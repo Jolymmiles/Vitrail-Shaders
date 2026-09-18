@@ -110,7 +110,7 @@ final class EntityProgram extends FamilyProgram {
 	 * it here is branching on a constant.
 	 */
 	private static Set<String> answered(EntityDraw.Element element) {
-		if (element.glint() || element.text()) {
+		if (element.glint() || element.text() || element.movingBlock()) {
 			return Set.of();
 		}
 

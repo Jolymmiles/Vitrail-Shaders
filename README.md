@@ -74,7 +74,7 @@ looks like.
 
 ## What goes through your pack
 
-Terrain, water, shadows, sky, clouds, weather, particles, mobs, block entities,
+Terrain, moving blocks, water, shadows, sky, clouds, weather, particles, mobs, block entities,
 the held hand, and the far terrain of Distant Horizons given a build of that mod
 that draws on this backend, which [Other mods](INSTALL.md#other-mods) names. The
 settings screen reads the pack's own menu layout, and a resource pack's normal

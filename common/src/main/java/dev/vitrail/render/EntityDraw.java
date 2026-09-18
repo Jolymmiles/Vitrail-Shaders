@@ -288,7 +288,8 @@ public final class EntityDraw extends FamilyDraw {
 		 * question about the program: the shadow table asks for one name and no row outside it does.
 		 */
 		boolean shadow() {
-			return SHADOW_ENTITIES.equals(this.program);
+			return SHADOW_ENTITIES.equals(this.program) || SHADOW_CUTOUT.equals(this.program)
+					|| SHADOW_WATER.equals(this.program);
 		}
 
 		/**
@@ -314,6 +315,14 @@ public final class EntityDraw extends FamilyDraw {
 		@SuppressWarnings("ReferenceEquality")
 		boolean crumbling() {
 			return this.pipeline == RenderPipelines.CRUMBLING;
+		}
+
+		/** Whether this piece is a falling block or a block carried by a piston. */
+		@SuppressWarnings("ReferenceEquality")
+		boolean movingBlock() {
+			return this.pipeline == RenderPipelines.SOLID_BLOCK
+					|| this.pipeline == RenderPipelines.CUTOUT_BLOCK
+					|| this.pipeline == RenderPipelines.TRANSLUCENT_BLOCK;
 		}
 
 		/**
@@ -384,7 +393,7 @@ public final class EntityDraw extends FamilyDraw {
 				return glyph;
 			}
 
-			return crumbling() ? DefaultVertexFormat.BLOCK : EntityMesh.format();
+			return (crumbling() || movingBlock()) ? DefaultVertexFormat.BLOCK : EntityMesh.format();
 		}
 
 		/**
@@ -423,6 +432,10 @@ public final class EntityDraw extends FamilyDraw {
 				return VertexInputs.CRUMBLING;
 			}
 
+			if (movingBlock()) {
+				return VertexInputs.MOVING_BLOCK;
+			}
+
 			if (lines()) {
 				return VertexInputs.LINES;
 			}
@@ -446,6 +459,10 @@ public final class EntityDraw extends FamilyDraw {
 
 			if (crumbling()) {
 				return "block breaking";
+			}
+
+			if (movingBlock()) {
+				return shadow() ? "moving blocks in the shadow map" : "moving blocks";
 			}
 
 			if (lines()) {
@@ -617,6 +634,11 @@ public final class EntityDraw extends FamilyDraw {
 	 * rather than as a mob even on a pack that ships no such file.
 	 */
 	private static final String BLOCK = "gbuffers_block";
+
+	/** The two opaque moving-block programs Iris assigns directly by pipeline. */
+	private static final String TERRAIN_SOLID = "gbuffers_terrain_solid";
+
+	private static final String TERRAIN_CUTOUT = "gbuffers_terrain_cutout";
 
 	/**
 	 * The blending half of each of those two names, which is what Iris's own {@code getTranslucent}
@@ -1063,12 +1085,19 @@ public final class EntityDraw extends FamilyDraw {
 				.forEach(element -> into.put(element.pipeline(), element));
 	}
 
-	/** What everything submitted through the feature renderers asks for, seen from the light. */
+	/** What ordinary entity feature geometry asks for, seen from the light. */
 	private static final String SHADOW_ENTITIES = "shadow_entities";
 
+	/** What solid and cutout moving blocks ask for in the shadow map. */
+	private static final String SHADOW_CUTOUT = "shadow_cutout";
+
+	/** What translucent moving blocks ask for in the shadow map. */
+	private static final String SHADOW_WATER = "shadow_water";
+
 	/**
-	 * The same pieces again as the shadow map sees them, which is ONE program for the lot and not the
-	 * three the camera uses.
+	 * The same pieces again as the shadow map sees them. Ordinary entity and block-entity feature
+	 * geometry shares {@code shadow_entities}; moving blocks keep Iris's dedicated
+	 * {@code shadow_cutout} or {@code shadow_water} choice instead.
 	 * <p>
 	 * <strong>The block entities lose their own name here, and that is Iris's answer and not a
 	 * simplification.</strong> Its shadow table is keyed on the pipeline like its main one, and every
@@ -1138,8 +1167,17 @@ public final class EntityDraw extends FamilyDraw {
 				// compiled module nothing selects.
 				.filter(mob -> mob.pipeline() != RenderPipelines.ENTITY_SHADOW
 						&& mob.pipeline() != RenderPipelines.CRUMBLING && !mob.lines())
-				.map(mob -> new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
-						mob.text() ? AlphaTest.NON_ZERO : CUTOUT, RenderStage.ENTITIES, false))
+				.map(mob -> {
+					if (!mob.movingBlock()) {
+						return new Element(mob.pipeline(), "shadow_" + mob.element(), SHADOW_ENTITIES,
+							mob.text() ? AlphaTest.NON_ZERO : CUTOUT, RenderStage.ENTITIES, false);
+					}
+
+					String program = RenderPipelines.TRANSLUCENT_BLOCK.equals(mob.pipeline())
+							? SHADOW_WATER : SHADOW_CUTOUT;
+					return new Element(mob.pipeline(), "shadow_" + mob.element(), program, CUTOUT,
+							RenderStage.ENTITIES, false);
+				})
 				.forEach(element -> SHADOW_ELEMENTS.put(element.pipeline(), element));
 	}
 
@@ -1355,6 +1393,15 @@ public final class EntityDraw extends FamilyDraw {
 		// reading renderStage here reads what it reads there.
 		FIXED.put(RenderPipelines.CRUMBLING, new Element(RenderPipelines.CRUMBLING, "crumbling",
 				DAMAGED_BLOCK, CUTOUT, RenderStage.NONE, false, true));
+		// MovingBlockFeatureRenderer uses these three pipelines for falling blocks and blocks carried
+		// by pistons. Iris assigns them directly rather than consulting the entity, block-entity or
+		// hand phase (IrisPipelines.java:25-30), so they belong in this fixed table too.
+		FIXED.put(RenderPipelines.SOLID_BLOCK, new Element(RenderPipelines.SOLID_BLOCK,
+				"moving_solid", TERRAIN_SOLID, AlphaTest.OFF));
+		FIXED.put(RenderPipelines.CUTOUT_BLOCK, new Element(RenderPipelines.CUTOUT_BLOCK,
+				"moving_cutout", TERRAIN_CUTOUT, AlphaTest.CUTOUT));
+		FIXED.put(RenderPipelines.TRANSLUCENT_BLOCK, new Element(RenderPipelines.TRANSLUCENT_BLOCK,
+				"moving_translucent", BLOCK, CUTOUT));
 		// The three lines pipelines Iris keys to the line program (pipeline/IrisPipelines.java:40-42),
 		// no alpha test (ShaderKey.java:72). The fourth built on the same snippet, LINES_DEPTH_BIAS
 		// (RenderPipelines.java:574-580), Iris keys to nothing and neither does this. Under
@@ -2286,8 +2333,8 @@ public final class EntityDraw extends FamilyDraw {
 		}
 
 		// One group for the whole shadow table, where the picture takes two: the map has no deferred
-		// stage to stand either side of and one program name for the lot, so there is no line inside
-		// it for a half to fall on.
+		// stage to stand either side of, and every row writes the same shadow image even though moving
+		// blocks now ask for their own shadow program names.
 		//
 		// Asked for only where the pack draws something through the feature renderers at all. A pack
 		// that keeps the entities and the block entities out of its map wants no shadow_entities read,
@@ -2385,7 +2432,7 @@ public final class EntityDraw extends FamilyDraw {
 				.toList();
 	}
 
-	/** The fixed rows this engine can decode the mesh of, which today is all six of them. */
+	/** The fixed rows this engine can decode the mesh of, which today is all nine of them. */
 	private static List<Element> fixed() {
 		return FIXED.values().stream().filter(EntityDraw::decodable).toList();
 	}

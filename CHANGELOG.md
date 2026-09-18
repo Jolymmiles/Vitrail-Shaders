@@ -15,6 +15,11 @@ what the next one holds.
 
 ### Fixed
 
+- **Moving blocks are drawn through the shader pack instead of falling back to the game's shader.**
+  Falling blocks such as sand and blocks carried by pistons use Minecraft's moving-block pipelines,
+  which were not served by the pack. They are now routed to the same shader programs Iris uses for
+  those pipelines and keep their real light-map coordinates while moving, instead of changing
+  brightness when they leave ordinary terrain rendering.
 - **SEUS PTGI HRR 3 is no longer set aside as soon as it loads.** Its anti-aliasing header carries
   a comment giving example settings for other platforms, and the engine read those examples as if
   the pack had set them. It then took the code meant for those platforms as the code in use, left

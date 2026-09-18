@@ -97,6 +97,13 @@ public enum VertexInputs {
 	CRUMBLING,
 
 	/**
+	 * A falling block or a block carried by a piston. The game binds
+	 * {@code DefaultVertexFormat.BLOCK}, as it does for the breaking overlay, but this contract keeps
+	 * the real {@code UV2} light map instead of answering it at full light.
+	 */
+	MOVING_BLOCK,
+
+	/**
 	 * The game's lines mesh, the block outline first among them: four elements out of which the
 	 * names a {@code gbuffers_line} program reads are made, and a wrapper around the pack's main
 	 * that widens each edge on the screen the way the game's own stage does. {@link LinesVertex}
@@ -232,6 +239,7 @@ public enum VertexInputs {
 			case ENTITY, ENTITY_FULLBRIGHT -> EntityVertex.ATTRIBUTES;
 			case GLINT -> GlintVertex.ATTRIBUTES;
 			case CRUMBLING -> CrumblingVertex.ATTRIBUTES;
+			case MOVING_BLOCK -> MovingBlockVertex.ATTRIBUTES;
 			case LINES -> LinesVertex.ATTRIBUTES;
 			case GLYPH -> GlyphVertex.ATTRIBUTES;
 			case PARTICLE -> ParticleVertex.ATTRIBUTES;

@@ -138,6 +138,8 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 						EntityVertex.prologue(this.used, this.synthesized, this.inputs.fullbright()));
 				case GLINT -> lines.addAll(GlintVertex.prologue(this.used, this.synthesized));
 				case CRUMBLING -> lines.addAll(CrumblingVertex.prologue(this.used, this.synthesized));
+				case MOVING_BLOCK -> lines.addAll(
+						MovingBlockVertex.prologue(this.used, this.synthesized));
 				case GLYPH -> lines.addAll(
 						GlyphVertex.prologue(this.bound, this.used, this.synthesized));
 				case LINES -> {
