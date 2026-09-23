@@ -138,9 +138,10 @@ public final class VertexPrologue {
 	 * as a float would read a different number from the same bytes.
 	 * <p>
 	 * The three {@link EntityVertex} appends are in here rather than beside their own head for that
-	 * same reason and no other: they are elements of a format like the six around them, and the one
-	 * format that carries them is the one this engine appends them to. {@link EntityVertex#TANGENT}
-	 * takes the default, being four normalised bytes exactly as {@code Normal} is.
+	 * same reason and no other: they are elements of a format like the six around them, and the
+	 * formats that carry them are the ones this engine appends them to. {@link EntityVertex#TANGENT}
+	 * and {@link MovingBlockVertex#MID_BLOCK} take the default, being four normalised bytes exactly
+	 * as {@code Normal} is.
 	 */
 	public static String elementType(String element) {
 		return switch (element) {

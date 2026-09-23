@@ -285,7 +285,8 @@ public final class EntityDraw extends FamilyDraw {
 
 		/**
 		 * Whether this piece is drawn into the shadow map rather than into the picture, which is a
-		 * question about the program: the shadow table asks for one name and no row outside it does.
+		 * question about the program: the shadow table asks for three names and no row outside it
+		 * does.
 		 */
 		boolean shadow() {
 			return SHADOW_ENTITIES.equals(this.program) || SHADOW_CUTOUT.equals(this.program)
@@ -318,11 +319,8 @@ public final class EntityDraw extends FamilyDraw {
 		}
 
 		/** Whether this piece is a falling block or a block carried by a piston. */
-		@SuppressWarnings("ReferenceEquality")
 		boolean movingBlock() {
-			return this.pipeline == RenderPipelines.SOLID_BLOCK
-					|| this.pipeline == RenderPipelines.CUTOUT_BLOCK
-					|| this.pipeline == RenderPipelines.TRANSLUCENT_BLOCK;
+			return EntityMesh.movingBlock(this.pipeline);
 		}
 
 		/**
@@ -359,7 +357,8 @@ public final class EntityDraw extends FamilyDraw {
 
 		/**
 		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
-		 * four, the crumbling's one, the three lines rows and the text's eight.
+		 * four, the crumbling's one, the three moving-block rows, the three lines rows and the text's
+		 * eight.
 		 * <p>
 		 * Derived from {@link #glint} and {@link #crumbling} rather than tabulated beside them, so
 		 * that a row and its format cannot drift: a row whose format did not match the pipeline it
@@ -371,7 +370,9 @@ public final class EntityDraw extends FamilyDraw {
 		 * of this engine's is built to bind, and it is what the game's own entity pipelines report
 		 * while the mesh carries. The rows are only ever read while it does, {@link #served} refusing
 		 * the whole family otherwise, so the two answers cannot be taken under different ones. The
-		 * others keep the game's, their elements being untouched by any of this.
+		 * moving-block one is {@link EntityMesh}'s too and on the same terms, the three pipelines a
+		 * moving block is drawn with reporting it while the mesh carries. The others keep the game's,
+		 * their elements being untouched by any of this.
 		 * <p>
 		 * <strong>The text is the one family here whose rows do not share a format</strong>, so its
 		 * eight are tabulated in {@link #TEXT_FORMATS} rather than answered by a branch. What
@@ -393,7 +394,11 @@ public final class EntityDraw extends FamilyDraw {
 				return glyph;
 			}
 
-			return (crumbling() || movingBlock()) ? DefaultVertexFormat.BLOCK : EntityMesh.format();
+			if (movingBlock()) {
+				return EntityMesh.movingBlockFormat();
+			}
+
+			return crumbling() ? DefaultVertexFormat.BLOCK : EntityMesh.format();
 		}
 
 		/**
@@ -1815,8 +1820,8 @@ public final class EntityDraw extends FamilyDraw {
 		boolean inMoment = (element != null && element.hand()) ? HandDraw.wanted()
 				: wanted && element != null && inWindow(element);
 		// And the mesh has to be carrying, whatever the moment says. Every row but the glint's, the
-		// crumbling's, the lines' and the text's is read against EntityMesh.format, so a draw served
-		// before the mesh settled would bind fifty-six bytes of layout over a vertex of thirty-six.
+		// crumbling's, the lines' and the text's is read against one of EntityMesh's two formats, so
+		// a draw served before the mesh settled would bind a wider layout over the game's vertex.
 		// It lasts from the load that asked until the extract that rebuilds the world, which is one
 		// frame in the ordinary case.
 		//
@@ -2432,7 +2437,7 @@ public final class EntityDraw extends FamilyDraw {
 				.toList();
 	}
 
-	/** The fixed rows this engine can decode the mesh of, which today is all nine of them. */
+	/** The fixed rows this engine can decode the mesh of, which today is every one of them. */
 	private static List<Element> fixed() {
 		return FIXED.values().stream().filter(EntityDraw::decodable).toList();
 	}

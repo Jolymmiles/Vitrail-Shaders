@@ -210,7 +210,7 @@ public final class EntityVertex {
 	 * does not know keeps its zero, which is a pack declaring this name as something the corpus has
 	 * never used.
 	 */
-	private static String midTexCoord(String type) {
+	static String midTexCoord(String type) {
 		return switch (type) {
 			case "float" -> MID_TEX_COORD + ".x";
 			case "vec2" -> MID_TEX_COORD;
@@ -227,7 +227,7 @@ public final class EntityVertex {
 	 * rather than a spare lane. A pack declaring three loses it and gets the direction alone, which
 	 * is what asking for three means.
 	 */
-	private static String tangent(String type) {
+	static String tangent(String type) {
 		return switch (type) {
 			case "float" -> TANGENT + ".x";
 			case "vec2" -> TANGENT + ".xy";

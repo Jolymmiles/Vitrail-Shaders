@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.mixin.access.RenderPipelineAccessor;
+import dev.vitrail.render.EntityMesh;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.StalePipelines;
 import dev.vitrail.Vitrail;
@@ -122,10 +123,15 @@ public abstract class VulkanDeviceMixin implements StalePipelines {
 	 * Whether this is one of the game's entity pipelines, read off the DECLARED formats and not the
 	 * getter: {@code RenderPipelineMixin} rewrites the getter while the mesh carries, which would
 	 * make a pack's own pipelines answer yes here. Those follow their chain, not this cache walk.
-	 * By identity, the same question {@code EntityMesh.binding} asks.
+	 * By identity, the same question {@code EntityMesh.binding} asks. The three pipelines a moving
+	 * block is drawn with answer yes as well, their binding moving with the same answer.
 	 */
 	@Unique
 	private static boolean declaresGameEntity(RenderPipeline pipeline) {
+		if (EntityMesh.movingBlock(pipeline)) {
+			return true;
+		}
+
 		@Nullable VertexFormat[] declared = ((RenderPipelineAccessor) pipeline).vitrail$declaredFormats();
 		for (VertexFormat format : declared) {
 			@SuppressWarnings("ReferenceEquality")

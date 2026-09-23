@@ -19,8 +19,9 @@ import org.jspecify.annotations.Nullable;
  * Iris's own answer, one method for one question
  * ({@code mixin/MixinRenderPipeline.iris$change}): a pipeline declaring the game's entity format
  * reports the extended one instead, under the same gate as the mesh, so the two move together and
- * cannot disagree. {@code EntityMesh} carries why the gate has to be a settled answer here where Iris
- * reads its own live.
+ * cannot disagree. The three pipelines a moving block is drawn with report the moving-block format
+ * the same way where they declare the game's block one. {@code EntityMesh} carries why the gate has
+ * to be a settled answer here where Iris reads its own live.
  * <p>
  * <strong>One door and not two.</strong> This is not only what the compiled pipeline binds: a draw of
  * the level takes its format from {@code RenderType.format()}, which is
@@ -42,7 +43,8 @@ public abstract class RenderPipelineMixin {
 	 * moves. Null until it is first wanted, and it is only ever wanted while the mesh carries.
 	 * <p>
 	 * It is the declared array itself where no binding moved, which is every pipeline of the game but
-	 * the entity ones, so a hundred pipelines hold one field and allocate nothing.
+	 * the entity ones and the three a moving block is drawn with, so a hundred pipelines hold one
+	 * field and allocate nothing.
 	 */
 	@Unique
 	private VertexFormat @Nullable [] vitrail$carried;
@@ -60,7 +62,7 @@ public abstract class RenderPipelineMixin {
 
 		VertexFormat[] carried = this.vitrail$carried;
 		if (carried == null) {
-			carried = exchange(declared);
+			carried = exchange((RenderPipeline) (Object) this, declared);
 			this.vitrail$carried = carried;
 		}
 
@@ -69,15 +71,16 @@ public abstract class RenderPipelineMixin {
 
 	@Inject(method = "getVertexFormatBinding", at = @At("RETURN"), cancellable = true, require = 1)
 	private void vitrail$binding(int bindingIndex, CallbackInfoReturnable<VertexFormat> callback) {
-		callback.setReturnValue(EntityMesh.binding(callback.getReturnValue()));
+		callback.setReturnValue(EntityMesh.binding((RenderPipeline) (Object) this,
+				callback.getReturnValue()));
 	}
 
 	@Unique
-	private static VertexFormat[] exchange(VertexFormat[] declared) {
+	private static VertexFormat[] exchange(RenderPipeline pipeline, VertexFormat[] declared) {
 		VertexFormat[] carried = declared.clone();
 		boolean moved = false;
 		for (int binding = 0; binding < carried.length; binding++) {
-			VertexFormat one = EntityMesh.binding(carried[binding]);
+			VertexFormat one = EntityMesh.binding(pipeline, carried[binding]);
 			moved = moved || one != carried[binding];
 			carried[binding] = one;
 		}

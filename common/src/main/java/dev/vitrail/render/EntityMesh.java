@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.EntityVertex;
+import dev.vitrail.glsl.MovingBlockVertex;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.Vitrail;
 
@@ -13,6 +14,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderPipelines;
 
 import java.util.List;
 
@@ -105,6 +107,15 @@ public final class EntityMesh {
 	 */
 	private static final VertexFormat FORMAT = extend();
 
+	/**
+	 * The mesh a moving block is built from while the entity mesh carries, which is Iris's terrain
+	 * vertex and not the game's block one: {@code MixinBufferBuilder.iris$extendFormat} hands back
+	 * {@code IrisVertexFormats.TERRAIN} for {@code DefaultVertexFormat.BLOCK}, and
+	 * {@code MixinRenderPipeline.iris$change} binds it for every pipeline declaring that format.
+	 * Built once for the reason {@link #FORMAT} is. {@link MovingBlockVertex} says what it carries.
+	 */
+	private static final VertexFormat MOVING_BLOCK_FORMAT = extendMovingBlock();
+
 	/** The answer in force, which only {@link #settle()} moves. */
 	private static boolean carrying;
 
@@ -152,24 +163,64 @@ public final class EntityMesh {
 		return FORMAT;
 	}
 
+	/**
+	 * The extended format of a moving block, whether or not it is in force, for the reason
+	 * {@link #format()} is handed out that way.
+	 */
+	public static VertexFormat movingBlockFormat() {
+		return MOVING_BLOCK_FORMAT;
+	}
+
 	/** Whether the mesh really carries the identifiers as things stand. */
 	public static boolean carrying() {
 		return carrying;
 	}
 
 	/**
-	 * What a binding declared as {@code declared} really is, which is this format wherever the game
-	 * declares its own entity one and the mesh is carrying, and {@code declared} everywhere else.
+	 * What a binding of {@code pipeline} declared as {@code declared} really is while the mesh
+	 * carries: this format wherever the game declares its own entity one, the moving-block format
+	 * wherever one of the game's three moving-block pipelines declares the block one, and
+	 * {@code declared} everywhere else.
 	 * <p>
 	 * By identity and not by equality, because that is the question: a pipeline of this engine's own
-	 * already binds {@link #FORMAT} and must be handed straight back, and it is a format equal to
-	 * neither. Null passes through, a pipeline being free to leave a binding unused.
+	 * already binds one of the two extended formats and must be handed straight back, and it is a
+	 * format equal to neither. Null passes through, a pipeline being free to leave a binding unused.
+	 * <p>
+	 * <strong>The block format moves for three pipelines and not for every one declaring it</strong>,
+	 * where Iris moves it everywhere ({@code MixinRenderPipeline.java:29-33}). The breaking overlay
+	 * and the beacon beam declare it too and nothing here serves their elements, {@code
+	 * CrumblingVertex} carrying what the overlay's four cost, and the chunk pipelines are Sodium's to
+	 * draw. What it costs: another pipeline declaring the block format, the beacon beam among them,
+	 * hands a pack the prologue's stand-ins for those elements rather than computed ones.
 	 */
-	public static @Nullable VertexFormat binding(@Nullable VertexFormat declared) {
+	public static @Nullable VertexFormat binding(RenderPipeline pipeline,
+			@Nullable VertexFormat declared) {
+		if (!carrying) {
+			return declared;
+		}
+
 		@SuppressWarnings("ReferenceEquality")
 		boolean entity = declared == DefaultVertexFormat.ENTITY;
+		if (entity) {
+			return FORMAT;
+		}
 
-		return carrying && entity ? FORMAT : declared;
+		@SuppressWarnings("ReferenceEquality")
+		boolean block = declared == DefaultVertexFormat.BLOCK;
+
+		return block && movingBlock(pipeline) ? MOVING_BLOCK_FORMAT : declared;
+	}
+
+	/**
+	 * Whether this is one of the three pipelines the game draws a falling block or a block carried by
+	 * a piston with. {@code MovingBlockFeatureRenderer} reaches them through
+	 * {@code RenderTypes.solidMovingBlock}, {@code cutoutMovingBlock} and
+	 * {@code translucentMovingBlock}, and nothing else of the game draws with them.
+	 */
+	@SuppressWarnings("ReferenceEquality")
+	public static boolean movingBlock(RenderPipeline pipeline) {
+		return pipeline == RenderPipelines.SOLID_BLOCK || pipeline == RenderPipelines.CUTOUT_BLOCK
+				|| pipeline == RenderPipelines.TRANSLUCENT_BLOCK;
 	}
 
 	/**
@@ -338,6 +389,10 @@ public final class EntityMesh {
 				+ "tangent of that mapping: {}",
 				FORMAT.getVertexSize(), DefaultVertexFormat.ENTITY.getVertexSize(),
 				EntityVertex.APPENDED);
+		Vitrail.logger().info("A moving block's mesh carries {} bytes a vertex instead of {}, the "
+				+ "difference being the terrain elements a pack reads on a block: {}",
+				MOVING_BLOCK_FORMAT.getVertexSize(), DefaultVertexFormat.BLOCK.getVertexSize(),
+				MovingBlockVertex.APPENDED);
 	}
 
 	/**
@@ -363,6 +418,28 @@ public final class EntityMesh {
 		return builder.addAttribute(EntityVertex.IDENTIFIERS, GpuFormat.RGBA16_UINT)
 				.addAttribute(EntityVertex.MID_TEX_COORD, GpuFormat.RG32_FLOAT)
 				.addAttribute(EntityVertex.TANGENT, GpuFormat.RGBA8_SNORM)
+				.build();
+	}
+
+	/**
+	 * The game's block format with what Iris's terrain vertex adds after its four
+	 * ({@code vertices/IrisVertexFormats.java:32-42}), less the block id: that one is a constant on
+	 * every moving block, and {@link MovingBlockVertex} answers it in the stage.
+	 * <p>
+	 * They go LAST for the reason the entity three do: the game's own {@code core/block} stage
+	 * declares the four elements of the block format and nothing after them, and a skipped element
+	 * shifts every location behind it.
+	 */
+	private static VertexFormat extendMovingBlock() {
+		VertexFormat.Builder builder = VertexFormat.builder(DefaultVertexFormat.BLOCK.getStepRate());
+		for (VertexFormatElement element : DefaultVertexFormat.BLOCK.getElements()) {
+			builder.addAttribute(element.name(), element.format());
+		}
+
+		return builder.addAttribute(MovingBlockVertex.NORMAL, GpuFormat.RGBA8_SNORM)
+				.addAttribute(EntityVertex.MID_TEX_COORD, GpuFormat.RG32_FLOAT)
+				.addAttribute(EntityVertex.TANGENT, GpuFormat.RGBA8_SNORM)
+				.addAttribute(MovingBlockVertex.MID_BLOCK, GpuFormat.RGBA8_SNORM)
 				.build();
 	}
 }

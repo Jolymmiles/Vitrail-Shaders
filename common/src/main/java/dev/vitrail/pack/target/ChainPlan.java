@@ -136,8 +136,8 @@ public final class ChainPlan {
 					new NamedProgram("gbuffers_block", false, Families::entities),
 					// The blending half of those same two, on the far side of the stage: the game
 					// draws them among its translucent features, which is after the deferreds have
-					// run. Five entries for four names because the side is half the key, and the
-					// entry below says which name is here twice and why.
+					// run. Both opaque names come back on this side too, because the side is half the
+					// key, and the entries further down say why each one is here twice.
 					//
 					// A name that never enters this list answers empty, and empty is the same word
 					// this table uses for a walk it REFUSED, so the caller cannot tell the two
@@ -157,6 +157,14 @@ public final class ChainPlan {
 					new NamedProgram("gbuffers_entities_translucent", true,
 							Families::entities),
 					new NamedProgram("gbuffers_block_translucent", true, Families::entities),
+					// The block name on the far side, which is a translucent moving block: Iris keys
+					// TRANSLUCENT_BLOCK to ProgramId.Block (pipeline/IrisPipelines.java:30), and the
+					// game draws it among the translucent features. Without it the row resolved no
+					// attachment and wrote its one output on the game's target.
+					//
+					// Not counted, on the hand's argument: a block moves where a piston pushes or sand
+					// falls, a per frame answer no per place map may carry.
+					new NamedProgram("gbuffers_block", true, NOT_EVERYWHERE),
 					// The OPAQUE entity name on the far side, which reads like a contradiction and is
 					// the energy swirl over a charged creeper: Iris pins that row to ENTITIES_CUTOUT
 					// outright (pipeline/IrisPipelines.java:60) while the game blends it, so it is

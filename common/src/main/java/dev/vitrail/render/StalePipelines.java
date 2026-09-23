@@ -29,7 +29,8 @@ import java.util.List;
 public interface StalePipelines {
 
 	/**
-	 * Takes every cached pipeline that declares the game's entity format out of the cache, and
+	 * Takes every cached pipeline that declares the game's entity format out of the cache, the three
+	 * a moving block is drawn with among them, and
 	 * answers with their keys so the caller can compile them again under the answer now in force.
 	 * The compiled objects themselves are kept aside and freed at the next safe purge.
 	 */

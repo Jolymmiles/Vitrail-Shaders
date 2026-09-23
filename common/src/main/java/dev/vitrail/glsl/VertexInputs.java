@@ -97,9 +97,9 @@ public enum VertexInputs {
 	CRUMBLING,
 
 	/**
-	 * A falling block or a block carried by a piston. The game binds
-	 * {@code DefaultVertexFormat.BLOCK}, as it does for the breaking overlay, but this contract keeps
-	 * the real {@code UV2} light map instead of answering it at full light.
+	 * A falling block or a block carried by a piston, drawn from the game's block format widened
+	 * the way Iris widens it to its terrain vertex, and lit from the real {@code UV2} light map rather
+	 * than at full light. {@link MovingBlockVertex} says what the mesh carries.
 	 */
 	MOVING_BLOCK,
 

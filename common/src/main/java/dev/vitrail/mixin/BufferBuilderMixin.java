@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.glsl.EntityVertex;
+import dev.vitrail.glsl.MovingBlockVertex;
 import dev.vitrail.mixin.access.ByteBufferBuilderAccessor;
 import dev.vitrail.render.EntityFrame;
 import dev.vitrail.render.EntityIdentifiers;
@@ -24,7 +25,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Writes the three elements this engine appends onto every vertex of the entity mesh that does not
- * come from Sodium, since nothing in the game will.
+ * come from Sodium, since nothing in the game will, and the ones a moving block's mesh adds.
+ * <p>
+ * <strong>A moving block comes by this road alone.</strong> Its format is not the game's block one,
+ * so {@code BufferBuilder}'s own fast path and Sodium's {@code putBakedQuad}, which both ask for the
+ * block format by identity, step aside, and every quad reaches the setters through
+ * {@code beginVertex}, the Fabric renderer API's own quads included.
  * <p>
  * <strong>The builder knows seven elements and none of ours is one of them.</strong>
  * {@code BufferBuilder} holds its elements in an array indexed by a semantic id, seven names long
@@ -77,16 +83,24 @@ public abstract class BufferBuilderMixin {
 	private ByteBufferBuilder buffer;
 
 	/**
-	 * Where the identifiers start inside a vertex of this builder, or minus one when this builder is
-	 * not building the entity mesh. Taken once in the constructor, the format of a builder being
-	 * final, and it is the gate for all of this: the five offsets below are elements of the same
-	 * format and stand or fall with it.
+	 * Where the middle of the sprite starts inside a vertex of this builder, or minus one when this
+	 * builder is building neither the entity mesh nor a moving block's. Taken once in the
+	 * constructor, the format of a builder being final, and it is the gate for all of this: the
+	 * offsets below are elements of the same format and stand or fall with it.
 	 */
+	@Unique
+	private int vitrail$midTexCoord;
+
+	/** Where the identifiers start, or minus one on a moving block's mesh, which has none. */
 	@Unique
 	private int vitrail$identifiers;
 
+	/**
+	 * Where {@code at_midBlock} starts, or minus one on the entity mesh, which has none. Its being
+	 * there is also what says the builder is a moving block's and so owes the face normal back.
+	 */
 	@Unique
-	private int vitrail$midTexCoord;
+	private int vitrail$midBlock;
 
 	@Unique
 	private int vitrail$tangent;
@@ -128,32 +142,33 @@ public abstract class BufferBuilderMixin {
 	@Inject(method = "<init>", at = @At("RETURN"), require = 1)
 	private void vitrail$findElements(ByteBufferBuilder buffer, PrimitiveTopology topology,
 			VertexFormat format, CallbackInfo callback) {
-		this.vitrail$identifiers = -1;
+		this.vitrail$midTexCoord = -1;
 		// Asked on its own and ahead of the others, because asking is a WALK. A format keeps its
 		// elements in an array map sixteen slots wide (VertexFormat's own elements field, a fastutil
 		// Object2ObjectArrayMap), so a name is compared against every element the format has until it
-		// matches or runs out, and a name that is not there is that walk paid in full. This is the one
-		// name no format but this engine's carries, and the game builds one of these per render type
-		// change, so the five below are five walks an ordinary builder no longer takes.
-		int identifiers = vitrail$offsetOf(EntityVertex.IDENTIFIERS);
-		if (identifiers < 0) {
+		// matches or runs out, and a name that is not there is that walk paid in full. This is a name
+		// no format but this engine's two carry, and the game builds one of these per render type
+		// change, so the walks below are walks an ordinary builder no longer takes.
+		int midTexCoord = vitrail$offsetOf(EntityVertex.MID_TEX_COORD);
+		if (midTexCoord < 0) {
 			return;
 		}
 
-		int midTexCoord = vitrail$offsetOf(EntityVertex.MID_TEX_COORD);
 		int tangent = vitrail$offsetOf(EntityVertex.TANGENT);
 		int position = vitrail$offsetOf("Position");
 		int texCoord = vitrail$offsetOf("UV0");
 		int normal = vitrail$offsetOf("Normal");
-		// Six or none, and never some of them: what this builder is is one question, and a format
+		// Five or none, and never some of them: what this builder is is one question, and a format
 		// carrying the first without the rest is not a state this engine can build. Answering it the
 		// way a builder of any other format is answered is what keeps a constructor the game runs
 		// thousands of times a frame from being a place anything can be thrown out of.
-		if (midTexCoord < 0 || tangent < 0 || position < 0 || texCoord < 0 || normal < 0) {
+		if (tangent < 0 || position < 0 || texCoord < 0 || normal < 0) {
 			return;
 		}
 
-		this.vitrail$identifiers = identifiers;
+		// The one element each of the two formats has and the other has not.
+		this.vitrail$identifiers = vitrail$offsetOf(EntityVertex.IDENTIFIERS);
+		this.vitrail$midBlock = vitrail$offsetOf(MovingBlockVertex.MID_BLOCK);
 		this.vitrail$midTexCoord = midTexCoord;
 		this.vitrail$tangent = tangent;
 		this.vitrail$position = position;
@@ -177,10 +192,11 @@ public abstract class BufferBuilderMixin {
 	 * hand the pack whatever the arena held there. Nought for the middle of the sprite and an axis
 	 * for the tangent, which are the two values {@code VertexPrologue} hands a mesh carrying neither,
 	 * and the axis is not a nicety: a tangent of nought normalises to a NaN that reaches the colour.
+	 * A moving block's {@code at_midBlock} takes nought the same way until its polygon is whole.
 	 */
 	@Inject(method = "beginVertex", at = @At("RETURN"), require = 1)
 	private void vitrail$writeVertex(CallbackInfoReturnable<Long> callback) {
-		if (this.vitrail$identifiers < 0) {
+		if (this.vitrail$midTexCoord < 0) {
 			return;
 		}
 
@@ -190,11 +206,18 @@ public abstract class BufferBuilderMixin {
 		vitrail$fill();
 
 		long pointer = callback.getReturnValueJ();
-		long identifiers = pointer + this.vitrail$identifiers;
-		MemoryUtil.memPutShort(identifiers, (short) EntityIdentifiers.entity());
-		MemoryUtil.memPutShort(identifiers + 2L, (short) EntityIdentifiers.blockEntity());
-		MemoryUtil.memPutShort(identifiers + 4L, (short) EntityIdentifiers.item());
-		MemoryUtil.memPutShort(identifiers + 6L, (short) 0);
+		if (this.vitrail$identifiers >= 0) {
+			long identifiers = pointer + this.vitrail$identifiers;
+			MemoryUtil.memPutShort(identifiers, (short) EntityIdentifiers.entity());
+			MemoryUtil.memPutShort(identifiers + 2L, (short) EntityIdentifiers.blockEntity());
+			MemoryUtil.memPutShort(identifiers + 4L, (short) EntityIdentifiers.item());
+			MemoryUtil.memPutShort(identifiers + 6L, (short) 0);
+		}
+
+		if (this.vitrail$midBlock >= 0) {
+			MemoryUtil.memPutInt(pointer + this.vitrail$midBlock, 0);
+		}
+
 		MemoryUtil.memPutFloat(pointer + this.vitrail$midTexCoord, 0.0F);
 		MemoryUtil.memPutFloat(pointer + this.vitrail$midTexCoord + 4L, 0.0F);
 		MemoryUtil.memPutInt(pointer + this.vitrail$tangent, EntityFrame.FLAT);
@@ -215,7 +238,7 @@ public abstract class BufferBuilderMixin {
 	 */
 	@Inject(method = "build", at = @At("HEAD"), require = 1)
 	private void vitrail$finishPolygon(CallbackInfoReturnable<MeshData> callback) {
-		if (this.vitrail$identifiers >= 0) {
+		if (this.vitrail$midTexCoord >= 0) {
 			vitrail$fill();
 		}
 	}
@@ -254,6 +277,13 @@ public abstract class BufferBuilderMixin {
 
 		midU /= corners;
 		midV /= corners;
+
+		if (this.vitrail$midBlock >= 0) {
+			for (int at = 0; at < corners; at++) {
+				MemoryUtil.memPutInt(base + corner[at] + this.vitrail$midBlock,
+						vitrail$midBlock(read[at * 5], read[at * 5 + 1], read[at * 5 + 2]));
+			}
+		}
 
 		// A quad is read flat and a triangle is not, which is Iris's own split
 		// (MixinBufferBuilder.fillExtendedData) and its own reason: it took the face normal off the
@@ -296,6 +326,17 @@ public abstract class BufferBuilderMixin {
 	 * {@link dev.vitrail.mixin.RenderPipelineMixin} doing the binding, so a write-back here would
 	 * reach geometry Iris never touches, an item drawn into an inventory screen among it.
 	 * <p>
+	 * <strong>A moving block's mesh does get the write-back, which is Iris's answer there.</strong>
+	 * Its format is bound for the three pipelines only {@code MovingBlockFeatureRenderer} draws with,
+	 * inside the level, so the flag Iris tests is true wherever this runs. It matters there where it
+	 * would not for a cuboid: the game writes a baked quad the normal of its nominal face
+	 * ({@code VertexConsumer.putBakedQuad}, {@code quad.direction()}), which a rotated element of a
+	 * block model does not face. The positions read are the ones the builder was handed, after the
+	 * submit's pose and before any projection, so this engine's reversed depth never reaches the
+	 * cross product, and the diagonals are taken in Iris's order, which turns outward on the game's
+	 * counter-clockwise quads in both engines. The fourth byte is nought, as {@code NormI8.pack}
+	 * writes it there.
+	 * <p>
 	 * <strong>What it costs is the handedness and not the direction.</strong> The corners are not
 	 * flattened onto this normal's plane here, so it reaches {@code EntityFrame.tangent} for one
 	 * thing only, the sign in the fourth component. A quad whose corners were given a normal that is
@@ -320,6 +361,11 @@ public abstract class BufferBuilderMixin {
 			face[0] = EntityFrame.unpack(given, 0);
 			face[1] = EntityFrame.unpack(given, 1);
 			face[2] = EntityFrame.unpack(given, 2);
+		} else if (this.vitrail$midBlock >= 0) {
+			int normal = EntityFrame.pack(face[0], face[1], face[2], 0.0F);
+			for (int at = 0; at < 4; at++) {
+				MemoryUtil.memPutInt(base + corner[at] + this.vitrail$normal, normal);
+			}
 		}
 
 		int tangent = EntityFrame.tangent(face[0], face[1], face[2], false,
@@ -337,6 +383,24 @@ public abstract class BufferBuilderMixin {
 		MemoryUtil.memPutFloat(vertex + this.vitrail$midTexCoord, midU);
 		MemoryUtil.memPutFloat(vertex + this.vitrail$midTexCoord + 4L, midV);
 		MemoryUtil.memPutInt(vertex + this.vitrail$tangent, tangent);
+	}
+
+	/**
+	 * A moving block's {@code at_midBlock} at one corner, which is Iris's word for it
+	 * ({@code vertices/ExtendedDataHelper.computeMidBlock}, written from
+	 * {@code MixinBufferBuilder.iris$fillPerVertexData}): the offset from the corner to the middle of
+	 * the block at the local position a block was opened at, in sixty-fourths truncated into a byte
+	 * each, and the block's light emission in the fourth.
+	 * <p>
+	 * Nothing opens a block around a moving one there, so the local position is the nought and the
+	 * emission the minus one its fields are declared with, and the offset is taken from the origin of
+	 * the space the corner was written in rather than from the block's middle. That is what a pack
+	 * reads under Iris and what it reads here, the corner being the same float in both engines.
+	 */
+	@Unique
+	private static int vitrail$midBlock(float x, float y, float z) {
+		return ((int) ((0.5F - x) * 64.0F) & 0xFF) | (((int) ((0.5F - y) * 64.0F) & 0xFF) << 8)
+				| (((int) ((0.5F - z) * 64.0F) & 0xFF) << 16) | (0xFF << 24);
 	}
 
 	/** Where one element starts inside a vertex of this builder, or minus one where it has none. */
