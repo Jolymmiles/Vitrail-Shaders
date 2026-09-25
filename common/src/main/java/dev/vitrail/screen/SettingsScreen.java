@@ -1226,7 +1226,7 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			Vitrail.logger().warn("Vitrail could not create {}", directory, e);
 		}
 
-		Util.getPlatform().openPath(directory);
+		Desktop.openPath(directory);
 	}
 
 	/**
