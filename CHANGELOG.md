@@ -20,12 +20,13 @@ what the next one holds.
   API, and the Sodium 0.9.2 built for 26.3. On NeoForge, Complementary Reimagined draws there as it
   does on 26.2: its terrain, water, shadows, sky, sun, moon and stars, mobs, the hand, clouds, rain
   and snow, particles and composites, and the game's translucent features the pack does not serve
-  are composed into its image as on 26.2. Compiled shader modules are kept on disk, so a second
-  load of a pack skips the compile. The game's improved transparency stays off while a pack draws,
-  as Iris keeps it off on the other backend, and the player's setting stands again as soon as
-  shaders are off. One thing is not carried over yet: a program with a geometry stage is served
-  only where that stage passes each corner on, which is folded into the stage after it, as on a Mac
-  on either game, and any other such program is set aside with a line in the log.
+  are composed into its image as on 26.2, and so is Distant Horizons' far terrain, land and water
+  both, with the pack's own `dh_terrain` and `dh_water`. Compiled shader modules are kept on disk,
+  so a second load of a pack skips the compile. The game's improved transparency stays off while a
+  pack draws, as Iris keeps it off on the other backend, and the player's setting stands again as
+  soon as shaders are off. One thing is not carried over yet: a program with a geometry stage is
+  served only where that stage passes each corner on, which is folded into the stage after it, as on
+  a Mac on either game, and any other such program is set aside with a line in the log.
 
 ### Fixed
 
