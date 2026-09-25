@@ -6,14 +6,24 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import dev.vitrail.Vitrail;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.PlayerRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Util;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
 
@@ -169,6 +179,37 @@ public final class GameRender {
 			gameRenderer.firstPersonHandsAndItemsRenderer.submitHandsWithItems(partialTicks, pose,
 					into, state, state.firstPersonHandsAndItems);
 		}
+	}
+
+	/**
+	 * Fills a camera render state from the camera, as the game's own extraction does. 26.3 takes
+	 * the delta tracker and works the camera entity's partial tick out of it itself, which is the
+	 * value the 26.2 twin hands in, and keeps it on the state.
+	 */
+	public static void extractCamera(Camera camera, CameraRenderState into, DeltaTracker delta) {
+		camera.extractRenderState(into, delta);
+	}
+
+	/**
+	 * The game's own frustum test for one entity, asked of the renderer that draws it. 26.3 builds
+	 * the culling box at the partial tick it is handed, where 26.2 built it where the entity stood;
+	 * the game hands it the entity's own tick, frozen or not, and so does the caller here.
+	 */
+	public static boolean shouldRender(EntityRenderDispatcher entities, Entity entity,
+			Frustum frustum, Vec3 at, float partialTicks) {
+		return entities.shouldRender(entity, frustum, at.x, at.y, at.z, partialTicks);
+	}
+
+	/**
+	 * Whether the section a block stands in has a mesh and has faded in far enough to be drawn,
+	 * which is the game's own second test on an entity it is about to extract. 26.3 takes the length
+	 * of the fade as an argument rather than reading it off the section, and the game hands it the
+	 * option's value, as this does.
+	 */
+	public static boolean sectionShown(LevelRenderer level, BlockPos block) {
+		long fade = Util.toMillis(Minecraft.getInstance().options.chunkSectionFadeInTime().get());
+
+		return level.isSectionCompiledAndVisible(block, fade);
 	}
 
 	/**

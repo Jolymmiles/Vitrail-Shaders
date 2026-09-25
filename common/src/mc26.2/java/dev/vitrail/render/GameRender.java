@@ -4,13 +4,22 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
 
@@ -113,6 +122,31 @@ public final class GameRender {
 	public static void submitHands(GameRenderer gameRenderer, float partialTicks, PoseStack pose,
 			SubmitNodeCollector into, LocalPlayer player, int light) {
 		gameRenderer.itemInHandRenderer.submitHandsWithItems(partialTicks, pose, into, player, light);
+	}
+
+	/**
+	 * Fills a camera render state from the camera, as the game's own extraction does, with the
+	 * partial tick of the entity the camera rides.
+	 */
+	public static void extractCamera(Camera camera, CameraRenderState into, DeltaTracker delta) {
+		camera.extractRenderState(into, camera.getCameraEntityPartialTicks(delta));
+	}
+
+	/**
+	 * The game's own frustum test for one entity, asked of the renderer that draws it. The partial
+	 * tick is not read on this game.
+	 */
+	public static boolean shouldRender(EntityRenderDispatcher entities, Entity entity,
+			Frustum frustum, Vec3 at, float partialTicks) {
+		return entities.shouldRender(entity, frustum, at.x, at.y, at.z);
+	}
+
+	/**
+	 * Whether the section a block stands in has a mesh and has faded in far enough to be drawn,
+	 * which is the game's own second test on an entity it is about to extract.
+	 */
+	public static boolean sectionShown(LevelRenderer level, BlockPos block) {
+		return level.isSectionCompiledAndVisible(block);
 	}
 
 	/**
