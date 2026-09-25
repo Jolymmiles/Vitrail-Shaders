@@ -481,13 +481,17 @@ public final class GraphicsApi {
 					((PipelineCacheAccessor) cache).vitrail$cache().entrySet().iterator();
 			while (held.hasNext()) {
 				Map.Entry<RenderPipeline, CompiledRenderPipeline> entry = held.next();
-				if (!declaresGameEntity(entry.getKey())) {
+				RenderPipeline pipeline = entry.getKey();
+				if (!declaresGameEntity(pipeline)) {
 					continue;
 				}
 
+				// Read before the removal: the map's entries are views of its slots, and a removed
+				// slot answers nothing.
+				CompiledRenderPipeline compiled = entry.getValue();
 				held.remove();
-				entry.getValue().close();
-				dropped.add(entry.getKey());
+				compiled.close();
+				dropped.add(pipeline);
 			}
 		}
 
