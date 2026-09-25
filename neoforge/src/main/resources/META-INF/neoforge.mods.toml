@@ -41,14 +41,14 @@ config = "vitrail-neoforge.mixins.json"
 [[dependencies.${mod_id}]]
 modId = "minecraft"
 type = "required"
-versionRange = "[${minecraft_version},26.3)"
+versionRange = "[${minecraft_version},${minecraft_next})"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neoforge_min_version},26.3)"
+versionRange = "[${neoforge_min_version},${minecraft_next})"
 ordering = "NONE"
 side = "CLIENT"
 
