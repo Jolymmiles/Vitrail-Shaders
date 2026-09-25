@@ -48,25 +48,50 @@ public final class LevelPass implements RenderPass {
 	/** The level's pass while the level is being drawn, and null at every other instant. */
 	private static @Nullable LevelPass current;
 
+	private final GpuTextureView colour;
+	private final @Nullable GpuTextureView depth;
 	private final Supplier<RenderPass> opener;
 	private final List<Supplier<String>> groups = new ArrayList<>();
 	private @Nullable RenderPass real;
 	private int @Nullable [] scissor;
 	private boolean closed;
 
-	private LevelPass(RenderPass first, Supplier<RenderPass> opener) {
+	private LevelPass(RenderPass first, GpuTextureView colour, @Nullable GpuTextureView depth,
+			Supplier<RenderPass> opener) {
 		this.real = first;
+		this.colour = colour;
+		this.depth = depth;
 		this.opener = opener;
 	}
 
 	/**
 	 * Replaces the pass the level has just opened. {@code opener} opens a real pass on the same
 	 * attachments with nothing emptied, which is what the level's own opening does.
+	 *
+	 * @param colour the colour image the level's pass was opened on
+	 * @param depth  the depth image it was opened on, or null where it has none
 	 */
-	public static RenderPass open(RenderPass first, Supplier<RenderPass> opener) {
-		LevelPass pass = new LevelPass(first, opener);
+	public static RenderPass open(RenderPass first, GpuTextureView colour,
+			@Nullable GpuTextureView depth, Supplier<RenderPass> opener) {
+		LevelPass pass = new LevelPass(first, colour, depth, opener);
 		current = pass;
 		return pass;
+	}
+
+	/**
+	 * The colour image this pass draws into, which is the main target's.
+	 * <p>
+	 * On 26.2 a phase of the level that a pack serves was about to open a pass of its own, and the
+	 * engine read the images that pass would have been opened on to build the pack's pass beside
+	 * them. On 26.3 the phase is handed this pass instead, and these two are those images.
+	 */
+	public GpuTextureView colour() {
+		return this.colour;
+	}
+
+	/** The depth image this pass tests against, or null where it has none. */
+	public @Nullable GpuTextureView depth() {
+		return this.depth;
 	}
 
 	/**

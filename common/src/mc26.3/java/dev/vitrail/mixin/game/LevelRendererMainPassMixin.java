@@ -37,7 +37,7 @@ public abstract class LevelRendererMainPassMixin {
 			GpuTextureView colour, Optional<?> clearColour, GpuTextureView depth,
 			OptionalDouble clearDepth, Operation<RenderPass> original) {
 		RenderPass first = original.call(encoder, label, colour, clearColour, depth, clearDepth);
-		return LevelPass.open(first, () -> original.call(encoder, label, colour, Optional.empty(),
-				depth, OptionalDouble.empty()));
+		return LevelPass.open(first, colour, depth, () -> original.call(encoder, label, colour,
+				Optional.empty(), depth, OptionalDouble.empty()));
 	}
 }
