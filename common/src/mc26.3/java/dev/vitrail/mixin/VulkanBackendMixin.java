@@ -150,6 +150,22 @@ public abstract class VulkanBackendMixin {
 			ProgramStage.TESSELLATION_CONTROL, VK10.VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
 			ProgramStage.TESSELLATION_EVALUATION, VK10.VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
 
+	// On a device that only promises the portability subset, MoltenVK among them, a sampler made to
+	// compare may only be written into a descriptor once this is enabled, and the shadow lookups a
+	// pack asks the hardware to compare are bound through exactly such a sampler (ShadowCompare).
+	// The game enables triangleFans alone out of that struct. Asked only where the extension is
+	// there, since every other device honours a comparison sampler with nothing to enable.
+	@Unique
+	private static final VulkanFeature MUTABLE_COMPARISON = new VulkanFeature(
+			VulkanFeatureSets.PORTABILITY_SUBSET_FEATURES_STRUCT, "mutableComparisonSamplers");
+
+	@Unique
+	private static final String PORTABILITY_EXTENSION = "VK_KHR_portability_subset";
+
+	@Unique
+	private static final String COMPARISON = "the comparison sampler a pack's shadow lookups are "
+			+ "bound with is outside what the device promises, which the validation layer refuses";
+
 	@Unique
 	private static final String VOXELS = "voxel lighting will not write";
 
@@ -189,6 +205,9 @@ public abstract class VulkanBackendMixin {
 		enable(physical, features, WRITE_WITHOUT_FORMAT, enabled, VOXELS);
 		BufferBlending.serve(enable(physical, features, INDEPENDENT_BLEND, enabled, PER_BUFFER));
 		GeometryStage.serve(enable(physical, features, GEOMETRY_SHADER, enabled, GEOMETRY));
+		if (physical.hasDeviceExtension(PORTABILITY_EXTENSION)) {
+			enable(physical, features, MUTABLE_COMPARISON, enabled, COMPARISON);
+		}
 		// Not a feature, but asked of the same device at the same moment: the physical device is
 		// closed once the game's own device has read what it keeps of it.
 		boolean moltenVk =
