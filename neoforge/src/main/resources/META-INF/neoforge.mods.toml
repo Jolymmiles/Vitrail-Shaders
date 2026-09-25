@@ -32,7 +32,11 @@ description = '''OptiFine-format shader packs, on Minecraft's native Vulkan rend
 [[mixins]]
 config = "vitrail.mixins.json"
 
-# The engine's own mixins are in the common module and are listed above. This second config is
+# The mixins that exist for one game version only, which the build takes from src/mc<version>/.
+[[mixins]]
+config = "vitrail-game.mixins.json"
+
+# The engine's own mixins are in the common module and are listed above. This last config is
 # the handful that exist on this loader alone, which today is the refusal of the early loading
 # window: it names classes of NeoForge's, so it could not live where the Fabric module reads.
 [[mixins]]

@@ -1,7 +1,8 @@
 package dev.vitrail.render;
 
 import dev.vitrail.cache.ModuleCache;
-import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
+import dev.vitrail.glsl.LoadClock;
+import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
 
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
@@ -11,12 +12,15 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.spvc.Spvc;
 import org.lwjgl.util.spvc.SpvcReflectedResource;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Compiles a compute SPIR-V module and remaps its bindings the way the game remaps a render one.
@@ -64,7 +68,79 @@ public final class ComputeShader {
 	private ComputeShader() {
 	}
 
-	public record Compiled(long module, List<VulkanBindGroupLayout.Entry> entries) {
+	/**
+	 * One descriptor a compute declares, in the order its binding was remapped to: a buffer,
+	 * uniform or storage, or an image, sampled or storage. Which of the two storage kinds a name is
+	 * is the engine's to answer by name, as it was before this record existed.
+	 */
+	public record Binding(boolean buffer, String name) {
+	}
+
+	/** The device module a compute was built into, and what it binds, binding by binding. */
+	public record Compiled(long module, List<Binding> entries) {
+	}
+
+	/**
+	 * Builds one compute unit into a device module: through {@link ModuleCache}, with the zeroes the
+	 * game's compiler road gets, and clocked as module work.
+	 * <p>
+	 * Clocked like everything the game's compiler makes: shaderc first, then the reflection inside
+	 * {@code createFromSpirv}. Neither goes through the game's compiler, so the funnel clock cannot
+	 * see them and this road counts itself. A cache hit skips both and still clocks the file read,
+	 * the same way {@code GlslCompilerMixin} clocks a served graphics unit. The layout and the
+	 * pipeline the caller builds afterwards stay outside the figure: they are Vulkan object
+	 * creation, not module work. One outer finally so that every exit, the refusal and the throw
+	 * included, is counted exactly once.
+	 * <p>
+	 * Iris has no disk store for this. {@code ProgramBuilder.beginCompute}
+	 * ({@code ProgramBuilder.java:71-84}) then {@code GlShader} ({@code GlShader.java:24-49}) calls
+	 * glCompileShader on the render thread, and the binary cache is the OpenGL driver's. This
+	 * engine's compute never entered {@code GlslCompiler.createIntermediary}, so it never entered
+	 * the store either; the same store now holds it, same file layout, a stage token that names
+	 * this road's shaderc options so a graphics unit through the game's compiler cannot serve this
+	 * blob.
+	 *
+	 * @param source  the unit's text as shaderc is to read it
+	 * @param stage   the stage token the store keys this road under
+	 * @param compile shaderc for this road, answering null where it refused the unit
+	 * @return the module, or null where shaderc refused the unit
+	 * @throws Exception whatever the reflection or the module creation threw
+	 */
+	public static @Nullable Compiled build(VulkanDevice vulkan, String label, String source,
+			String stage, Function<String, @Nullable ByteBuffer> compile) throws Exception {
+		long began = System.nanoTime();
+		IntermediaryShaderModule module = null;
+		// One state for the key and the patch, as the game's compiler road takes it.
+		RawLocals.begin();
+		try {
+			String key = ModuleCache.keyOf(source, stage);
+			module = ModuleCache.lookup(key, label);
+			if (module == null) {
+				ByteBuffer spirv = compile.apply(source);
+				ModuleCache.building(label);
+				if (spirv == null) {
+					return null;
+				}
+
+				// The same zeroes the game's compiler road gets in GlslCompilerMixin: this road
+				// has its own shaderc call, so it has to ask for them itself, and before the
+				// reflection and the store, so a served blob carries them too. Compiled at the
+				// performance level, this module has mostly values where that road has variables,
+				// and its undefined reads are what the pass turns into zeroes here.
+				module = IntermediaryShaderModule.createFromSpirv(label,
+						RawLocals.patch(label, spirv));
+				ModuleCache.store(key, module);
+			}
+
+			return compile(vulkan, module);
+		} finally {
+			RawLocals.end();
+			if (module != null) {
+				module.close();
+			}
+
+			LoadClock.module(System.nanoTime() - began);
+		}
 	}
 
 	/**
@@ -110,7 +186,7 @@ public final class ComputeShader {
 	 * have the same lifetime as this call, and {@code rebind} rewrites the bytes after the store
 	 * has copied them.
 	 */
-	public static Compiled compile(VulkanDevice vulkan, IntermediaryShaderModule module) {
+	private static Compiled compile(VulkanDevice vulkan, IntermediaryShaderModule module) {
 		try {
 			IntermediaryShaderModuleAccessor access =
 					(IntermediaryShaderModuleAccessor) (Object) module;
@@ -129,7 +205,14 @@ public final class ComputeShader {
 
 			List<VulkanBindGroupLayout.Entry> frozen = List.copyOf(entries);
 			module.rebind(List.of(), frozen);
-			return new Compiled(module.createVulkanShaderModule(vulkan), frozen);
+			List<Binding> bindings = new ArrayList<>(frozen.size());
+			for (VulkanBindGroupLayout.Entry entry : frozen) {
+				bindings.add(new Binding(
+						entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER,
+						entry.name()));
+			}
+
+			return new Compiled(module.createVulkanShaderModule(vulkan), List.copyOf(bindings));
 		} catch (RuntimeException e) {
 			throw e;
 		} catch (Exception e) {

@@ -2,7 +2,7 @@ package dev.vitrail.render;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.Vitrail;
-import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
+import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.spvc.Spvc;

@@ -2,7 +2,7 @@ package dev.vitrail.cache;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import dev.vitrail.glsl.LocalZeroes;
-import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
+import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;

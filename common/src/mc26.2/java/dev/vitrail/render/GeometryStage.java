@@ -3,7 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.GeometryFold;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.mixin.access.IntermediaryShaderModuleAccessor;
+import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.Vitrail;
 

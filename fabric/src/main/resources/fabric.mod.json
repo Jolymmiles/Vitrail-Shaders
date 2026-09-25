@@ -25,6 +25,7 @@
 	},
 	"mixins": [
 		"vitrail.mixins.json",
+		"vitrail-game.mixins.json",
 		"vitrail-fabric.mixins.json"
 	],
 	"depends": {

@@ -1,4 +1,4 @@
-package dev.vitrail.mixin.access;
+package dev.vitrail.mixin.game;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import org.spongepowered.asm.mixin.Mixin;
