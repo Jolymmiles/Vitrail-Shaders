@@ -1,5 +1,7 @@
 package dev.vitrail.render;
 
+import dev.vitrail.mixin.access.GpuDeviceAccessor;
+
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
@@ -152,5 +154,20 @@ public final class GraphicsApi {
 	public static RenderPassDescriptor withDepthAttachment(RenderPassDescriptor descriptor,
 			GpuTextureView view, OptionalDouble clear) {
 		return descriptor.withDepthAttachment(view, clear);
+	}
+
+	/**
+	 * Takes every compiled pipeline that declares the game's entity format out of the device's
+	 * cache, so the next bind compiles it against the mesh now in force, and answers with their
+	 * keys. The compiled objects are kept aside and freed at the next safe purge, which is
+	 * {@link StalePipelines}'s whole reason to exist on this game.
+	 *
+	 * @return the keys taken out, or null where the device is not the one this engine keeps a
+	 *         cache hook on
+	 */
+	public static @Nullable List<RenderPipeline> dropEntityPipelines(GpuDevice device) {
+		return ((GpuDeviceAccessor) device).vitrail$backend() instanceof StalePipelines stale
+				? stale.vitrail$dropEntityPipelines()
+				: null;
 	}
 }

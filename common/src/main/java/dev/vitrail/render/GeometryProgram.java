@@ -3,7 +3,6 @@ package dev.vitrail.render;
 import dev.vitrail.glsl.LegacyGlsl;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
-import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.BlendMode;
 import dev.vitrail.pack.model.ProgramStage;
@@ -29,7 +28,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.platform.CompareOp;
-import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -51,11 +49,7 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
-import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
-import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.MappableRingBuffer;
@@ -500,7 +494,7 @@ final class GeometryProgram {
 	 * take itself. Written and cleared under this program's monitor, on whichever side gets there
 	 * first.
 	 */
-	private VulkanRenderPipeline ahead;
+	private AheadCompiler.Ahead ahead;
 
 	/**
 	 * Set by {@link #discardAhead()} when the chain released before anything drew this program:
@@ -1086,12 +1080,10 @@ final class GeometryProgram {
 		// What the worker finished is handed to the cache here, on the render thread, and the
 		// precompile below finds it as a lookup. A cache that already holds the key kept a copy
 		// somebody compiled meanwhile, so ours dies instead, never having been bound anywhere.
-		VulkanRenderPipeline ready = this.ahead;
+		AheadCompiler.Ahead ready = this.ahead;
 		if (ready != null) {
 			this.ahead = null;
-			boolean adopted = ((GpuDeviceAccessor) device).vitrail$backend()
-					instanceof StalePipelines cache && cache.vitrail$adopt(this.pipeline, ready);
-			if (!adopted) {
+			if (!ready.adopt(device, this.pipeline)) {
 				ready.destroy();
 			}
 		}
@@ -1291,54 +1283,29 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * Builds this program's compiled pipeline on the pack-load worker, through the same public
-	 * steps the device takes, so the first draw finds the half second of shaderc already paid.
-	 * <p>
-	 * <strong>Deliberately not {@code precompilePipeline}</strong>: the device keeps its results
-	 * in plain maps only the render thread may touch, and its compiler is one shared instance on
-	 * the same rule. Everything used here instead is safe off the thread. The worker's own
-	 * {@code GlslCompiler} carries shaderc, the SPIRV-Cross reflection opens a context per call,
-	 * and the three calls underneath ({@code vkCreateShaderModule}, the set layout, the pipelines)
-	 * create device-level objects Vulkan lets any thread create. What the worker may not do is
-	 * write the cache, and {@link #compile} does that half, adopting the object built here.
+	 * Builds this program's compiled pipeline on the pack-load worker, so the first draw finds the
+	 * half second of shaderc already paid. {@link AheadCompiler} says how each game does that off
+	 * the render thread; what the worker may not do is file the result where the render thread
+	 * looks, and {@link #compile} does that half, adopting the object built here.
 	 * <p>
 	 * A compile the pack's GLSL refuses stores nothing and says so in one line, because a refusal
 	 * only this path reproduces would otherwise never be seen at all; the first draw then retries
 	 * on the device's own path, which latches {@link #broken} and prints the authoritative one.
 	 *
-	 * @param compiler the worker's own compiler, never the device's
+	 * @param compiler the worker's own, never shared with another task
 	 * @return true when a compiled pipeline now waits for {@link #compile} to adopt it
 	 */
-	boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+	boolean warmAhead(AheadCompiler compiler) {
 		synchronized (this) {
 			if (this.compiled || this.broken || this.discarded || this.ahead != null) {
 				return false;
 			}
 		}
 
-		VulkanRenderPipeline built;
+		AheadCompiler.Ahead built;
 		try {
-			IntermediaryShaderModule vertex =
-					intermediary(compiler, GraphicsApi.vertexShader(this.pipeline), ShaderType.VERTEX);
-			try {
-				IntermediaryShaderModule fragment =
-						intermediary(compiler, GraphicsApi.fragmentShader(this.pipeline), ShaderType.FRAGMENT);
-				try {
-					GlslCompiler.CompiledModules modules =
-							compiler.compile(device, this.pipeline, vertex, fragment);
-					built = VulkanRenderPipeline.compile(device, modules.layout(), this.pipeline,
-							modules.vertex(), modules.fragment());
-				} finally {
-					// vkCreateShaderModule consumes pCode at the call, by spec, so the buffers
-					// behind the intermediaries are done once compile returns. The device keeps
-					// its own in a cache instead, which is why its path has no close: here
-					// nothing keeps them.
-					fragment.close();
-				}
-			} finally {
-				vertex.close();
-			}
-		} catch (ShaderCompileException e) {
+			built = compiler.build(this.pipeline, this.source);
+		} catch (AheadCompiler.Refused e) {
 			// The first draw retries on the device's own path, which latches broken and prints
 			// the pack's defect properly. Said here as well because a refusal the device path
 			// does NOT reproduce would otherwise never be seen at all.
@@ -1358,18 +1325,6 @@ final class GeometryProgram {
 		}
 
 		return true;
-	}
-
-	/** One stage the way the device reads it: the pipeline's defines injected, then shaderc. */
-	private IntermediaryShaderModule intermediary(GlslCompiler compiler, Identifier id,
-			ShaderType type) throws ShaderCompileException {
-		String text = GraphicsApi.shaderText(this.source, id, type);
-		if (text == null) {
-			throw new ShaderCompileException("no source for " + id);
-		}
-
-		return compiler.createIntermediary(id.toDebugFileName(),
-				GlslPreprocessor.injectDefines(text, this.pipeline.getShaderDefines()), type);
 	}
 
 	/**

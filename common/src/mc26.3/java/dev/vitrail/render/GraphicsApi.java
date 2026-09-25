@@ -1,7 +1,9 @@
 package dev.vitrail.render;
 
+import com.mojang.blaze3d.pipeline.PipelineCache;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
@@ -15,15 +17,20 @@ import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.renderpearl.api.vertex.VertexFormat;
 import dev.vitrail.Vitrail;
+import dev.vitrail.mixin.access.RenderPipelineAccessor;
+import dev.vitrail.mixin.game.PipelineCacheAccessor;
+import dev.vitrail.mixin.game.RenderSystemAccessor;
 import net.minecraft.resources.Identifier;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.OptionalDouble;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -157,6 +164,17 @@ public final class GraphicsApi {
 	/** Whether a compiled pipeline can be drawn with. */
 	public static boolean valid(@Nullable CompiledRenderPipeline compiled) {
 		return compiled != null && !compiled.isClosed();
+	}
+
+	/**
+	 * Files a pipeline compiled elsewhere under the description it was compiled from, so the next
+	 * {@link #compile} of that description is a lookup.
+	 *
+	 * @return false where one was already filed, in which case nothing moved and the caller still
+	 *         owns what it offered
+	 */
+	static boolean adopt(RenderPipeline pipeline, CompiledRenderPipeline compiled) {
+		return COMPILED.putIfAbsent(pipeline, new Held(compiled)) == null;
 	}
 
 	/**
@@ -320,5 +338,63 @@ public final class GraphicsApi {
 			GpuTextureView view, OptionalDouble clear) {
 		return new RenderPassDescriptor(descriptor.label(), descriptor.colorAttachments(),
 				new RenderPassDescriptor.Attachment<>(view, clear), descriptor.renderArea());
+	}
+
+	/**
+	 * Takes every compiled pipeline that declares the game's entity format out of the game's
+	 * pipeline caches, so the next bind compiles it against the mesh now in force, and answers
+	 * with their keys.
+	 * <p>
+	 * On 26.2 those pipelines sat in the device's cache and could only be set aside until the next
+	 * safe purge. Here they sit in the game's own caches, the one the current resource load built
+	 * and the one it falls back on, and closing one is safe at any instant, so they are closed as
+	 * they leave.
+	 *
+	 * @return the keys taken out, never null on this game
+	 */
+	public static @Nullable List<RenderPipeline> dropEntityPipelines(GpuDevice device) {
+		List<RenderPipeline> dropped = new ArrayList<>();
+		for (PipelineCache cache : new PipelineCache[] {RenderSystemAccessor.vitrail$current(),
+				RenderSystemAccessor.vitrail$fallback()}) {
+			if (cache == null) {
+				continue;
+			}
+
+			Iterator<Map.Entry<RenderPipeline, CompiledRenderPipeline>> held =
+					((PipelineCacheAccessor) cache).vitrail$cache().entrySet().iterator();
+			while (held.hasNext()) {
+				Map.Entry<RenderPipeline, CompiledRenderPipeline> entry = held.next();
+				if (!declaresGameEntity(entry.getKey())) {
+					continue;
+				}
+
+				held.remove();
+				entry.getValue().close();
+				dropped.add(entry.getKey());
+			}
+		}
+
+		return dropped;
+	}
+
+	/**
+	 * Whether a pipeline declares the game's entity format, read off the field rather than the
+	 * getter, which {@code RenderPipelineMixin} rewrites while the entity mesh carries. The three
+	 * pipelines a moving block is drawn with count as well.
+	 */
+	private static boolean declaresGameEntity(RenderPipeline pipeline) {
+		if (EntityMesh.movingBlock(pipeline)) {
+			return true;
+		}
+
+		for (VertexFormat format : ((RenderPipelineAccessor) pipeline).vitrail$declaredFormats()) {
+			@SuppressWarnings("ReferenceEquality")
+			boolean entity = format == DefaultVertexFormat.ENTITY;
+			if (entity) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
