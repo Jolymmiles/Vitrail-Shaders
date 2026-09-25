@@ -1,4 +1,4 @@
-package dev.vitrail.mixin.sodium;
+package dev.vitrail.mixin.game;
 
 import net.caffeinemc.mods.sodium.client.gpu.arena.ArenaAggregator;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Sizes Sodium 0.9.2's shared geometry arena at the pack's stride, the same answer
- * {@link ChunkMeshFormatsMixin} already gives everyone else.
+ * {@link dev.vitrail.mixin.sodium.ChunkMeshFormatsMixin} already gives everyone else.
  * <p>
  * 0.9.1 has no {@code ArenaAggregator}. 0.9.2 added one and baked
  * {@code ChunkMeshFormats.COMPACT} into it at construction, twenty bytes, then refused any other
