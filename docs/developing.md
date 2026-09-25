@@ -67,7 +67,8 @@ By family, so you can tell whether a change is in scope:
 
 Two of those need no corpus: the uniform block invariants and path confinement. Everything else
 wants one. None of them run on a bare clone even so, since the harness that drives them is the one
-absent above, and what `check` adds to a compile is the text rule and nothing else.
+absent above, and what `check` adds to a compile is the text rule and the one unit test that needs
+no pack, which holds the game's transforms block to the include the game ships.
 
 ## What makes a measurement trustworthy
 

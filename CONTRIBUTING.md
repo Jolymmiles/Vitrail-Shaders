@@ -404,6 +404,10 @@ holds:
   join them, `StringSplitter` and `OperatorPrecedence`
 - `checkText`, which covers the two things no compiler sees: a byte order mark, which PowerShell
   writes unless told not to, and typographic punctuation
+- the unit tests under `common/src/test/`, which need neither a game running nor a pack. There is
+  one: it holds the game's transforms block, which a pack's entity programs are declared against,
+  to the include the game being built ships, since a block declared in another order compiles and
+  reads the wrong bytes
 
 `gradlew build -PlintReport` prints the remaining Error Prone warnings and every compiler warning
 with them, since it drops `-Werror`. A run under it is a listing rather than a check, and the build
