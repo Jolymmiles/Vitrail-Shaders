@@ -21,10 +21,14 @@ import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.PlayerRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 import net.minecraft.util.Util;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
+import org.joml.Vector3fc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -210,6 +214,29 @@ public final class GameRender {
 		long fade = Util.toMillis(Minecraft.getInstance().options.chunkSectionFadeInTime().get());
 
 		return level.isSectionCompiledAndVisible(block, fade);
+	}
+
+	/**
+	 * The sky's colour at this partial tick, read through the camera's attribute probe and packed
+	 * as 26.2 holds it: eight bits a channel, red in the third byte.
+	 * <p>
+	 * 26.3 holds the attribute as three floats, the channel over 255 that 26.2 packed, which is what
+	 * its sky renderer hands its shader as it stands. Packing it again keeps one shape for both games
+	 * and costs nothing 26.2 did not already cost, the uniform being built from those eight bits on
+	 * either. Rounded to the nearest step rather than floored as the game's own packing is: a float
+	 * that is a whole step over 255 can land a hair below the step once multiplied back, and floored
+	 * it would come out one below the byte 26.2 read.
+	 */
+	public static int skyColor(Camera camera, float partialTick) {
+		Vector3fc colour = camera.attributeProbe().getValue(EnvironmentAttributes.SKY_COLOR,
+				partialTick);
+
+		return ARGB.color(255, channel(colour.x()), channel(colour.y()), channel(colour.z()));
+	}
+
+	/** One channel of a colour held as a float, as the byte a packed colour holds it in. */
+	private static int channel(float value) {
+		return Mth.clamp(Math.round(value * 255.0F), 0, 255);
 	}
 
 	/**

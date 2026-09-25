@@ -18,6 +18,7 @@ import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
@@ -147,6 +148,14 @@ public final class GameRender {
 	 */
 	public static boolean sectionShown(LevelRenderer level, BlockPos block) {
 		return level.isSectionCompiledAndVisible(block);
+	}
+
+	/**
+	 * The sky's colour at this partial tick, read through the camera's attribute probe, packed as
+	 * the attribute holds it on this game: eight bits a channel, red in the third byte.
+	 */
+	public static int skyColor(Camera camera, float partialTick) {
+		return camera.attributeProbe().getValue(EnvironmentAttributes.SKY_COLOR, partialTick);
 	}
 
 	/**
