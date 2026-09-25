@@ -41,13 +41,21 @@ public final class SodiumApi {
 	 * {@link GeometryHold} as the mixin did, and draws the group into it with no order independent
 	 * stage, which is the classic path the game's own chunk sections take.
 	 * <p>
-	 * <strong>One pass for the whole group, where 26.2 had one per terrain pass.</strong> The opaque
-	 * group is the solid and the cutout passes, and the descriptor is asked for the first of them.
-	 * The two shadow programs draw into the one map and their passes were already joined into one by
-	 * {@link GeometryHold} wherever they named the same attachments; a pack that gave them different
-	 * draw buffers would have the second refused at {@code setPipeline}, and that is a question for
-	 * the port of the chunk renderer mixin, which is also what puts the pack's shadow programs on
-	 * this pass at all.
+	 * <strong>One pass handed in for the whole group, and one per terrain pass where they
+	 * differ.</strong> The opaque group is the solid and the cutout passes, and the descriptor is
+	 * asked here for the first of them. The chunk renderer mixin asks it again for each terrain pass
+	 * as the renderer reaches it, through {@link GeometryHold}, which joins this pass wherever the
+	 * two name the same attachments and opens another where a pack gave its shadow programs different
+	 * draw buffers: the pass per terrain pass of 26.2, answered the same way.
+	 * <p>
+	 * <strong>The draw commands are picked first.</strong> Sodium 0.9.2 for 26.3 fills its batches in
+	 * {@code prepareChunkRendering}, for every terrain pass at once, where the build for 26.2 filled
+	 * them inside the draw. The level calls it for the camera and nothing calls it for the light, and
+	 * the light's walk draws out of batches of its own, which only a fill made under the flag reaches,
+	 * so this makes that fill, with the light's lists standing and the face culling the chunk
+	 * renderer mixin turns off for it. Made outside the pass, since a fill may grow the shared index
+	 * buffer, and once for each group, since either group may be left out of the map: the second call
+	 * copies the same commands again and fills nothing twice.
 	 * <p>
 	 * <strong>No descriptor, no draw.</strong> 26.2 fell back on Sodium's own pass on the game's
 	 * target there, which the shadow stage guards against before it opens; drawn here, that would be
@@ -72,6 +80,7 @@ public final class SodiumApi {
 			return;
 		}
 
+		renderer.prepareChunkRendering(matrices, camera.x, camera.y, camera.z);
 		try (RenderPass pass = GeometryHold.open(RenderSystem.getDevice().createCommandEncoder(),
 				descriptor)) {
 			renderer.drawChunkLayer(pass, group, matrices, camera.x, camera.y, camera.z, sampler,
