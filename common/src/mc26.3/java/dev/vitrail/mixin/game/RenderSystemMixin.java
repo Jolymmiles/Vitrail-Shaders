@@ -2,6 +2,8 @@ package dev.vitrail.mixin.game;
 
 import com.mojang.blaze3d.pipeline.PipelineCache;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import dev.vitrail.render.GraphicsApi;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -27,5 +29,23 @@ public abstract class RenderSystemMixin {
 	private static void vitrail$purge(PipelineCache cache,
 			CallbackInfoReturnable<@Nullable PipelineCache> callback) {
 		GraphicsApi.purge();
+	}
+
+	/**
+	 * Answers the game's lookup of a compiled pipeline out of the engine's own map first. On 26.2
+	 * the device held one cache and a pipeline this engine compiled was in it, so Sodium's renderer
+	 * setting the terrain pipeline this engine handed it found the pack's compile. 26.3 looks the
+	 * description up in caches that hold only what the game compiled, and compiles a miss from the
+	 * game's own sources, which hold no line of a pack: without this, that lookup would build an
+	 * invalid pipeline in the middle of Sodium's pass.
+	 */
+	@Inject(method = "getCompiledPipelineNullable", at = @At("HEAD"), cancellable = true,
+			require = 1)
+	private static void vitrail$ours(RenderPipeline pipeline,
+			CallbackInfoReturnable<@Nullable CompiledRenderPipeline> callback) {
+		CompiledRenderPipeline ours = GraphicsApi.held(pipeline);
+		if (ours != null) {
+			callback.setReturnValue(ours);
+		}
 	}
 }

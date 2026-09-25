@@ -18,6 +18,7 @@ import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.renderpearl.frontend.FrontendRenderPipeline;
 import dev.vitrail.Vitrail;
 import dev.vitrail.mixin.access.RenderPipelineAccessor;
 import dev.vitrail.mixin.game.PipelineCacheAccessor;
@@ -77,6 +78,15 @@ public final class GraphicsApi {
 	 * because a refusal is kept as well, and the map takes no null.
 	 */
 	private static final Map<RenderPipeline, Held> COMPILED = new ConcurrentHashMap<>();
+
+	/**
+	 * The description each backend pipeline in {@link #COMPILED} was compiled from, by the backend
+	 * object. The backend's own pass only holds that object when it pushes a draw's descriptors,
+	 * and the questions asked there, which shadow samplers compare, are keyed on the description,
+	 * as they were on 26.2 where the backend pipeline carried it. Identity is what the key needs
+	 * and what it gets: backend pipelines override neither equals nor hashCode.
+	 */
+	private static final Map<Object, RenderPipeline> DESCRIBED = new ConcurrentHashMap<>();
 
 	private GraphicsApi() {
 	}
@@ -158,6 +168,7 @@ public final class GraphicsApi {
 			return raced.compiled();
 		}
 
+		describe(pipeline, built);
 		return built;
 	}
 
@@ -174,7 +185,40 @@ public final class GraphicsApi {
 	 *         owns what it offered
 	 */
 	static boolean adopt(RenderPipeline pipeline, CompiledRenderPipeline compiled) {
-		return COMPILED.putIfAbsent(pipeline, new Held(compiled)) == null;
+		if (COMPILED.putIfAbsent(pipeline, new Held(compiled)) != null) {
+			return false;
+		}
+
+		describe(pipeline, compiled);
+		return true;
+	}
+
+	/**
+	 * What this engine compiled for a description, or null where it compiled nothing or the compile
+	 * refused it. {@code RenderSystemMixin} answers the game's own lookup with it, so a pipeline
+	 * of this engine that the game or Sodium sets by description is found here rather than
+	 * compiled again from the game's sources, which hold none of it.
+	 */
+	public static @Nullable CompiledRenderPipeline held(RenderPipeline pipeline) {
+		Held held = COMPILED.get(pipeline);
+		return held == null ? null : held.compiled();
+	}
+
+	/** The description a backend pipeline of this engine was compiled from, or null. */
+	public static @Nullable RenderPipeline describing(@Nullable Object backend) {
+		return backend == null ? null : DESCRIBED.get(backend);
+	}
+
+	private static void describe(RenderPipeline pipeline, @Nullable CompiledRenderPipeline compiled) {
+		if (compiled instanceof FrontendRenderPipeline front) {
+			DESCRIBED.put(front.backendRenderPipeline(), pipeline);
+		}
+	}
+
+	private static void undescribe(@Nullable CompiledRenderPipeline compiled) {
+		if (compiled instanceof FrontendRenderPipeline front) {
+			DESCRIBED.remove(front.backendRenderPipeline());
+		}
 	}
 
 	/**
@@ -184,6 +228,7 @@ public final class GraphicsApi {
 	public static void forget(RenderPipeline pipeline) {
 		Held held = COMPILED.remove(pipeline);
 		if (held != null && held.compiled() != null) {
+			undescribe(held.compiled());
 			held.compiled().close();
 		}
 	}
@@ -216,6 +261,7 @@ public final class GraphicsApi {
 			held.remove();
 			CompiledRenderPipeline compiled = entry.getValue().compiled();
 			if (compiled != null) {
+				undescribe(compiled);
 				compiled.close();
 			}
 		}

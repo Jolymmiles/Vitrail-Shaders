@@ -10,6 +10,7 @@
 		"PipelineBuilderMixin",
 		"PipelineCacheAccessor",
 		"RenderSystemAccessor",
-		"RenderSystemMixin"
+		"RenderSystemMixin",
+		"VulkanRenderPipelineAccessor"
 	]
 }
