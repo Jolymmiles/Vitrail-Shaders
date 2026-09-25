@@ -19,12 +19,9 @@ import org.lwjgl.vulkan.VK10;
 import org.lwjgl.vulkan.VK11;
 import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VkDevice;
-import org.lwjgl.vulkan.VkPhysicalDeviceFeatures;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures2;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties2;
 import org.lwjgl.vulkan.VkPhysicalDeviceSubgroupProperties;
-import org.lwjgl.vulkan.VkPhysicalDeviceVulkan11Features;
-import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Features;
 import org.lwjgl.vulkan.VkPhysicalDeviceVulkan12Properties;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -65,30 +62,30 @@ import java.util.Set;
 @Mixin(VulkanBackend.class)
 public abstract class VulkanBackendMixin {
 
+	// Every feature through the constructor that works out its own offset. On this game a
+	// Vulkan 1.0 feature is found in VkPhysicalDeviceFeatures2 and its offset counts from there,
+	// which the constructor adds; the bare offset of the field in VkPhysicalDeviceFeatures would
+	// land four fields early, reading and enabling robustBufferAccess for geometryShader and
+	// nothing for independentBlend.
 	@Unique
 	private static final VulkanFeature VERTEX_STORES = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "vertexPipelineStoresAndAtomics",
-			VkPhysicalDeviceFeatures.VERTEXPIPELINESTORESANDATOMICS);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "vertexPipelineStoresAndAtomics");
 
 	@Unique
 	private static final VulkanFeature FRAGMENT_STORES = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "fragmentStoresAndAtomics",
-			VkPhysicalDeviceFeatures.FRAGMENTSTORESANDATOMICS);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "fragmentStoresAndAtomics");
 
 	@Unique
 	private static final VulkanFeature EXTENDED_FORMATS = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderStorageImageExtendedFormats",
-			VkPhysicalDeviceFeatures.SHADERSTORAGEIMAGEEXTENDEDFORMATS);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderStorageImageExtendedFormats");
 
 	@Unique
 	private static final VulkanFeature WRITE_WITHOUT_FORMAT = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderStorageImageWriteWithoutFormat",
-			VkPhysicalDeviceFeatures.SHADERSTORAGEIMAGEWRITEWITHOUTFORMAT);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderStorageImageWriteWithoutFormat");
 
 	@Unique
 	private static final VulkanFeature INDEPENDENT_BLEND = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "independentBlend",
-			VkPhysicalDeviceFeatures.INDEPENDENTBLEND);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "independentBlend");
 
 	// The narrow arithmetic a pack written for a recent card asks for. RenderPearl computes in
 	// float16_t, int16_t and int8_t throughout and keeps a half in its storage buffers, so its
@@ -104,53 +101,44 @@ public abstract class VulkanBackendMixin {
 	// pack of the corpus declares one.
 	@Unique
 	private static final VulkanFeature SHADER_FLOAT16 = new VulkanFeature(
-			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderFloat16",
-			VkPhysicalDeviceVulkan12Features.SHADERFLOAT16);
+			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderFloat16");
 
 	@Unique
 	private static final VulkanFeature SHADER_INT8 = new VulkanFeature(
-			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderInt8",
-			VkPhysicalDeviceVulkan12Features.SHADERINT8);
+			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderInt8");
 
 	@Unique
 	private static final VulkanFeature SHADER_INT16 = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderInt16",
-			VkPhysicalDeviceFeatures.SHADERINT16);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "shaderInt16");
 
 	// Subgroup operations over those types, which the pack reaches through the extended types
 	// subgroup extensions: a reduction over a half vector is refused without this one.
 	@Unique
 	private static final VulkanFeature SUBGROUP_EXTENDED = new VulkanFeature(
-			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderSubgroupExtendedTypes",
-			VkPhysicalDeviceVulkan12Features.SHADERSUBGROUPEXTENDEDTYPES);
+			VulkanFeatureSets.VK12_FEATURES_STRUCT, "shaderSubgroupExtendedTypes");
 
 	@Unique
 	private static final VulkanFeature STORAGE_16 = new VulkanFeature(
-			VulkanFeatureSets.VK11_FEATURES_STRUCT, "storageBuffer16BitAccess",
-			VkPhysicalDeviceVulkan11Features.STORAGEBUFFER16BITACCESS);
+			VulkanFeatureSets.VK11_FEATURES_STRUCT, "storageBuffer16BitAccess");
 
 	@Unique
 	private static final VulkanFeature UNIFORM_STORAGE_16 = new VulkanFeature(
-			VulkanFeatureSets.VK11_FEATURES_STRUCT, "uniformAndStorageBuffer16BitAccess",
-			VkPhysicalDeviceVulkan11Features.UNIFORMANDSTORAGEBUFFER16BITACCESS);
+			VulkanFeatureSets.VK11_FEATURES_STRUCT, "uniformAndStorageBuffer16BitAccess");
 
 	@Unique
 	private static final VulkanFeature STORAGE_8 = new VulkanFeature(
-			VulkanFeatureSets.VK12_FEATURES_STRUCT, "storageBuffer8BitAccess",
-			VkPhysicalDeviceVulkan12Features.STORAGEBUFFER8BITACCESS);
+			VulkanFeatureSets.VK12_FEATURES_STRUCT, "storageBuffer8BitAccess");
 
 	@Unique
 	private static final VulkanFeature UNIFORM_STORAGE_8 = new VulkanFeature(
-			VulkanFeatureSets.VK12_FEATURES_STRUCT, "uniformAndStorageBuffer8BitAccess",
-			VkPhysicalDeviceVulkan12Features.UNIFORMANDSTORAGEBUFFER8BITACCESS);
+			VulkanFeatureSets.VK12_FEATURES_STRUCT, "uniformAndStorageBuffer8BitAccess");
 
 	// The stage a pack puts between its vertex and its fragment stage. Iris links a .gsh whenever
 	// the pack ships one and OpenGL asks nothing of the driver for it; Vulkan makes it an optional
 	// feature, and the game, which has no geometry stage of its own, never asks for it.
 	@Unique
 	private static final VulkanFeature GEOMETRY_SHADER = new VulkanFeature(
-			VulkanFeatureSets.VK10_FEATURES_STRUCT, "geometryShader",
-			VkPhysicalDeviceFeatures.GEOMETRYSHADER);
+			VulkanFeatureSets.VK10_FEATURES_STRUCT, "geometryShader");
 
 	// The Vulkan stage bit of each stage a pack ships, to read the stages a device names.
 	@Unique
