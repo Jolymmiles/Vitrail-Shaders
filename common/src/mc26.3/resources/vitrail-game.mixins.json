@@ -9,6 +9,8 @@
 	"client": [
 		"FirstPersonHandsAndItemsRendererMixin",
 		"GameRendererHandMixin",
+		"GameRendererTransparencyMixin",
+		"LevelRendererMainPassMixin",
 		"PipelineBuilderMixin",
 		"PipelineCacheAccessor",
 		"RenderSystemAccessor",

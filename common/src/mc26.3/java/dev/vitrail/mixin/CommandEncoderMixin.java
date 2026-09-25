@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.render.GeometryHold;
+import dev.vitrail.render.LevelPass;
 import dev.vitrail.render.timing.PassTimings;
 
 import com.mojang.renderpearl.api.commands.CommandEncoder;
@@ -29,7 +30,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>
  * The 26.3 half: the encoder is an interface there, and the class every call lands in is
  * {@code FrontendCommandEncoder}, which carries the same methods; the clear with a region names a
- * mip level beside it.
+ * mip level beside it. Every one of those ends the level's pass as well, {@link LevelPass} saying
+ * why: on this game the level draws through one pass, and what the engine records between two of
+ * its phases could not be recorded inside it.
  */
 @Mixin(FrontendCommandEncoder.class)
 public abstract class CommandEncoderMixin {
@@ -41,6 +44,9 @@ public abstract class CommandEncoderMixin {
 			require = 1)
 	private void vitrail$flushHold(RenderPassDescriptor descriptor,
 			CallbackInfoReturnable<RenderPass> cir) {
+		// The level's pass first: whatever is opened now, the pass the game drew the level into so
+		// far has to end before it, and the level's next draw opens it again.
+		LevelPass.suspendCurrent();
 		RenderPass leftover = GeometryHold.leftover(descriptor);
 		if (leftover != null) {
 			cir.setReturnValue(leftover);
@@ -73,12 +79,14 @@ public abstract class CommandEncoderMixin {
 
 	@Inject(method = "clearColorTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$clearColour(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
 	@Inject(method = "clearDepthTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$clearDepth(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
@@ -88,6 +96,7 @@ public abstract class CommandEncoderMixin {
 			+ "Lcom/mojang/renderpearl/api/textures/GpuTexture;D)V",
 			at = @At("HEAD"), require = 1)
 	private void vitrail$clearColourAndDepth(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
@@ -97,12 +106,14 @@ public abstract class CommandEncoderMixin {
 			+ "Lcom/mojang/renderpearl/api/textures/GpuTexture;DIIIII)V",
 			at = @At("HEAD"), require = 1)
 	private void vitrail$clearColourAndDepthRegion(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flush(() -> "a texture clear");
 		PassTimings.censusClear();
 	}
 
 	@Inject(method = "copyTextureToTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$copyTexture(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flush(() -> "a texture copy");
 		PassTimings.censusCopy();
 	}
@@ -135,6 +146,7 @@ public abstract class CommandEncoderMixin {
 					+ "JLjava/lang/Runnable;IIIII)V"},
 			at = @At("HEAD"), require = 7)
 	private void vitrail$transfer(CallbackInfo ci) {
+		LevelPass.suspendCurrent();
 		GeometryHold.flushIdle(() -> "a buffer or texture transfer");
 	}
 }

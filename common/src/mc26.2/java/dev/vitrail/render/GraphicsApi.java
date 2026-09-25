@@ -176,4 +176,12 @@ public final class GraphicsApi {
 				? stale.vitrail$dropEntityPipelines()
 				: null;
 	}
+
+	/**
+	 * Ends the pass the level is being drawn through, where the game draws the whole level through
+	 * one. This game opens a pass per phase, so there is none to end.
+	 */
+	public static void suspendLevelPass() {
+		// Nothing: every phase of the level closes its own pass on this game.
+	}
 }

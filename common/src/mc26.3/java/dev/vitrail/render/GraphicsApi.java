@@ -514,4 +514,12 @@ public final class GraphicsApi {
 
 		return false;
 	}
+
+	/**
+	 * Ends the pass the level is being drawn through, so the engine can record what a pass may not
+	 * hold; the level's next draw opens it again. {@link LevelPass} says why.
+	 */
+	public static void suspendLevelPass() {
+		LevelPass.suspendCurrent();
+	}
 }
