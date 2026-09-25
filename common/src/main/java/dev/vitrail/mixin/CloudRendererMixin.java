@@ -25,11 +25,11 @@ import java.util.function.Supplier;
 /**
  * Draws the clouds with the program the pack ships for them, instead of the game's own shader.
  * <p>
- * The shape is {@link SkyRendererMixin}'s and shorter, because the cloud renderer is simpler than
- * the sky renderer: one method, one pass, one draw. The pipeline is swapped where it is set and the
- * pass is replaced where it is opened, on one call of one wrap each, so that the two cannot part
- * company - a pipeline carries one colour state per attachment the descriptor names, and setting one
- * against a pass built for the other throws by name in the middle of the frame.
+ * The shape is that of 26.2's {@code SkyRendererMixin}, and shorter, because the cloud renderer is
+ * simpler than the sky renderer: one method, one pass, one draw. The pipeline is swapped where it is
+ * set and the pass is replaced where it is opened, on one call of one wrap each, so that the two
+ * cannot part company - a pipeline carries one colour state per attachment the descriptor names, and
+ * setting one against a pass built for the other throws by name in the middle of the frame.
  * <p>
  * <strong>What is not swapped is the geometry, because there is none to swap.</strong> This renderer
  * binds no vertex buffer at all: it fills a texel buffer with three bytes a face and draws six

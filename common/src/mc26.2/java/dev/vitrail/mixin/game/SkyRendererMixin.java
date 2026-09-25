@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.game;
 
 import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.SkyDraw;
@@ -70,6 +70,11 @@ import java.util.function.Supplier;
  * past next, and the block and the samplers are bound after that, once everything the bind needs is
  * known. The draw comes last, and it is the one place a piece of geometry the game has none of can
  * be added to a pass the game built.
+ * <p>
+ * <strong>26.2's alone, with a twin of the same name under {@code src/mc26.3/}.</strong> 26.3
+ * records the whole sky in one pass, labels its pieces with debug groups rather than passes, sets a
+ * compiled pipeline and binds its images as uniforms, and every wrap below names a call that game
+ * no longer makes. The twin says what it keeps of this and why the rest waits.
  */
 @Mixin(SkyRenderer.class)
 public abstract class SkyRendererMixin {

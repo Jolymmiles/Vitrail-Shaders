@@ -63,7 +63,6 @@
 		"RenderTypeFeatureRendererGroupMixin",
 		"RenderTypeFeatureRendererMixin",
 		"sodium.MixinShaderChunkRenderer",
-		"SkyRendererMixin",
 		"access.MixinSodiumWorldRenderer",
 		"sodium.MixinSodiumWorldRendererInit",
 		"StagedVertexBufferDrawMixin",

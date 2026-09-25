@@ -13,6 +13,7 @@
 		"PipelineCacheAccessor",
 		"RenderSystemAccessor",
 		"RenderSystemMixin",
+		"SkyRendererMixin",
 		"VulkanRenderPipelineAccessor"
 	]
 }
