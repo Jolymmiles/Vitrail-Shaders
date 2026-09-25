@@ -2,6 +2,7 @@ package dev.vitrail.cache;
 
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
+import dev.vitrail.render.SamplerReach;
 import dev.vitrail.Vitrail;
 
 import com.mojang.renderpearl.backend.api.SpvModule;
@@ -156,5 +157,6 @@ public final class ModuleCache {
 				+ "load were compiled ({} since this launch)", built, COMPILED_SINCE_LAUNCH.get());
 		RawLocals.say(built);
 		PackNames.say(built);
+		SamplerReach.say(built);
 	}
 }

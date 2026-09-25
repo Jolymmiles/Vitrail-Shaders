@@ -13,6 +13,7 @@ import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
+import dev.vitrail.render.SamplerReach;
 import dev.vitrail.render.ShaderDebugInfo;
 import net.minecraft.client.renderer.ShaderDefines;
 import org.lwjgl.util.shaderc.Shaderc;
@@ -98,7 +99,13 @@ public abstract class GlslCompilerMixin {
 	private SPIRVModule vitrail$zeroLocals(ByteBuffer spirv, ShaderType type,
 			Operation<SPIRVModule> original, @Local(argsOnly = true, ordinal = 0) String name) {
 		String filename = debugName(name);
-		return original.call(PackNames.patch(filename, RawLocals.patch(filename, spirv)), type);
+		ByteBuffer patched = PackNames.patch(filename, RawLocals.patch(filename, spirv));
+		SPIRVModule module = original.call(patched, type);
+		// Read off the words the module was just made of, which it now owns and frees at its
+		// close, and before anything has asked for its reflection.
+		SamplerReach.narrow(filename, patched, module);
+
+		return module;
 	}
 
 	/**

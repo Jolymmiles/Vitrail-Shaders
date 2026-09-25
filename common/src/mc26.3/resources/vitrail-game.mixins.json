@@ -16,6 +16,7 @@
 		"RenderSystemAccessor",
 		"RenderSystemMixin",
 		"SkyRendererMixin",
+		"SPIRVModuleMixin",
 		"VulkanRenderPipelineAccessor"
 	]
 }
