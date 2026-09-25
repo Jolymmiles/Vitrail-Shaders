@@ -1,7 +1,11 @@
 package dev.vitrail.render;
 
+import dev.vitrail.Vitrail;
+import dev.vitrail.mixin.game.RenderPipelinesAccessor;
+
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
 
 import org.jspecify.annotations.Nullable;
 
@@ -22,10 +26,15 @@ import org.jspecify.annotations.Nullable;
  * <li>The two weather pipelines are one, {@code WEATHER}, which is the old non writing one: the same
  * snippet and the same depth state, a test and no write. The one that wrote depth is gone with the
  * transparency chain that picked it; under improved transparency the weather is drawn through the
- * order independent set, which does not come in by the weather's door at all.</li>
+ * order independent set, which does not come in by the weather's door at all. This engine builds
+ * the one that wrote depth again, out of the same snippet, for a pack asking for
+ * {@code rain.depth}.</li>
  * </ul>
  */
 public final class GamePipelines {
+
+	/** The weather that writes depth, built at the first question. */
+	private static @Nullable RenderPipeline weatherDepthWrite;
 
 	private GamePipelines() {
 	}
@@ -50,8 +59,22 @@ public final class GamePipelines {
 		return RenderPipelines.WEATHER;
 	}
 
-	/** Null: this game has no weather pipeline that writes depth. */
-	public static @Nullable RenderPipeline weatherDepthWrite() {
-		return null;
+	/**
+	 * The weather that writes depth, which this game no longer keeps: built as 26.2 built
+	 * {@code WEATHER_DEPTH_WRITE}, from the weather's own snippet and the depth state it carries, a
+	 * test and a write, under a location of this engine's. The game never draws with it; it is the
+	 * pipeline a pack's weather program is made from where the pack asks for {@code rain.depth}.
+	 */
+	public static RenderPipeline weatherDepthWrite() {
+		RenderPipeline built = weatherDepthWrite;
+		if (built == null) {
+			built = RenderPipeline.builder(RenderPipelinesAccessor.vitrail$weatherSnippet())
+					.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID,
+							"pipeline/weather_depth_write"))
+					.build();
+			weatherDepthWrite = built;
+		}
+
+		return built;
 	}
 }

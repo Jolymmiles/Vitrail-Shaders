@@ -1,6 +1,6 @@
 package dev.vitrail.mixin;
 
-import dev.vitrail.Vitrail;
+import dev.vitrail.render.GamePipelines;
 import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.GraphicsApi;
 import dev.vitrail.render.LevelPass;
@@ -61,20 +61,18 @@ import org.jspecify.annotations.Nullable;
  * bound with {@code setUniform}, so the two swaps speak those. The order independent draw reaches
  * all of it with the order independent pass and pipeline, which serve nothing, and keeps its own.
  * <p>
- * <strong>Two things of 26.2's are not carried over.</strong> NeoForge no longer widens the method
+ * <strong>Two things of 26.2's are done otherwise.</strong> NeoForge no longer widens the method
  * into a second one on this game, so there is one descriptor to name and not two. And
- * {@code rain.depth} has nothing to move: 26.2 added it to the game's own question before the game
- * picked between the weather pipeline that writes depth and the one that does not, and 26.3 keeps
- * the second alone, the first having gone with the transparency chain that asked for it. The game's
- * weather therefore writes no depth whatever the pack asks, and a pack asking for it is told so
- * once. No pack of the corpus asks.
+ * {@code rain.depth} cannot move the game's choice: 26.2 added it to the game's own question before
+ * the game picked between the weather pipeline that writes depth and the one that does not, and
+ * 26.3 keeps the second alone, the first having gone with the transparency chain that asked for it.
+ * So the pack's program is made from the one that writes depth, which {@link GamePipelines} builds
+ * again out of the same snippet, and the game's own weather, where the pack serves none, is left as
+ * the game draws it.
  */
 @Mixin(WeatherEffectRenderer.class)
 public abstract class WeatherEffectRendererMixin {
 
-	/** Whether the line about {@code rain.depth} has been said, so that it is said once a session. */
-	@Unique
-	private static boolean vitrail$depthSaid;
 
 	/**
 	 * The pipeline the curtain is drawn with, or null for the game's own. A field of the mixin and
@@ -120,19 +118,15 @@ public abstract class WeatherEffectRendererMixin {
 			RenderPipeline game) {
 		this.vitrail$pipeline = null;
 		this.vitrail$opened = null;
-		if (WeatherDraw.depth() && !vitrail$depthSaid) {
-			vitrail$depthSaid = true;
-			Vitrail.logger().warn("The pack asks for rain.depth, and on Minecraft 26.3 the rain and "
-					+ "the snow write no depth whatever it asks: that game keeps one weather "
-					+ "pipeline, which tests the world's depth and writes none, the one that wrote it "
-					+ "having gone with the transparency chain that picked it");
-		}
 
 		if (!(pass instanceof LevelPass level)) {
 			return pass;
 		}
 
-		this.vitrail$pipeline = WeatherDraw.element(game, level.colour(), level.depth());
+		// The pipeline the pack's program is made from: the one that writes depth where the pack
+		// asks for it, which the game would have picked on 26.2 and no longer keeps.
+		RenderPipeline asked = WeatherDraw.depth() ? GamePipelines.weatherDepthWrite() : game;
+		this.vitrail$pipeline = WeatherDraw.element(asked, level.colour(), level.depth());
 		RenderPassDescriptor descriptor =
 				this.vitrail$pipeline == null ? null : WeatherDraw.descriptor();
 		if (descriptor == null) {
