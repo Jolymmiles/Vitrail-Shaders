@@ -15,6 +15,7 @@ import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.ShaderDebugInfo;
 import net.minecraft.client.renderer.ShaderDefines;
+import org.lwjgl.util.shaderc.Shaderc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -59,6 +60,33 @@ public abstract class GlslCompilerMixin {
 	}
 
 	/**
+	 * Gives this engine's units what the 26.2 compiler gave every unit and 26.3's gives none: the
+	 * locations of a stage's inputs and outputs assigned where the text names none, and the two
+	 * OpenGL builtins a pack spells by their OpenGL names read as their Vulkan ones. A pack's GLSL was
+	 * written for OpenGL, which links the stages by name and knows {@code gl_VertexID}; 26.3 builds
+	 * its own shaders with explicit locations and the Vulkan names, so it turned both off. The two
+	 * stages are then linked by name in {@code PipelineBuilderMixin}, as 26.2's rebind did. The game's
+	 * own units, and every other mod's, are compiled with the options 26.3 gives them.
+	 */
+	@WrapOperation(method = "compileToSpv", require = 1,
+			at = @At(value = "INVOKE",
+					target = "Lcom/mojang/renderpearl/frontend/shaders/GlslCompiler;"
+							+ "createBaseShaderOptions()J"))
+	private long vitrail$legacyOptions(GlslCompiler compiler, Operation<Long> original,
+			@Local(argsOnly = true, ordinal = 0) String name) {
+		long options = original.call(compiler);
+		if (RawLocals.ours(debugName(name))) {
+			Shaderc.shaderc_compile_options_set_auto_map_locations(options, true);
+			Shaderc.shaderc_compile_options_add_macro_definition(options, "gl_VertexID",
+					"gl_VertexIndex");
+			Shaderc.shaderc_compile_options_add_macro_definition(options, "gl_InstanceID",
+					"gl_InstanceIndex");
+		}
+
+		return options;
+	}
+
+	/**
 	 * Between shaderc and the module, on the copy the game made of the compiler's output: every
 	 * variable the pack can read before writing gets the zero it reads under Iris, and the names
 	 * MoltenVK chokes on go. {@link RawLocals} and {@link PackNames} carry the switches and the why.
@@ -68,7 +96,7 @@ public abstract class GlslCompilerMixin {
 			at = @At(value = "NEW",
 					target = "com/mojang/renderpearl/frontend/shaders/SPIRVModule"))
 	private SPIRVModule vitrail$zeroLocals(ByteBuffer spirv, ShaderType type,
-			Operation<SPIRVModule> original, @Local(argsOnly = true) String name) {
+			Operation<SPIRVModule> original, @Local(argsOnly = true, ordinal = 0) String name) {
 		String filename = debugName(name);
 		return original.call(PackNames.patch(filename, RawLocals.patch(filename, spirv)), type);
 	}
