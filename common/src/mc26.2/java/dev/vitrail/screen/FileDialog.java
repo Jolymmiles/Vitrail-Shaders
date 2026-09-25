@@ -20,6 +20,11 @@ import java.util.concurrent.Executors;
  * behind a window the game is not drawing. The answer comes back as a
  * {@link CompletableFuture}, so whoever asked has to check that the screen is still the one it was
  * before acting on it.
+ * <p>
+ * <b>This is the Minecraft 26.2 half</b>, the class as it was before there were two games, moved here
+ * unchanged. 26.3 no longer ships LWJGL's tinyfd, which this half asks, so a class of the same name
+ * and the same surface sits under {@code src/mc26.3/} and asks SDL instead. A build compiles exactly
+ * one of them.
  */
 public final class FileDialog {
 
