@@ -111,6 +111,18 @@ public abstract class CommandEncoderMixin {
 		PassTimings.censusClear();
 	}
 
+	/**
+	 * A fence is refused inside a pass like a copy is. The shadow casters' storage recycles its
+	 * staged vertex buffers behind one at the end of the walk, and where the pack drew the last
+	 * caster that caster's pass is still held, the level's pass it was drawn through having nothing
+	 * left to reopen for.
+	 */
+	@Inject(method = "createFence", at = @At("HEAD"), require = 1)
+	private void vitrail$fence(CallbackInfoReturnable<?> cir) {
+		LevelPass.suspendCurrent();
+		GeometryHold.flush(() -> "a fence");
+	}
+
 	@Inject(method = "copyTextureToTexture", at = @At("HEAD"), require = 1)
 	private void vitrail$copyTexture(CallbackInfo ci) {
 		LevelPass.suspendCurrent();
