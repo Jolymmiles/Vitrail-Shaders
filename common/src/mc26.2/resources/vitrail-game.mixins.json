@@ -7,8 +7,10 @@
 		"defaultRequire": 1
 	},
 	"client": [
+		"GameRendererHandMixin",
 		"IntermediaryShaderModuleAccessor",
 		"IntermediaryShaderModuleMixin",
+		"ItemInHandRendererMixin",
 		"VulkanBindGroupLayoutMixin"
 	]
 }

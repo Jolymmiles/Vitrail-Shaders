@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.game;
 
 import dev.vitrail.render.HandDraw;
 
@@ -29,6 +29,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <strong>It answers no whenever the hand is not being drawn by this engine at all</strong>, which
  * covers the game's own late call on every frame where the switch is off or no pack is loaded. There
  * is no need to test that separately: nothing raises a half except the two passes themselves.
+ * <p>
+ * <strong>26.2's alone.</strong> 26.3 renamed the class to {@code FirstPersonHandsAndItemsRenderer}
+ * and hands the per arm method a render state instead of the player, so its twin under
+ * {@code src/mc26.3/} is another class on another target, and each game lists its own in
+ * {@code vitrail-game.mixins.json}.
  */
 @Mixin(ItemInHandRenderer.class)
 public abstract class ItemInHandRendererMixin {

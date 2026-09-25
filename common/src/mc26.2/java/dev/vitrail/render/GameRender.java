@@ -3,7 +3,11 @@ package dev.vitrail.render;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
@@ -100,6 +104,15 @@ public final class GameRender {
 	public static void renderAllFeatures(FeatureRenderDispatcher dispatcher,
 			SubmitNodeStorage submits, Supplier<String> label) {
 		dispatcher.renderAllFeatures(submits);
+	}
+
+	/**
+	 * Submits the player's own hands and whatever they hold, as the game's own late call submits
+	 * them.
+	 */
+	public static void submitHands(GameRenderer gameRenderer, float partialTicks, PoseStack pose,
+			SubmitNodeCollector into, LocalPlayer player, int light) {
+		gameRenderer.itemInHandRenderer.submitHandsWithItems(partialTicks, pose, into, player, light);
 	}
 
 	/**

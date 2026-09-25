@@ -1,4 +1,4 @@
-package dev.vitrail.mixin;
+package dev.vitrail.mixin.game;
 
 import dev.vitrail.render.HandDraw;
 
@@ -26,8 +26,13 @@ import org.spongepowered.asm.mixin.injection.At;
  * ({@code mixin/MixinGameRenderer.java:75}), so the hand is neutralised where it is submitted rather
  * than where it is drawn.
  * <p>
- * A class of its own rather than a fourth handler on {@link GameRendererMixin}, which copies the
+ * A class of its own rather than a fourth handler on {@code GameRendererMixin}, which copies the
  * projection this method never touches: the two have nothing in common but their target.
+ * <p>
+ * <strong>26.2's alone, with a twin of the same name under {@code src/mc26.3/}.</strong> 26.3 hands
+ * the submission a render state extracted for the frame instead of the player and its light, and
+ * the class it calls was renamed, so the call wrapped here is another call there. Each game lists
+ * its own in {@code vitrail-game.mixins.json}.
  */
 @Mixin(GameRenderer.class)
 public abstract class GameRendererHandMixin {

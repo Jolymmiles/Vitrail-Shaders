@@ -32,7 +32,9 @@ description = '''OptiFine-format shader packs, on Minecraft's native Vulkan rend
 [[mixins]]
 config = "vitrail.mixins.json"
 
-# The mixins that exist for one game version only, which the build takes from src/mc<version>/.
+# The engine's mixins that differ between the games this jar can be built for. The common module
+# holds one file of this name per game, under src/mc<version>/, and a build takes the one for the
+# game it is built for, so this entry names whichever that was.
 [[mixins]]
 config = "vitrail-game.mixins.json"
 

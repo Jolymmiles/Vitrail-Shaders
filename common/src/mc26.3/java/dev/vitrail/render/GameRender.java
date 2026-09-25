@@ -2,13 +2,18 @@ package dev.vitrail.render;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import dev.vitrail.Vitrail;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+import net.minecraft.client.renderer.state.level.PlayerRenderState;
 
 import org.jspecify.annotations.Nullable;
 
@@ -143,6 +148,26 @@ public final class GameRender {
 						main.getDepthTextureView(), OptionalDouble.empty())) {
 			RenderSystem.bindDefaultUniforms(pass);
 			FeatureRenderDispatcher.renderAllFeatures(pass, frame);
+		}
+	}
+
+	/**
+	 * Submits the player's own hands and whatever they hold, as the game's own late call submits
+	 * them.
+	 * <p>
+	 * 26.3 draws the hands from a render state the frame extracted for the player, and the class
+	 * that submits them is {@code FirstPersonHandsAndItemsRenderer}. The player and the light are
+	 * not read: the state carries the light the frame extracted for the player, and the game
+	 * submits nothing where it extracted no player, which is kept here too. The partial
+	 * tick the caller hands in is the camera entity's, which is the one the game extracts for this
+	 * very call.
+	 */
+	public static void submitHands(GameRenderer gameRenderer, float partialTicks, PoseStack pose,
+			SubmitNodeCollector into, LocalPlayer player, int light) {
+		PlayerRenderState state = gameRenderer.gameRenderState().levelRenderState.playerRenderState;
+		if (state.hasPlayer) {
+			gameRenderer.firstPersonHandsAndItemsRenderer.submitHandsWithItems(partialTicks, pose,
+					into, state, state.firstPersonHandsAndItems);
 		}
 	}
 
