@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import dev.vitrail.Vitrail;
@@ -151,15 +152,25 @@ public final class GameRender {
 	 * since preparing uploads and an upload is refused inside a pass, and the default uniforms bound
 	 * before the phases run. The phases are the ones 26.2's call ran, the see-through one included,
 	 * which 26.3 split out of the translucent one.
+	 * <p>
+	 * The pass is handed over as a {@link LevelPass}, as the level hands over its own, and for the
+	 * same reason: the entity door records a run of draws the pack serves into a pass of its own,
+	 * the hand's or the shadow map's, and on this game the encoder opens one pass at a time, so the
+	 * pass the draws were handed has to step aside for it and open again at the next draw the game
+	 * records itself. A plain pass would stay open under the door's and have it refused.
 	 */
 	public static void renderAllFeatures(FeatureRenderDispatcher dispatcher,
 			SubmitNodeStorage submits, Supplier<String> label) {
 		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+		GpuTextureView colour = main.getColorTextureView();
+		GpuTextureView depth = main.getDepthTextureView();
+		CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
 
 		try (FeatureRenderDispatcher.PreparedFrame frame = dispatcher.prepareFrame(submits);
-				RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-						label, main.getColorTextureView(), Optional.empty(),
-						main.getDepthTextureView(), OptionalDouble.empty())) {
+				RenderPass pass = LevelPass.open(encoder.createRenderPass(label, colour,
+						Optional.empty(), depth, OptionalDouble.empty()), colour, depth,
+						() -> encoder.createRenderPass(label, colour, Optional.empty(), depth,
+								OptionalDouble.empty()))) {
 			RenderSystem.bindDefaultUniforms(pass);
 			FeatureRenderDispatcher.renderAllFeatures(pass, frame);
 		}

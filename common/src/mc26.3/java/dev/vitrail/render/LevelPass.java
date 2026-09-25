@@ -42,12 +42,25 @@ import java.util.function.Supplier;
  * <p>
  * It never clears: the pass the level opens loads what the frame drew before it, and so does every
  * pass opened again after a gap.
+ * <p>
+ * <strong>The engine's own feature storages are drawn through one as well</strong>, the hand's and
+ * the shadow casters' ({@code GameRender.renderAllFeatures}), for the reason the level's is: the
+ * entity door opens a pass of its own for a run of draws the pack serves, and the pass the draws
+ * were handed has to step aside for it. One may be opened while another is current, the level's
+ * being the one under it: the newer is current until it closes, and the one it opened over is
+ * current again after, its real pass having been closed when the newer one's opened and opening
+ * again at its own next call.
  */
 public final class LevelPass implements RenderPass {
 
-	/** The level's pass while the level is being drawn, and null at every other instant. */
+	/**
+	 * The pass of this kind opened last and not yet closed: the level's while the level is being
+	 * drawn, one of the engine's own feature passes while it draws a storage of its own, and null
+	 * at every other instant.
+	 */
 	private static @Nullable LevelPass current;
 
+	private final @Nullable LevelPass under;
 	private final GpuTextureView colour;
 	private final @Nullable GpuTextureView depth;
 	private final Supplier<RenderPass> opener;
@@ -56,8 +69,9 @@ public final class LevelPass implements RenderPass {
 	private int @Nullable [] scissor;
 	private boolean closed;
 
-	private LevelPass(RenderPass first, GpuTextureView colour, @Nullable GpuTextureView depth,
-			Supplier<RenderPass> opener) {
+	private LevelPass(@Nullable LevelPass under, RenderPass first, GpuTextureView colour,
+			@Nullable GpuTextureView depth, Supplier<RenderPass> opener) {
+		this.under = under;
 		this.real = first;
 		this.colour = colour;
 		this.depth = depth;
@@ -65,15 +79,16 @@ public final class LevelPass implements RenderPass {
 	}
 
 	/**
-	 * Replaces the pass the level has just opened. {@code opener} opens a real pass on the same
-	 * attachments with nothing emptied, which is what the level's own opening does.
+	 * Replaces the pass the level, or the engine for a storage of its own, has just opened.
+	 * {@code opener} opens a real pass on the same attachments with nothing emptied, which is what
+	 * the level's own opening does.
 	 *
-	 * @param colour the colour image the level's pass was opened on
+	 * @param colour the colour image the pass was opened on
 	 * @param depth  the depth image it was opened on, or null where it has none
 	 */
 	public static RenderPass open(RenderPass first, GpuTextureView colour,
 			@Nullable GpuTextureView depth, Supplier<RenderPass> opener) {
-		LevelPass pass = new LevelPass(first, colour, depth, opener);
+		LevelPass pass = new LevelPass(current, first, colour, depth, opener);
 		current = pass;
 		return pass;
 	}
@@ -278,7 +293,14 @@ public final class LevelPass implements RenderPass {
 		suspend();
 		this.closed = true;
 		if (current == this) {
-			current = null;
+			// The one it was opened over, unless that one has been closed meanwhile, which a
+			// storage drawn across the level's end would see.
+			LevelPass next = this.under;
+			while (next != null && next.closed) {
+				next = next.under;
+			}
+
+			current = next;
 		}
 	}
 }
