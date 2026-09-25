@@ -30,6 +30,12 @@ what the next one holds.
 
 ### Fixed
 
+- **Coloured lighting works on a Mac.** Vitrail no longer tells a pack it is running on a Mac.
+  Packs read that as Apple's OpenGL driver and switch off what it lacks: Complementary Reimagined
+  turned its coloured lighting (Advanced Color Tracing) off and painted an error over the picture
+  when it was asked for. On a Mac Vitrail draws through Vulkan on Metal, which has everything
+  that needs, so the setting now works there, and so do the improved rain and the rest of what the
+  pack held back for Apple's driver.
 - **A Mac declares the shadow comparisons a pack asks for.** The sampler a pack's shadow lookups
   compare through is one a Mac's Vulkan driver only accepts once a feature of its portability rules
   is enabled, and nothing enabled it. The driver drew the lookups anyway, but a launch under the
