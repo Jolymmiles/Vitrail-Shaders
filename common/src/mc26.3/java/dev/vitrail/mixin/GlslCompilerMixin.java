@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 /**
  * Gives the compiler's output its zeroes before anything reflects it, decides whether shaderc
@@ -109,8 +110,15 @@ public abstract class GlslCompilerMixin {
 	}
 
 	/**
-	 * Clocks the compile and counts it, under the state of the zero pass taken once at its head, so
-	 * a load flipping the switch meanwhile cannot patch one unit under two states.
+	 * Serves the unit from {@link ModuleCache} where it holds it, and otherwise compiles it, counts
+	 * it and keeps what came out, all under the state of the zero pass taken once at the head, so a
+	 * load flipping the switch meanwhile cannot patch one unit under two states nor store one
+	 * state's words under the other's key.
+	 * <p>
+	 * A served unit is made into a module here, as the compiler makes one, and handed the samplers
+	 * its reflection leaves out, as a compiled one is where it is made: the words are the same
+	 * either way, so the reach read off them is too. The debug name is not keyed, carrying the load
+	 * number the disk key must not see.
 	 */
 	@WrapMethod(method = "compileToSpv", require = 1)
 	private SpvModule vitrail$module(String name, String source, ShaderType type,
@@ -118,12 +126,44 @@ public abstract class GlslCompilerMixin {
 		long began = System.nanoTime();
 		RawLocals.begin();
 		try {
-			ModuleCache.building(debugName(name));
-			return original.call(name, source, type, defines, shaderSource);
+			String filename = debugName(name);
+			String key = ModuleCache.keyOf(source, type.name(), vitrail$defines(defines));
+			ByteBuffer served = ModuleCache.lookup(key);
+			if (served != null) {
+				SPIRVModule module = new SPIRVModule(served, type);
+				SamplerReach.narrow(filename, served, module);
+
+				return module;
+			}
+
+			// Counted before the call and not after it: a unit a pack broke throws out of the
+			// compile, and counting on the way back would leave that load short by exactly the
+			// units somebody is reading the log to find.
+			ModuleCache.building(filename);
+			SpvModule built = original.call(name, source, type, defines, shaderSource);
+			ModuleCache.store(key, built.spv());
+
+			return built;
 		} finally {
 			RawLocals.end();
 			LoadClock.module(System.nanoTime() - began);
 		}
+	}
+
+	/**
+	 * The defines a compile hands shaderc beside its text, in an order of their own: the compiler
+	 * adds them as macros, where their order says nothing, so two orders of one set are one key.
+	 */
+	@Unique
+	private static String vitrail$defines(ShaderDefines defines) {
+		StringBuilder described = new StringBuilder();
+		defines.values().entrySet().stream()
+				.sorted(Map.Entry.comparingByKey())
+				.forEach(define -> described.append(define.getKey()).append('=')
+						.append(define.getValue()).append('\n'));
+		defines.flags().stream().sorted().forEach(flag -> described.append(flag).append('\n'));
+
+		return described.toString();
 	}
 
 	/**

@@ -50,7 +50,9 @@ public final class ComputeShader {
 
 	/**
 	 * Builds one compute unit into a device module, with the zeroes the game's compiler road gets
-	 * and clocked as module work. Nothing is kept on disk on this game; {@link ModuleCache} says why.
+	 * and clocked as module work. A compute unit is not kept on disk on this game: {@link ModuleCache}
+	 * keeps what goes through the game's compiler, and a compute does not, a pack shipping a
+	 * handful.
 	 *
 	 * @param source  the unit's text as shaderc is to read it
 	 * @param stage   the stage token a store would key this road under
