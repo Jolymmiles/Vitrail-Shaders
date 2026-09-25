@@ -30,6 +30,12 @@ what the next one holds.
 
 ### Fixed
 
+- **World space reflections show the blocks they reflect instead of magenta.** A pack can name one
+  of the game's atlases as a texture of its own, and Complementary Reimagined colours its world
+  space reflections from the block atlas that way. An atlas is built while the game runs and is no
+  file of any resource pack, so Vitrail found no file and bound the game's missing texture, and
+  every block reflected from off screen came out magenta and black. A texture the game holds under
+  that name is now bound as it stands, as Iris binds it.
 - **Coloured lighting works on a Mac.** Vitrail no longer tells a pack it is running on a Mac.
   Packs read that as Apple's OpenGL driver and switch off what it lacks: Complementary Reimagined
   turned its coloured lighting (Advanced Color Tracing) off and painted an error over the picture

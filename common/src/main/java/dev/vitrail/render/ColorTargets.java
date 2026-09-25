@@ -1137,6 +1137,12 @@ final class ColorTargets {
 		for (PackImages.Image image : images) {
 			Vitrail.logger().info("The pack supplies {}", PackImages.describe(image));
 
+			// Nothing to allocate for a texture the game holds: packView asks the game for it at
+			// every bind, and an image of our own here would be a copy of nothing.
+			if (image.live()) {
+				continue;
+			}
+
 			// On the render thread, and before the pack-load worker exists: this is what answers the
 			// device for every format the pack supplies, so a geometry program built off thread
 			// reads the table rather than filling it. The note belongs here for the same reason.
@@ -1244,8 +1250,15 @@ final class ColorTargets {
 		});
 	}
 
-	/** The view behind a supplied image, or null while nothing could be put behind it. */
+	/**
+	 * The view behind a supplied image, or null while nothing could be put behind it. For one bound
+	 * live, whatever the game holds under its name as this is asked, which is what an atlas needs.
+	 */
 	GpuTextureView packView(PackImages.Image image) {
+		if (image.live()) {
+			return GameImages.held(PackImages.location(image.texture().path()));
+		}
+
 		TargetSurface surface = this.packSurfaces.get(image);
 
 		return surface == null ? null : surface.view();
