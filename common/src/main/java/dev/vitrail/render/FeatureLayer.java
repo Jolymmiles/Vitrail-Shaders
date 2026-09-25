@@ -8,7 +8,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -183,13 +182,13 @@ final class FeatureLayer {
 	 */
 	FeatureLayer(ChainPlan.Attachment into, GpuFormat destination) {
 		this.into = into;
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 			}
 
 			return VERTEX_ID.equals(id) ? VERTEX : null;
-		};
+		});
 
 		this.pipeline = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID,
@@ -197,7 +196,7 @@ final class FeatureLayer {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(
 						Optional.of(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA), destination,
@@ -241,7 +240,7 @@ final class FeatureLayer {
 			try {
 				// No depth of its own: the redirected draws test against the game's depth, which
 				// the override for depth keeps pointing at, so entities still hide behind walls.
-				this.layer = new TextureTarget("Vitrail features", width, height, false, FORMAT);
+				this.layer = GraphicsApi.textureTarget("Vitrail features", width, height, false, FORMAT);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -263,7 +262,7 @@ final class FeatureLayer {
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (device.precompilePipeline(this.pipeline, this.source).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, this.source))) {
 			return true;
 		}
 
@@ -298,10 +297,10 @@ final class FeatureLayer {
 		}
 
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, clear)) {
-			pass.setPipeline(this.pipeline);
+			GraphicsApi.setPipeline(pass, this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
-			pass.bindTexture(SAMPLER, this.layer.getColorTextureView(),
+			GraphicsApi.bindTexture(pass, SAMPLER, this.layer.getColorTextureView(),
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}

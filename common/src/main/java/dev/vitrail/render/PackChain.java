@@ -2904,7 +2904,7 @@ public final class PackChain {
 	 * engine that has just decided to draw nothing.
 	 */
 	private boolean valid(CompiledRenderPipeline compiled, PackPass pass) {
-		if (compiled.isValid()) {
+		if (GraphicsApi.valid(compiled)) {
 			return true;
 		}
 

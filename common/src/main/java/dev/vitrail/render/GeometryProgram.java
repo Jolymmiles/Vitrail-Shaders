@@ -63,6 +63,7 @@ import net.minecraft.resources.Identifier;
 
 import org.joml.Matrix4fc;
 import org.joml.Vector4fc;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -738,7 +739,7 @@ final class GeometryProgram {
 			bindings.withUniform(pass.perDraw(), UniformType.UNIFORM_BUFFER);
 		}
 
-		this.samplers.forEach(bindings::withSampler);
+		this.samplers.forEach(name -> GraphicsApi.withSampler(bindings, name));
 		this.storage.forEach(name -> bindings.withUniform(name, UniformType.UNIFORM_BUFFER));
 
 		// Everything but the shaders, the bind group, the attachments and the two lines below is
@@ -828,13 +829,13 @@ final class GeometryProgram {
 			this.broken = true;
 		}
 
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return fragmentId.equals(id) ? fragment : null;
 			}
 
 			return vertexId.equals(id) ? vertex : null;
-		};
+		});
 
 		// A storage block this engine has no bufferObject for is the one refusal that does not
 		// announce itself. An unbindable sampler stops the pipeline from being built and this class
@@ -1095,8 +1096,8 @@ final class GeometryProgram {
 			}
 		}
 
-		CompiledRenderPipeline compiled = device.precompilePipeline(this.pipeline, this.source);
-		if (!compiled.isValid()) {
+		CompiledRenderPipeline compiled = GraphicsApi.compile(device, this.pipeline, this.source);
+		if (!GraphicsApi.valid(compiled)) {
 			// Handing back an invalid pipeline throws inside setPipeline, in the middle of Sodium's
 			// own pass, which reads as a Sodium failure. Refused here instead, once.
 			this.broken = true;
@@ -1164,7 +1165,7 @@ final class GeometryProgram {
 			RuntimeException thrown = null;
 			boolean valid;
 			try {
-				valid = device.precompilePipeline(variant, this.source).isValid();
+				valid = GraphicsApi.valid(GraphicsApi.compile(device, variant, this.source));
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -1243,8 +1244,8 @@ final class GeometryProgram {
 	private RenderPipeline reshapeAs(VertexFormat layout, int index) {
 		RenderPipeline.Builder builder = RenderPipeline.builder()
 				.withLocation(this.pipeline.getLocation().withSuffix("/reshaped/" + index))
-				.withVertexShader(this.pipeline.getVertexShader())
-				.withFragmentShader(this.pipeline.getFragmentShader())
+				.withVertexShader(GraphicsApi.vertexShader(this.pipeline))
+				.withFragmentShader(GraphicsApi.fragmentShader(this.pipeline))
 				.withCull(this.pipeline.isCull())
 				.withPrimitiveTopology(this.pipeline.getPrimitiveTopology())
 				.withVertexBinding(0, layout);
@@ -1255,12 +1256,13 @@ final class GeometryProgram {
 
 		// Null is how the builder holds an unused slot, so null is copied as unused; the count the
 		// pipeline carries beside the array is rebuilt by walking every slot in order.
-		ColorTargetState[] states = this.pipeline.getColorTargetStates();
-		for (int slot = 0; slot < states.length; slot++) {
-			if (states[slot] == null) {
+		List<@Nullable ColorTargetState> states = GraphicsApi.colorTargets(this.pipeline);
+		for (int slot = 0; slot < states.size(); slot++) {
+			ColorTargetState state = states.get(slot);
+			if (state == null) {
 				builder.withUnusedColorTargetState(slot);
 			} else {
-				builder.withColorTargetState(slot, states[slot]);
+				builder.withColorTargetState(slot, state);
 			}
 		}
 
@@ -1317,10 +1319,10 @@ final class GeometryProgram {
 		VulkanRenderPipeline built;
 		try {
 			IntermediaryShaderModule vertex =
-					intermediary(compiler, this.pipeline.getVertexShader(), ShaderType.VERTEX);
+					intermediary(compiler, GraphicsApi.vertexShader(this.pipeline), ShaderType.VERTEX);
 			try {
 				IntermediaryShaderModule fragment =
-						intermediary(compiler, this.pipeline.getFragmentShader(), ShaderType.FRAGMENT);
+						intermediary(compiler, GraphicsApi.fragmentShader(this.pipeline), ShaderType.FRAGMENT);
 				try {
 					GlslCompiler.CompiledModules modules =
 							compiler.compile(device, this.pipeline, vertex, fragment);
@@ -1361,7 +1363,7 @@ final class GeometryProgram {
 	/** One stage the way the device reads it: the pipeline's defines injected, then shaderc. */
 	private IntermediaryShaderModule intermediary(GlslCompiler compiler, Identifier id,
 			ShaderType type) throws ShaderCompileException {
-		String text = this.source.get(id, type);
+		String text = GraphicsApi.shaderText(this.source, id, type);
 		if (text == null) {
 			throw new ShaderCompileException("no source for " + id);
 		}
@@ -1432,12 +1434,12 @@ final class GeometryProgram {
 		settled = this;
 
 		for (Sampled one : this.following) {
-			pass.bindTexture(one.name, imageView(one), imageSampler(one));
+			GraphicsApi.bindTexture(pass, one.name, imageView(one), imageSampler(one));
 		}
 
 		if (settle) {
 			for (Sampled one : this.settledOnce) {
-				pass.bindTexture(one.name, one.view, one.state);
+				GraphicsApi.bindTexture(pass, one.name, one.view, one.state);
 			}
 		}
 	}
@@ -1745,7 +1747,7 @@ final class GeometryProgram {
 			this.attachedViews.add(view);
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.passLabel);
+		PassDescriptor descriptor = PassDescriptor.create(this.passLabel);
 		for (GpuTextureView view : this.attachedViews) {
 			if (view == null) {
 				descriptor.withUnusedColorAttachment();
@@ -1765,7 +1767,7 @@ final class GeometryProgram {
 		// is dropped before it gets here, and the game's depth is attached whatever else is.
 		descriptor.withRenderArea(area(this.targets.screenWidth(), this.targets.screenHeight()));
 
-		return depth == null ? descriptor : descriptor.withDepthAttachment(depth);
+		return (depth == null ? descriptor : descriptor.withDepthAttachment(depth)).build();
 	}
 
 	/**
@@ -1840,7 +1842,7 @@ final class GeometryProgram {
 			this.shadowViews.add(colour);
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.shadowLabel);
+		PassDescriptor descriptor = PassDescriptor.create(this.shadowLabel);
 		int at = 0;
 		for (int index : this.shadowColours) {
 			descriptor.withColorAttachment(this.shadowViews.get(at), this.shadow.takeColourClear(index));
@@ -1850,7 +1852,7 @@ final class GeometryProgram {
 		descriptor.withDepthAttachment(depth, this.shadow.takeDepthClear())
 				.withRenderArea(shadowArea());
 		this.shadow.flushPending(RenderSystem.getDevice().createCommandEncoder());
-		return descriptor;
+		return descriptor.build();
 	}
 
 	/**

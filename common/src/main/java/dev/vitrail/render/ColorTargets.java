@@ -713,14 +713,14 @@ final class ColorTargets {
 			int height = group.get(0).view().texture().getHeight(0);
 			for (int from = 0; from < group.size(); from += perPass) {
 				int to = Math.min(from + perPass, group.size());
-				RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> CLEAR_LABEL);
+				PassDescriptor descriptor = PassDescriptor.create(() -> CLEAR_LABEL);
 				for (int index = from; index < to; index++) {
 					Pending one = group.get(index);
 					descriptor.withColorAttachment(one.view(), Optional.of(one.colour()));
 				}
 
 				descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
-				encoder.createRenderPass(descriptor).close();
+				encoder.createRenderPass(descriptor.build()).close();
 			}
 		}
 	}

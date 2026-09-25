@@ -333,7 +333,7 @@ public final class EntityMesh {
 				List<RenderPipeline> dropped = stale.vitrail$dropEntityPipelines();
 				try {
 					for (RenderPipeline pipeline : dropped) {
-						device.precompilePipeline(pipeline, null);
+						GraphicsApi.compile(device, pipeline, null);
 					}
 				} catch (GpuDeviceLossException e) {
 					throw e;

@@ -575,7 +575,7 @@ public final class EntityDraw extends FamilyDraw {
 		 * drifted would put a piece in the window where nothing is drawing it.
 		 */
 		boolean blended() {
-			return this.pipeline.getColorTargetState().blendFunction().isPresent();
+			return GraphicsApi.colorTarget(this.pipeline).blendFunction().isPresent();
 		}
 
 		/**
@@ -1974,7 +1974,7 @@ public final class EntityDraw extends FamilyDraw {
 						: texture.textureView(),
 				texture == null ? null : texture.sampler());
 
-		this.open.setPipeline(this.bound);
+		GraphicsApi.setPipeline(this.open, this.bound);
 		scissor(prepared.scissorState());
 		program.bind(this.open);
 
