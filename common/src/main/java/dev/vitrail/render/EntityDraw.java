@@ -18,7 +18,6 @@ import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -29,7 +28,6 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
@@ -1752,13 +1750,13 @@ public final class EntityDraw extends FamilyDraw {
 	 * other than the main one ({@code rendertype/RenderTypes.java:25,141,167,260,324,345,352,359,397}),
 	 * none is built on a pipeline of the opaque table, so every opaque row named the main target
 	 * before and resolves to it now.
+	 * <p>
+	 * 26.3 names no target on a render type at all, and {@link GameRender#drawsOnMainTarget} asks
+	 * the same question there in that game's terms: what goes elsewhere under its improved
+	 * transparency is what it draws through the order independent passes.
 	 */
-	@SuppressWarnings("ReferenceEquality")
 	private static boolean onMainTarget(PreparedRenderType prepared) {
-		Minecraft minecraft = Minecraft.getInstance();
-		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
-
-		return main != null && prepared.outputTarget().getRenderTarget() == main;
+		return GameRender.drawsOnMainTarget(prepared);
 	}
 
 	/** What closing either window costs, which is the same two things. */
@@ -1887,9 +1885,11 @@ public final class EntityDraw extends FamilyDraw {
 			// like six of the entity ones, so a key on the target alone would let whichever came first
 			// speak for both and the log would never say the glint went back too. Keying on the piece
 			// instead would say it once per row, which is six lines for the one thing that happened.
+			String target = GameRender.drawTargetName(prepared);
+
 			return draw.refuse(element, "elsewhere:" + (element.glint() ? "glint" : "entity") + ":"
-					+ prepared.outputTarget(), true, "the game sends it to "
-					+ prepared.outputTarget() + ", which it composes itself afterwards, and the pack's "
+					+ target, true, "the game sends it to "
+					+ target + ", which it composes itself afterwards, and the pack's "
 					+ "colour targets cannot be attached beside a picture this engine has not got. It "
 					+ "is the game's improved transparency that allocates those targets, and this "
 					+ "engine turns that option off when the pack is loaded, as Iris does when shaders "
@@ -2093,15 +2093,10 @@ public final class EntityDraw extends FamilyDraw {
 
 		// The two images the game would have drawn into, worked out as PreparedRenderType works them
 		// out: the overrides are the game's own way of sending a phase somewhere else, and the layer
-		// that carries its translucent features is one of them.
-		RenderTarget target = prepared.outputTarget().getRenderTarget();
-		GpuTextureView colour = RenderSystem.outputColorTextureOverride != null
-				? RenderSystem.outputColorTextureOverride
-				: target.getColorTextureView();
-		GpuTextureView depth = !target.useDepth ? null
-				: RenderSystem.outputDepthTextureOverride != null
-						? RenderSystem.outputDepthTextureOverride
-						: target.getDepthTextureView();
+		// that carries its translucent features is one of them. On 26.3 there are no overrides and
+		// the answer is the main target, GameRender carrying why.
+		GpuTextureView colour = GameRender.drawColour(prepared);
+		GpuTextureView depth = GameRender.drawDepth(prepared);
 
 		RenderPassDescriptor descriptor = program.descriptor(colour, depth);
 		if (descriptor == null && element.shadow()) {

@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import com.mojang.blaze3d.pipeline.PipelineCache;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -431,6 +432,14 @@ public final class GraphicsApi {
 	public static TextureTarget textureTarget(@Nullable String label, int width, int height,
 			boolean depth, GpuFormat colour) {
 		return new TextureTarget(label, width, height, colour, depth ? GpuFormat.D32_FLOAT : null);
+	}
+
+	/**
+	 * Whether a render target carries a depth image beside its colour. 26.3 keeps the depth format
+	 * rather than a flag, and a target has depth exactly where it names one.
+	 */
+	public static boolean hasDepth(RenderTarget target) {
+		return target.hasDepth();
 	}
 
 	/** The area a pass descriptor restricts drawing to, or null where it draws everywhere. */

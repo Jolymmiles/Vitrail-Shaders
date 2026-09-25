@@ -1,6 +1,20 @@
 package dev.vitrail.render;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
+import dev.vitrail.Vitrail;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
+import net.minecraft.client.renderer.rendertype.PreparedRenderType;
+
+import org.jspecify.annotations.Nullable;
+
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.function.Supplier;
 
 /**
  * The calls into the game's own renderer that Minecraft 26.2 and 26.3 spell differently, one method
@@ -10,10 +24,126 @@ import net.minecraft.client.Minecraft;
  * <p>
  * <strong>This is the 26.3 half.</strong> Each method answers the question its 26.2 twin answers,
  * in the terms this game renders in, and says where the two part company.
+ * <p>
+ * <strong>What changed underneath the drawing half of them is who opens the render pass.</strong>
+ * On 26.2 an immediate draw opened a pass of its own, on the target its render type named, and
+ * {@code RenderSystem} carried an output override for colour and one for depth that every such
+ * draw read. 26.3 removed both: a render type names no target, a draw goes into the pass its caller
+ * hands it, and the level renderer opens ONE pass on the main target for its whole main pass, the
+ * opaque terrain, the solid features, the translucent features, the translucent terrain, the clouds
+ * and the weather in turn.
  */
 public final class GameRender {
 
+	/** Whether the refusal below has been said, so that it is said once a session. */
+	private static boolean featuresRefusalSaid;
+
 	private GameRender() {
+	}
+
+	/**
+	 * Whether the game's translucent features can be sent into an image of the engine's choosing,
+	 * which on this game they cannot yet, and the first refusal says so in the log.
+	 * <p>
+	 * <strong>What the redirect needs here is a pass of its own.</strong> The 26.3 way to send a
+	 * feature phase somewhere is to open the pass it is drawn into on that image and hand the pass
+	 * to the phase. The game draws its translucent features inside the one pass it keeps open for
+	 * the whole main pass, so that phase would have to be cut out of it: the main pass closed after
+	 * the solid features, a pass opened on the layer and the world's depth for the translucent ones,
+	 * and the main pass opened again for the translucent terrain after them. That cut is the same
+	 * work as running the engine's own stages at those two moments at all, which open passes and
+	 * copy images where NeoForge and the game now hand them the main pass still recording, and it is
+	 * not done yet. Until it is, the layer is never opened and the game's features stay on its own
+	 * target.
+	 */
+	public static boolean redirectsFeatures() {
+		if (!featuresRefusalSaid) {
+			featuresRefusalSaid = true;
+			Vitrail.logger().warn("Vitrail does not hand the game's translucent features to the pack's "
+					+ "image on Minecraft 26.3, so the player's own body in third person and every "
+					+ "translucent feature no program of the pack serves stay on the game's target, "
+					+ "which the pack's final draws over. This game draws them inside the one render "
+					+ "pass it keeps open for its whole main pass and has no output override to send "
+					+ "them elsewhere; redirecting them means cutting that pass, which is not done "
+					+ "yet");
+		}
+
+		return false;
+	}
+
+	/**
+	 * Never reached, {@link #redirectsFeatures()} answering no on this game. Kept so that the shared
+	 * caller is one caller, and a no-op rather than a throw so that a caller that did not ask first
+	 * costs a picture and not the frame.
+	 */
+	public static void redirectFeatures(GpuTextureView colour, GpuTextureView depth) {
+		// Nothing to redirect through: see redirectsFeatures.
+	}
+
+	/** Nothing to put back, nothing having been redirected. */
+	public static void endFeatureRedirect() {
+		// See redirectsFeatures.
+	}
+
+	/**
+	 * Whether a draw of this render type lands on the game's main target.
+	 * <p>
+	 * 26.3 names no target on a render type, and what separates the draws that do not land there is
+	 * the game's improved transparency: under it, a render type carrying an order independent
+	 * pipeline set is drawn in the translucent phase through {@code drawFromBufferOit}, into targets
+	 * that technique composes onto the main one afterwards, which is the position 26.2's targets of
+	 * that option were in. Everything else is drawn into a pass its caller opened on the main target.
+	 */
+	public static boolean drawsOnMainTarget(PreparedRenderType prepared) {
+		Minecraft minecraft = Minecraft.getInstance();
+
+		return minecraft != null && (!minecraft.gameRenderer.useImprovedTransparency()
+				|| prepared.oitPipelineSet() == null);
+	}
+
+	/** Where a draw of this render type is sent when {@link #drawsOnMainTarget} says elsewhere. */
+	public static String drawTargetName(PreparedRenderType prepared) {
+		return "the order independent transparency targets";
+	}
+
+	/**
+	 * The colour image a draw of this render type lands in: the main target's, which is where the
+	 * level renderer opens the pass its features are drawn in. No override exists on this game to
+	 * move it.
+	 */
+	public static GpuTextureView drawColour(PreparedRenderType prepared) {
+		return Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTextureView();
+	}
+
+	/** The same for depth, the main target's own. */
+	public static @Nullable GpuTextureView drawDepth(PreparedRenderType prepared) {
+		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+
+		return GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null;
+	}
+
+	/**
+	 * Draws everything a storage of the engine's own holds, on a dispatcher of the engine's own.
+	 * <p>
+	 * 26.2 opened a pass per draw on the target each render type named, and without an override
+	 * every one of those resolved to the main target and its depth for the storages this is called
+	 * with. 26.3 wants the pass from the caller, so this opens one on those same two images, the way
+	 * the game draws its own hand ({@code GameRenderer.renderItemInHand}): the frame prepared first,
+	 * since preparing uploads and an upload is refused inside a pass, and the default uniforms bound
+	 * before the phases run. The phases are the ones 26.2's call ran, the see-through one included,
+	 * which 26.3 split out of the translucent one.
+	 */
+	public static void renderAllFeatures(FeatureRenderDispatcher dispatcher,
+			SubmitNodeStorage submits, Supplier<String> label) {
+		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+
+		try (FeatureRenderDispatcher.PreparedFrame frame = dispatcher.prepareFrame(submits);
+				RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+						label, main.getColorTextureView(), Optional.empty(),
+						main.getDepthTextureView(), OptionalDouble.empty())) {
+			RenderSystem.bindDefaultUniforms(pass);
+			FeatureRenderDispatcher.renderAllFeatures(pass, frame);
+		}
 	}
 
 	/**

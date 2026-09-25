@@ -450,7 +450,7 @@ public final class HandDraw {
 			modelViewStack.identity();
 			gameRenderer.itemInHandRenderer.submitHandsWithItems(partial, new PoseStack(),
 					this.submits, player, light);
-			this.dispatcher.renderAllFeatures(this.submits);
+			GameRender.renderAllFeatures(this.dispatcher, this.submits, () -> "Vitrail hand");
 		} finally {
 			half = null;
 			modelViewStack.popMatrix();

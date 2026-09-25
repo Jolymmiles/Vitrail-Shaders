@@ -41,6 +41,12 @@ import java.util.Optional;
  * target the world's translucents are about to blend onto, in the order vanilla draws: features
  * first, then water.
  * <p>
+ * <strong>The override is 26.2's, and {@link GameRender} is where it is posed.</strong> Minecraft
+ * 26.3 removed it along with the pass each draw used to open for itself, and draws the translucent
+ * features inside the one pass it keeps open for its whole main pass. There
+ * {@link GameRender#redirectsFeatures()} answers no, says why once in the log, and this layer is
+ * never opened: what it catches on 26.2 stays on the game's target on 26.3.
+ * <p>
  * <strong>This is a stopgap and it is measured as one.</strong> It is the seed's compromise applied
  * to a handful more pixels: the features arrive tone mapped, after the deferreds, so they are
  * visible and flat, with none of the pack's lighting or shadow on them. It builds no piece of the

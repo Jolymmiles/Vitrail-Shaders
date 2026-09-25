@@ -324,7 +324,9 @@ public final class ShadowGeometry {
 
 		EntityDraw.shadowFeatures(true);
 		try {
-			dispatcher.renderAllFeatures(storage);
+			// Through the seam because 26.3 wants the pass from its caller where 26.2 let every draw
+			// open its own; GameRender says which pass that is on each game.
+			GameRender.renderAllFeatures(dispatcher, storage, () -> "Vitrail shadow casters");
 		} finally {
 			// Lowered whatever happened, and this is the one flag of the three that nothing else
 			// would lower: the other two are closed by the game's own events, and there is no event

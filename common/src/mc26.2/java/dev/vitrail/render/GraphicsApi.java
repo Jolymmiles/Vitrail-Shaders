@@ -7,6 +7,7 @@ import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
@@ -140,6 +141,11 @@ public final class GraphicsApi {
 	public static TextureTarget textureTarget(@Nullable String label, int width, int height,
 			boolean depth, GpuFormat colour) {
 		return new TextureTarget(label, width, height, depth, colour);
+	}
+
+	/** Whether a render target carries a depth image beside its colour. */
+	public static boolean hasDepth(RenderTarget target) {
+		return target.useDepth;
 	}
 
 	/** The area a pass descriptor restricts drawing to, or null where it draws everywhere. */
