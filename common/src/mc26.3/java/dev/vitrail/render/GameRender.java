@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.commands.CommandEncoder;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
-import dev.vitrail.Vitrail;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -55,54 +54,69 @@ import java.util.function.Supplier;
  */
 public final class GameRender {
 
-	/** Whether the refusal below has been said, so that it is said once a session. */
-	private static boolean featuresRefusalSaid;
+	/** The image the game's translucent features are sent to while they are redirected. */
+	private static @Nullable GpuTextureView featuresColour;
+
+	/** The depth they are tested against meanwhile, the world's. */
+	private static @Nullable GpuTextureView featuresDepth;
 
 	private GameRender() {
 	}
 
 	/**
 	 * Whether the game's translucent features can be sent into an image of the engine's choosing,
-	 * which on this game they cannot yet, and the first refusal says so in the log.
+	 * which on this game they can, through a pass of their own.
 	 * <p>
-	 * <strong>What the redirect needs here is a pass of its own.</strong> The 26.3 way to send a
-	 * feature phase somewhere is to open the pass it is drawn into on that image and hand the pass
-	 * to the phase. The game draws its translucent features inside the one pass it keeps open for
-	 * the whole main pass, so that phase would have to be cut out of it: the main pass closed after
-	 * the solid features, a pass opened on the layer and the world's depth for the translucent ones,
-	 * and the main pass opened again for the translucent terrain after them. That cut is the same
-	 * work as running the engine's own stages at those two moments at all, which open passes and
-	 * copy images where NeoForge and the game now hand them the main pass still recording, and it is
-	 * not done yet. Until it is, the layer is never opened and the game's features stay on its own
-	 * target.
+	 * 26.2 had an output override for colour and one for depth that every draw read. 26.3 has none,
+	 * and sends a feature phase where the pass it is handed is opened; the translucent phase is
+	 * handed the level's one pass. So while a redirect stands, the level renderer's mixin hands that
+	 * phase a pass opened on the layer and the world's depth instead ({@link #featuresPass}), the
+	 * level's pass stepping aside for it as it does for the engine's own stages.
 	 */
 	public static boolean redirectsFeatures() {
-		if (!featuresRefusalSaid) {
-			featuresRefusalSaid = true;
-			Vitrail.logger().warn("Vitrail does not hand the game's translucent features to the pack's "
-					+ "image on Minecraft 26.3, so the player's own body in third person and every "
-					+ "translucent feature no program of the pack serves stay on the game's target, "
-					+ "which the pack's final draws over. This game draws them inside the one render "
-					+ "pass it keeps open for its whole main pass and has no output override to send "
-					+ "them elsewhere; redirecting them means cutting that pass, which is not done "
-					+ "yet");
-		}
-
-		return false;
+		return true;
 	}
 
 	/**
-	 * Never reached, {@link #redirectsFeatures()} answering no on this game. Kept so that the shared
-	 * caller is one caller, and a no-op rather than a throw so that a caller that did not ask first
-	 * costs a picture and not the frame.
+	 * Sends the game's translucent features into these two images until
+	 * {@link #endFeatureRedirect()}.
 	 */
 	public static void redirectFeatures(GpuTextureView colour, GpuTextureView depth) {
-		// Nothing to redirect through: see redirectsFeatures.
+		featuresColour = colour;
+		featuresDepth = depth;
 	}
 
-	/** Nothing to put back, nothing having been redirected. */
+	/** Puts the game's draws back on the targets they name. Safe where nothing was redirected. */
 	public static void endFeatureRedirect() {
-		// See redirectsFeatures.
+		featuresColour = null;
+		featuresDepth = null;
+	}
+
+	/**
+	 * The pass the game's translucent phase is to be drawn into while a redirect stands, or null
+	 * where none does and the phase keeps the pass it was handed. The caller closes it once the phase
+	 * is drawn.
+	 * <p>
+	 * A {@link LevelPass} and not a plain pass, for the reason {@link #renderAllFeatures} gives: the
+	 * entity door records a run of draws the pack serves into a pass of its own, and this one has to
+	 * step aside for it. Nothing is emptied, the layer having been emptied where it was opened.
+	 */
+	public static @Nullable RenderPass featuresPass() {
+		GpuTextureView colour = featuresColour;
+		GpuTextureView depth = featuresDepth;
+		if (colour == null) {
+			return null;
+		}
+
+		CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+		Supplier<String> label = () -> "Vitrail translucent features";
+		RenderPass pass = LevelPass.open(encoder.createRenderPass(label, colour, Optional.empty(),
+				depth, OptionalDouble.empty()), colour, depth,
+				() -> encoder.createRenderPass(label, colour, Optional.empty(), depth,
+						OptionalDouble.empty()));
+		RenderSystem.bindDefaultUniforms(pass);
+
+		return pass;
 	}
 
 	/**
@@ -127,16 +141,24 @@ public final class GameRender {
 	}
 
 	/**
-	 * The colour image a draw of this render type lands in: the main target's, which is where the
-	 * level renderer opens the pass its features are drawn in. No override exists on this game to
-	 * move it.
+	 * The colour image a draw of this render type lands in: the layer while the game's translucent
+	 * features are redirected, as 26.2's override answered, and the main target's otherwise, which
+	 * is where the level renderer opens the pass its features are drawn in.
 	 */
 	public static GpuTextureView drawColour(PreparedRenderType prepared) {
-		return Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTextureView();
+		GpuTextureView redirected = featuresColour;
+
+		return redirected != null ? redirected
+				: Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTextureView();
 	}
 
-	/** The same for depth, the main target's own. */
+	/** The same for depth, the world's either way. */
 	public static @Nullable GpuTextureView drawDepth(PreparedRenderType prepared) {
+		GpuTextureView redirected = featuresDepth;
+		if (redirected != null) {
+			return redirected;
+		}
+
 		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 
 		return GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null;

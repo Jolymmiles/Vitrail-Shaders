@@ -1936,8 +1936,8 @@ public final class PackChain {
 	 * hide behind terrain and still leave the depth the water reads untouched.
 	 * <p>
 	 * <strong>That switch is 26.2's and {@link GameRender} is where it is thrown.</strong> 26.3
-	 * removed it, and {@link GameRender#redirectsFeatures()} answers no there and says why in the log,
-	 * so on that game nothing is redirected and the layer is never opened.
+	 * removed it, and there the switch is a pass of its own opened on the layer and the world's
+	 * depth, which the level renderer hands the game's translucent phase in place of its own.
 	 * <p>
 	 * Nothing is redirected while the chain is still compiling, and that refusal is the same one the
 	 * terrain makes through {@code TerrainDraw.shown()}. What the layer is composed onto is a colour
