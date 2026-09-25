@@ -19,7 +19,6 @@ import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -364,9 +363,9 @@ public final class WeatherDraw extends FamilyDraw {
 		// target of its own wherever the game's transparency chain is running and the main target
 		// everywhere else; the pack's colour targets are attached beside that image, and beside a
 		// target the game is going to compose itself afterwards they would be attached to a picture
-		// this engine has not got and does not read.
-		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft.levelRenderer.weatherTarget() != null) {
+		// this engine has not got and does not read. 26.3 has no such target and composes its order
+		// independent passes instead, which GameRender asks in that game's terms.
+		if (GameRender.weatherApart()) {
 			this.drawing = null;
 
 			return refuse("fabulous", "the game's improved transparency is on, so it draws its "
