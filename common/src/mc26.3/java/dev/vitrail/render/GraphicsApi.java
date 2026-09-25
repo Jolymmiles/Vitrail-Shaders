@@ -88,11 +88,35 @@ public final class GraphicsApi {
 	 */
 	private static final Map<Object, RenderPipeline> DESCRIBED = new ConcurrentHashMap<>();
 
+	/**
+	 * The description each compiled pipeline was compiled from, by the compiled object, for the
+	 * game's pipelines as well as this engine's. 26.2 set a pipeline on a pass by its description;
+	 * 26.3 sets the compiled object, so the hooks on a pass that asked which pipeline it was, the
+	 * particle swap among them, ask this instead. The compiled objects are records, whose equality
+	 * would compare every component, so they are keyed by identity through {@link Same}. The game's
+	 * entries are dropped where the game drops its cache, in {@link #purge}.
+	 */
+	private static final Map<Same, RenderPipeline> SOURCES = new ConcurrentHashMap<>();
+
 	private GraphicsApi() {
 	}
 
 	/** A compiled pipeline, or the refusal a compile ended on. */
 	private record Held(@Nullable CompiledRenderPipeline compiled) {
+	}
+
+	/** A key that compares the object it holds by identity. */
+	private record Same(Object held) {
+
+		@Override
+		public boolean equals(Object other) {
+			return other instanceof Same same && same.held == this.held;
+		}
+
+		@Override
+		public int hashCode() {
+			return System.identityHashCode(this.held);
+		}
 	}
 
 	/** Binds one sampled image by the name a shader declares it under. */
@@ -213,11 +237,44 @@ public final class GraphicsApi {
 		if (compiled instanceof FrontendRenderPipeline front) {
 			DESCRIBED.put(front.backendRenderPipeline(), pipeline);
 		}
+
+		if (compiled != null) {
+			SOURCES.put(new Same(compiled), pipeline);
+		}
+	}
+
+	/**
+	 * Notes the description the game compiled a pipeline of its own from, as the game hands it
+	 * out, so a hook on the pass it is set on can ask {@link #descriptionOf}.
+	 */
+	public static void noteGameCompiled(RenderPipeline pipeline,
+			@Nullable CompiledRenderPipeline compiled) {
+		if (compiled != null) {
+			SOURCES.putIfAbsent(new Same(compiled), pipeline);
+		}
+	}
+
+	/** The description a compiled pipeline was compiled from, or null where nothing noted it. */
+	public static @Nullable RenderPipeline descriptionOf(@Nullable CompiledRenderPipeline compiled) {
+		return compiled == null ? null : SOURCES.get(new Same(compiled));
+	}
+
+	/**
+	 * The compiled pipeline to set for a description: this engine's where it compiled one, the
+	 * game's otherwise.
+	 */
+	public static @Nullable CompiledRenderPipeline compiledFor(RenderPipeline pipeline) {
+		CompiledRenderPipeline ours = held(pipeline);
+		return ours != null ? ours : RenderSystem.getCompiledPipelineNullable(pipeline);
 	}
 
 	private static void undescribe(@Nullable CompiledRenderPipeline compiled) {
 		if (compiled instanceof FrontendRenderPipeline front) {
 			DESCRIBED.remove(front.backendRenderPipeline());
+		}
+
+		if (compiled != null) {
+			SOURCES.remove(new Same(compiled));
 		}
 	}
 
@@ -265,6 +322,11 @@ public final class GraphicsApi {
 				compiled.close();
 			}
 		}
+
+		// The game closes every pipeline of the cache it is replacing, so what it compiled is gone;
+		// what survives in the map is what this engine still holds.
+		SOURCES.keySet().removeIf(key -> COMPILED.values().stream()
+				.noneMatch(kept -> kept.compiled() == key.held()));
 
 		Vitrail.logger().info("Pipeline purge: {} pipelines of the pack held, {} carried over it, "
 				+ "property=vitrail.keepPackAcrossReload", ofThePack, carried);

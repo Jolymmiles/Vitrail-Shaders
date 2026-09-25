@@ -48,4 +48,14 @@ public abstract class RenderSystemMixin {
 			callback.setReturnValue(ours);
 		}
 	}
+
+	/**
+	 * Notes which description the game compiled what it hands out from, which a hook on a pass
+	 * asks now that a pass is handed the compiled object and not the description.
+	 */
+	@Inject(method = "getCompiledPipelineNullable", at = @At("RETURN"), require = 1)
+	private static void vitrail$note(RenderPipeline pipeline,
+			CallbackInfoReturnable<@Nullable CompiledRenderPipeline> callback) {
+		GraphicsApi.noteGameCompiled(pipeline, callback.getReturnValue());
+	}
 }
