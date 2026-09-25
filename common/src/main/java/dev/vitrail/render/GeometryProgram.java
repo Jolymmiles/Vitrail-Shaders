@@ -747,6 +747,13 @@ final class GeometryProgram {
 				.withPrimitiveTopology(pass.topology())
 				.withCull(pass.cull());
 
+		// The region offset Sodium pushes at every draw of a chunk layer. One game hands it to the
+		// pipelines whose name says sodium, the other has each pipeline declare the room it takes;
+		// GraphicsApi answers for both, and the family whose geometry is not Sodium's takes none.
+		if (pass.namespace().contains("sodium")) {
+			GraphicsApi.withSodiumPushConstants(builder);
+		}
+
 		// A second group, and it is the game's own rather than one built here: the pass binds its
 		// contents by name, so the names have to be the ones it binds. Only the clouds have one.
 		if (pass.bindings() != null) {
@@ -1242,6 +1249,7 @@ final class GeometryProgram {
 				.withPrimitiveTopology(this.pipeline.getPrimitiveTopology())
 				.withVertexBinding(0, layout);
 		this.pipeline.getBindGroupLayouts().forEach(builder::withBindGroupLayout);
+		GraphicsApi.copyPushConstants(builder, this.pipeline);
 		if (this.pipeline.getDepthStencilState() != null) {
 			builder.withDepthStencilState(this.pipeline.getDepthStencilState());
 		}

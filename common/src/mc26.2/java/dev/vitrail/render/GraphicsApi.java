@@ -184,4 +184,20 @@ public final class GraphicsApi {
 	public static void suspendLevelPass() {
 		// Nothing: every phase of the level closes its own pass on this game.
 	}
+
+	/**
+	 * Gives a pipeline the room Sodium's region offset takes. This game pushes it to every pipeline
+	 * whose name says sodium, whatever the pipeline declares, so there is nothing to declare.
+	 */
+	public static void withSodiumPushConstants(RenderPipeline.Builder builder) {
+		// Nothing: the backend decides by the pipeline's name on this game.
+	}
+
+	/**
+	 * Carries a pipeline's push constants over to a builder rebuilding it. Nothing to carry on this
+	 * game, where the name alone decides them.
+	 */
+	public static void copyPushConstants(RenderPipeline.Builder builder, RenderPipeline from) {
+		// Nothing: the rebuilt pipeline keeps the name that decides them.
+	}
 }

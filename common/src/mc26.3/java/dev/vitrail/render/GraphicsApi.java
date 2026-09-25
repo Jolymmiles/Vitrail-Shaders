@@ -99,6 +99,12 @@ public final class GraphicsApi {
 	 */
 	private static final Map<Same, RenderPipeline> SOURCES = new ConcurrentHashMap<>();
 
+	/**
+	 * The bytes Sodium pushes at every draw of a chunk layer, its region offset, which its own chunk
+	 * pipelines declare with {@code withPushConstantSize(20)} in {@code ShaderChunkRenderer}.
+	 */
+	private static final int SODIUM_PUSH_CONSTANTS = 20;
+
 	private GraphicsApi() {
 	}
 
@@ -525,5 +531,18 @@ public final class GraphicsApi {
 	 */
 	public static void suspendLevelPass() {
 		LevelPass.suspendCurrent();
+	}
+
+	/**
+	 * Gives a pipeline the room Sodium's region offset takes. This game has each pipeline declare
+	 * its push constants, and refuses a stage pushing more than its pipeline declared.
+	 */
+	public static void withSodiumPushConstants(RenderPipeline.Builder builder) {
+		builder.withPushConstantSize(SODIUM_PUSH_CONSTANTS);
+	}
+
+	/** Carries a pipeline's push constants over to a builder rebuilding it. */
+	public static void copyPushConstants(RenderPipeline.Builder builder, RenderPipeline from) {
+		builder.withPushConstantSize(from.pushConstantSize());
 	}
 }
