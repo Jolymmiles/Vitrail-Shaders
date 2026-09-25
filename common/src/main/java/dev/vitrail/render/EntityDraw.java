@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +49,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -704,17 +706,36 @@ public final class EntityDraw extends FamilyDraw {
 	 * ({@code pipeline/IrisPipelines.java:72-78}). It is served like its two neighbours, which is
 	 * what Iris does with every other pairing of those two words: the polygon offset changes the
 	 * depth the game nudges the quad by and nothing a pack reads.
+	 * <p>
+	 * <strong>Six on 26.3 and not eight.</strong> That game has no background pipeline, a text
+	 * display's box being submitted as text, so {@link GamePipelines} answers none for the two and
+	 * they are left out of this table and of the rows below alike.
 	 */
-	private static final Map<RenderPipeline, VertexFormat> TEXT_FORMATS = Map.of(
-			RenderPipelines.TEXT, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
-			RenderPipelines.TEXT_GRAYSCALE, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
-			RenderPipelines.TEXT_POLYGON_OFFSET, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
-			RenderPipelines.TEXT_GRAYSCALE_POLYGON_OFFSET,
-			DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR,
-			RenderPipelines.TEXT_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR,
-			RenderPipelines.TEXT_GRAYSCALE_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR,
-			RenderPipelines.TEXT_BACKGROUND, DefaultVertexFormat.POSITION_COLOR_LIGHTMAP,
-			RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH, DefaultVertexFormat.POSITION_COLOR);
+	private static final Map<RenderPipeline, VertexFormat> TEXT_FORMATS = textFormats();
+
+	private static Map<RenderPipeline, VertexFormat> textFormats() {
+		Map<RenderPipeline, VertexFormat> formats = new HashMap<>();
+		formats.put(RenderPipelines.TEXT, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR);
+		formats.put(RenderPipelines.TEXT_GRAYSCALE, DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR);
+		formats.put(RenderPipelines.TEXT_POLYGON_OFFSET,
+				DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR);
+		formats.put(RenderPipelines.TEXT_GRAYSCALE_POLYGON_OFFSET,
+				DefaultVertexFormat.POSITION_TEX_LIGHTMAP_COLOR);
+		formats.put(RenderPipelines.TEXT_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR);
+		formats.put(RenderPipelines.TEXT_GRAYSCALE_SEE_THROUGH, DefaultVertexFormat.POSITION_TEX_COLOR);
+
+		RenderPipeline background = GamePipelines.textBackground();
+		if (background != null) {
+			formats.put(background, DefaultVertexFormat.POSITION_COLOR_LIGHTMAP);
+		}
+
+		RenderPipeline seeThrough = GamePipelines.textBackgroundSeeThrough();
+		if (seeThrough != null) {
+			formats.put(seeThrough, DefaultVertexFormat.POSITION_COLOR);
+		}
+
+		return Map.copyOf(formats);
+	}
 
 	/**
 	 * The three of those eight whose font sheet holds ONE channel, and which the game therefore
@@ -775,13 +796,18 @@ public final class EntityDraw extends FamilyDraw {
 	 * the one thing that puts Iris's own {@code getText} in a hand pass, and it puts a GLYPH row
 	 * there and not one of these two: nothing but a text display reaches the two backgrounds, and no
 	 * text display is drawn inside a hand pass.
+	 * <p>
+	 * Three on 26.3, which has no background pipeline to pin: the box is text there, and the text
+	 * rows are not pinned on either game.
 	 */
-	private static final Set<RenderPipeline> PINNED = Set.of(
+	private static final Set<RenderPipeline> PINNED = Stream.of(
 			RenderPipelines.END_CRYSTAL_BEAM,
 			RenderPipelines.ENTITY_CUTOUT_Z_OFFSET,
 			RenderPipelines.ENERGY_SWIRL,
-			RenderPipelines.TEXT_BACKGROUND,
-			RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH);
+			GamePipelines.textBackground(),
+			GamePipelines.textBackgroundSeeThrough())
+			.filter(Objects::nonNull)
+			.collect(Collectors.toUnmodifiableSet());
 
 	/**
 	 * Every pipeline whose draws walk the entity program names, in the two runs the game sorts its
@@ -877,7 +903,9 @@ public final class EntityDraw extends FamilyDraw {
 				CUTOUT));
 		put(new Element(RenderPipelines.ENTITY_TRANSLUCENT_CULL, "translucent_cull",
 				ENTITIES_TRANSLUCENT, CUTOUT));
-		put(new Element(RenderPipelines.ARMOR_TRANSLUCENT, "armor_translucent", ENTITIES_TRANSLUCENT,
+		// The cracks over a wolf's armour, which 26.3 renamed after that one caller and left the same
+		// pipeline under the same location; GamePipelines names it on each game.
+		put(new Element(GamePipelines.armorTranslucent(), "armor_translucent", ENTITIES_TRANSLUCENT,
 				CUTOUT));
 		put(new Element(RenderPipelines.ITEM_TRANSLUCENT, "item_translucent", ENTITIES_TRANSLUCENT,
 				CUTOUT));
@@ -925,11 +953,18 @@ public final class EntityDraw extends FamilyDraw {
 		// holds to their own program: Iris keys them on a constant where the six above go through
 		// getText. Not a name plate's box, which is an effect over the font's white glyph and comes
 		// in on the six above with the letters it sits behind; the two render types below have one
-		// caller in the client and it is DisplayRenderer.TextDisplayRenderer.
-		put(new Element(RenderPipelines.TEXT_BACKGROUND, "text_background", ENTITIES_TRANSLUCENT,
-				CUTOUT));
-		put(new Element(RenderPipelines.TEXT_BACKGROUND_SEE_THROUGH, "text_background_see_through",
-				ENTITIES_TRANSLUCENT, CUTOUT));
+		// caller in the client and it is DisplayRenderer.TextDisplayRenderer. Neither exists on 26.3,
+		// which submits that box as text, so there it arrives on the six rows above.
+		RenderPipeline background = GamePipelines.textBackground();
+		if (background != null) {
+			put(new Element(background, "text_background", ENTITIES_TRANSLUCENT, CUTOUT));
+		}
+
+		RenderPipeline seeThrough = GamePipelines.textBackgroundSeeThrough();
+		if (seeThrough != null) {
+			put(new Element(seeThrough, "text_background_see_through", ENTITIES_TRANSLUCENT,
+					CUTOUT));
+		}
 	}
 
 	/**

@@ -20,7 +20,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderPipelines;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -57,7 +56,9 @@ import java.util.Set;
  * pieces out of two files: the game picks between {@code WEATHER_DEPTH_WRITE} and
  * {@code WEATHER_NO_DEPTH_WRITE} at every frame, the two differ in a depth state, and a depth state
  * belongs to a compiled pipeline rather than to a draw. A pack's file is still read and translated
- * once, the two elements sharing a translation.
+ * once, the two elements sharing a translation. On 26.3 it is one element: that game kept the
+ * pipeline that tests and does not write, as {@code WEATHER}, and dropped the other, which
+ * {@link GamePipelines} answers for.
  * <p>
  * <strong>No pack of the corpus asks for the depth writing one</strong>, and it is still made. The
  * game picks it under improved transparency or under a pack's {@code rain.depth}, and three packs of
@@ -115,8 +116,13 @@ public final class WeatherDraw extends FamilyDraw {
 	private static final Map<RenderPipeline, Element> ELEMENTS = new LinkedHashMap<>();
 
 	static {
-		put(new Element(RenderPipelines.WEATHER_NO_DEPTH_WRITE, "weather", RenderStage.RAIN_SNOW));
-		put(new Element(RenderPipelines.WEATHER_DEPTH_WRITE, "weather_depth", RenderStage.RAIN_SNOW));
+		put(new Element(GamePipelines.weather(), "weather", RenderStage.RAIN_SNOW));
+
+		// 26.3 has no depth writing weather pipeline, so there the family is one element.
+		RenderPipeline depthWrite = GamePipelines.weatherDepthWrite();
+		if (depthWrite != null) {
+			put(new Element(depthWrite, "weather_depth", RenderStage.RAIN_SNOW));
+		}
 	}
 
 	private static void put(Element element) {
