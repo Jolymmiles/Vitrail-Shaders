@@ -172,18 +172,29 @@ subprojects {
 
 			moves[names[0]] = names[1]
 			moves[names[0].replace(".", "/")] = names[1].replace(".", "/")
+			// A descriptor spells the class after an L, which the match below would otherwise read
+			// as the end of a longer name and leave alone.
+			moves["L" + names[0].replace(".", "/")] = "L" + names[1].replace(".", "/")
 		}
 
-		// Longest first, so the alternation tries a name before any name it begins with.
-		def alternatives = moves.keySet().sort { -it.length() }
-				.collect { java.util.regex.Pattern.quote(it) }.join("|")
+		// Longest first, so the alternation tries a name before any name it begins with. A name is
+		// matched whole: not after a letter, not before one. The descriptor spelling is the one
+		// exception on its left, since a descriptor packs its types together, (ILcom/...;) giving
+		// the name an I in front, and what closes it on the right, a semicolon or a nested class,
+		// is what says it is a descriptor.
+		def quoted = { names -> names.sort { -it.length() }
+				.collect { java.util.regex.Pattern.quote(it) }.join("|") }
 		def pattern = java.util.regex.Pattern.compile(
-				"(?<![\\w\$])(?:${alternatives})(?!\\w)")
+				'(?:' + quoted(moves.keySet().findAll { it.startsWith("L") }) + ')(?=[;$<])'
+				+ '|(?<![\\w$])(?:' + quoted(moves.keySet().findAll { !it.startsWith("L") })
+				+ ')(?!\\w)')
 
 		def remapSources = tasks.register("remapSources", Sync) {
 			description = "Rewrites the shared sources onto the class names of Minecraft ${minecraft}."
 
-			inputs.file(remapFile)
+			// The table as rewritten, and not only the file it came from: a change to how a line of
+			// that file becomes a rewrite would otherwise leave every copy under build/ standing.
+			inputs.property("moves", moves)
 			from("src/main/java")
 			into(layout.buildDirectory.dir("generated/sources/remapped/java"))
 			filteringCharset = "UTF-8"
