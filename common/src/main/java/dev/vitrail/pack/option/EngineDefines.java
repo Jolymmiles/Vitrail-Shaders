@@ -315,7 +315,8 @@ public final class EngineDefines {
 	 * OptiFine's symbol for the system, or null on a Mac, where no system symbol is posed at all.
 	 * <p>
 	 * <strong>A divergence, and on purpose.</strong> OptiFine and Iris pose {@code MC_OS_MAC} on a
-	 * Mac, and there they run on Apple's OpenGL driver. That driver is what the symbol means to a
+	 * Mac (Iris at {@code gl/shader/StandardMacros.java:253-261}, the {@code OSX} case), and there
+	 * they run on Apple's OpenGL driver. That driver is what the symbol means to a
 	 * pack: every test of it in Complementary Reimagined r5.9.3 switches off something that driver
 	 * lacks. The pack turns off its coloured lighting and the image stores it is built on
 	 * ({@code lib/common.glsl:33}, {@code shaders.properties:72}), and paints a full screen error
