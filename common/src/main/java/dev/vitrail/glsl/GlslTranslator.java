@@ -1872,9 +1872,13 @@ public final class GlslTranslator {
 	 * across a conditional, {@code out} under one branch and {@code in} under the other, which is
 	 * read through, the live word deciding; and a read of the instance inside a macro body is
 	 * rewritten with the rest. A block with no instance name already reads its members as globals
-	 * and is only unwrapped. Left whole: a block declared as an array, which only a geometry or
-	 * tessellation stage reads and this engine binds neither; a {@code patch} block, for the same
-	 * reason; {@code gl_PerVertex}, the compiler's block and not a pack's; and a block one of
+	 * and is only unwrapped. A geometry stage's input block is an array, one element per corner,
+	 * and each member becomes an array of its own ({@code data_in[i].color} to
+	 * {@code of_DATA_color[i]}): that stage is never bound, but a device without geometry shaders
+	 * folds a pass-through one into the fragment stage, and the fold reads varyings and not
+	 * blocks. Eclipse's terrain passes its corners that way and lost its terrain program to the
+	 * block. Left whole: any other block declared as an array, which only a tessellation stage
+	 * reads and this engine binds none; a {@code patch} block, for the same reason; {@code gl_PerVertex}, the compiler's block and not a pack's; and a block one of
 	 * whose members the pass cannot read, since half a block is worse than the whole one. What is
 	 * not told apart is a local named like the instance whose own field is named like a member,
 	 * which no pack of the corpus writes.
@@ -1907,9 +1911,31 @@ public final class GlslTranslator {
 
 			String instance = null;
 			int end = after;
+			List<Token> corners = List.of();
 			if (this.tokens.get(after).kind() == Kind.IDENTIFIER) {
 				instance = this.tokens.get(after).text();
 				end = this.tokens.significantAfter(after);
+				// A geometry stage reads its inputs one corner at a time, as an array of the
+				// block, and it is the one arrayed block read here: the fold reads that stage.
+				if (end >= 0 && this.tokens.get(end).operator("[") && token.identifier("in")
+						&& this.stage == ProgramStage.GEOMETRY) {
+					int closing = this.tokens.matchingBracket(end);
+					if (closing < 0) {
+						index = close;
+						continue;
+					}
+
+					List<Token> suffix = new ArrayList<>();
+					for (int at = end; at <= closing; at++) {
+						Token piece = this.tokens.get(at);
+						if (!piece.trivia() && piece.kind() != Kind.NEWLINE) {
+							suffix.add(piece);
+						}
+					}
+
+					corners = List.copyOf(suffix);
+					end = this.tokens.significantAfter(closing);
+				}
 			}
 
 			if (end < 0 || !this.tokens.get(end).operator(";")) {
@@ -1972,6 +1998,16 @@ public final class GlslTranslator {
 				declaration.clear();
 			}
 
+			// A member that is an array of its own would become an array of arrays, a shape the
+			// fold does not read either, so such a block stays whole as before.
+			if (!corners.isEmpty() && members.stream().flatMap(member -> member.names().stream())
+					.anyMatch(at -> {
+						int next = this.tokens.significantAfter(at);
+						return next >= 0 && this.tokens.get(next).operator("[");
+					})) {
+				readable = false;
+			}
+
 			if (!readable || !declaration.isEmpty()) {
 				index = close;
 				continue;
@@ -1981,13 +2017,15 @@ public final class GlslTranslator {
 			String prefix = instance == null ? "" : "of_" + this.tokens.get(name).text() + "_";
 			List<String> names = new ArrayList<>();
 			for (BlockMember member : members) {
-				flattenMember(member, storage, carried, prefix, names, insertions);
+				flattenMember(member, storage, carried, prefix, corners, names, insertions);
 			}
 
 			blankCode(start, brace);
 			blankCode(close, end);
-			if (instance != null) {
+			if (instance != null && corners.isEmpty()) {
 				rewriteBlockReads(instance, prefix, names);
+			} else if (instance != null) {
+				rewriteCornerReads(instance, prefix, names);
 			}
 
 			index = close;
@@ -2111,7 +2149,7 @@ public final class GlslTranslator {
 	 * layout on the member is dropped.
 	 */
 	private void flattenMember(BlockMember member, String storage, List<String> carried, String prefix,
-			List<String> names, List<TokenStream.Insertion> insertions) {
+			List<Token> corners, List<String> names, List<TokenStream.Insertion> insertions) {
 		if (member.layoutAt() >= 0) {
 			dropLocationLayout(member.layoutAt());
 		}
@@ -2120,6 +2158,10 @@ public final class GlslTranslator {
 			String name = this.tokens.get(nameAt).text();
 			names.add(name);
 			this.tokens.replace(nameAt, prefix + name);
+			// The block's corner array, handed to each member: in vec4 of_DATA_color[];
+			for (Token piece : corners) {
+				insertions.add(new TokenStream.Insertion(nameAt + 1, piece));
+			}
 		}
 
 		boolean interpolated = member.qualifiers().stream().anyMatch(INTERPOLATION_QUALIFIERS::contains);
@@ -2141,6 +2183,42 @@ public final class GlslTranslator {
 			if (this.tokens.get(at).directive() == null) {
 				this.tokens.blankRange(at, at);
 			}
+		}
+	}
+
+	/**
+	 * {@link #rewriteBlockReads} for a block read one corner at a time: {@code data_in[i].color}
+	 * becomes {@code of_DATA_color[i]}. The instance takes the member's name and the access after
+	 * the bracket is blanked, which puts the index where the flattened array wants it without
+	 * moving a token.
+	 */
+	private void rewriteCornerReads(String instance, String prefix, List<String> members) {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.macroName() || !token.identifier(instance) || fieldAccess(index)) {
+				continue;
+			}
+
+			int open = this.tokens.significantAfter(index);
+			if (open < 0 || !this.tokens.get(open).operator("[")) {
+				continue;
+			}
+
+			int closing = this.tokens.matchingBracket(open);
+			int dot = closing < 0 ? -1 : this.tokens.significantAfter(closing);
+			if (dot < 0 || !this.tokens.get(dot).operator(".")) {
+				continue;
+			}
+
+			int member = this.tokens.significantAfter(dot);
+			if (member < 0 || this.tokens.get(member).kind() != Kind.IDENTIFIER
+					|| !members.contains(this.tokens.get(member).text())) {
+				continue;
+			}
+
+			this.tokens.replace(index, prefix + this.tokens.get(member).text());
+			this.tokens.blank(dot);
+			this.tokens.blank(member);
 		}
 	}
 

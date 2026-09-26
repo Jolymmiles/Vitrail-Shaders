@@ -11,6 +11,23 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Bliss-based packs draw again, Eclipse among them.** Three things refused them, each on its
+  own enough to turn the whole pack off:
+  - A pack may keep data in a one dimensional image. Bliss keeps a line of block data that way,
+    and the game's shader checks refused every program reading it, the pack's composites among
+    them. One dimensional images now pass those checks, as three dimensional ones already did.
+  - A pack may define a macro twice with different bodies, which NVIDIA's driver accepts and the
+    compiler Vitrail uses does not. Eclipse's composite2 does it with `diagonal3`. Each use now
+    gets the body in force where it stands, which is the driver's reading.
+  - A geometry stage that only passes each corner on is folded into the stage after it on a Mac.
+    Eclipse's terrain writes that stage in a shape the fold did not read (a block of varyings read
+    one corner at a time, a counter declared ahead of its loop, the position held in a local), so
+    the pack's terrain program was set aside and the terrain drawn without it. It is folded now.
+
 ## 0.12.0-beta
 
 ### Added
