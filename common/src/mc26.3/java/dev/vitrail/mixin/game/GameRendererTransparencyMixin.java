@@ -14,8 +14,9 @@ import org.spongepowered.asm.mixin.injection.At;
  * main pass after the opaque world. A pack composes its own translucency, over the targets of its
  * own, and the engine's stages are cut around the classic order, the translucent features, then the
  * translucent terrain, in the main pass. So the one answer every reader of the option asks is no
- * while a pack is drawing, which is what Iris does with improved transparency on the other backend,
- * and the player's setting stands the moment the pack stops.
+ * while a pack is drawing, which is what Iris does with improved transparency on the other backend.
+ * The option itself is lowered at pack load by {@code PackChoice.turnOffImprovedTransparency}, as
+ * Iris lowers it, and this answer covers any frame that reads the option before that write.
  */
 @Mixin(GameRenderer.class)
 public abstract class GameRendererTransparencyMixin {

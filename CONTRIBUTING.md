@@ -384,8 +384,9 @@ Where the two games differ, the difference is a whole file and never a branch in
   never laid over it. A class that differs exists once per game under the same name and the same
   surface, `render/GraphicsApi` and `render/GameRender` being the two seams most calls go through;
   a class only one game has lives only there.
-- A mixin that differs keeps its name, sits once per game under `src/mc<version>/`, and stays listed
-  in the shared config. A mixin only one game has goes in `dev.vitrail.mixin.game` and in that
+- A mixin that differs keeps its name and sits once per game under `src/mc<version>/`. Most stay
+  listed in the shared config; the hand and the sky, which travel with mixins of one game only, are
+  in `dev.vitrail.mixin.game` with them. A mixin only one game has goes in that package and in that
   game's `vitrail-game.mixins.json`, which both loaders list. The compiler checks none of a mixin's
   targets, so a mixin changed for one game is checked against that game's jar, its handler
   signature included.
@@ -404,9 +405,9 @@ holds:
   join them, `StringSplitter` and `OperatorPrecedence`
 - `checkText`, which covers the two things no compiler sees: a byte order mark, which PowerShell
   writes unless told not to, and typographic punctuation
-- the unit tests under `common/src/test/`, which need neither a game running nor a pack. There is
-  one: it holds the game's transforms block, which a pack's entity programs are declared against,
-  to the include the game being built ships, since a block declared in another order compiles and
+- the unit tests under `common/src/test/`, which need neither a game running nor a pack. One of
+  them holds the game's transforms block, which a pack's entity programs are declared against, to
+  the include the game being built ships, since a block declared in another order compiles and
   reads the wrong bytes
 
 `gradlew build -PlintReport` prints the remaining Error Prone warnings and every compiler warning

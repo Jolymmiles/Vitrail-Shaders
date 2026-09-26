@@ -448,7 +448,10 @@ public final class GraphicsApi {
 		return target.hasDepth();
 	}
 
-	/** The area a pass descriptor restricts drawing to, or null where it draws everywhere. */
+	/**
+	 * The area a pass descriptor restricts drawing to. The 26.3 record fills in the extent of its
+	 * first attachment where none was set, so a built descriptor always answers one here.
+	 */
 	public static RenderPass.@Nullable RenderArea renderArea(RenderPassDescriptor descriptor) {
 		return descriptor.renderArea();
 	}
