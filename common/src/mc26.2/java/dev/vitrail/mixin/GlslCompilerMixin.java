@@ -182,12 +182,18 @@ public abstract class GlslCompilerMixin {
 		}
 	}
 
+	/**
+	 * A one (SpvDim1D, 0) or three (SpvDim3D, 2) dimensional image is read as two dimensional (1),
+	 * the only shape the game's own shaders sample and so the only one its check lets through; the
+	 * view bound is the one the engine allocated in the declared shape. Bliss keeps its block data as
+	 * a one dimensional image, and every program sampling it was refused before.
+	 */
 	@WrapOperation(method = "addToBindGroup", require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/vulkan/glsl/SpvSampler;dimensions()I"))
-	private static int vitrail$allow3d(@Coerce Object sampler, Operation<Integer> original) {
+	private static int vitrail$allowLineAndVolume(@Coerce Object sampler, Operation<Integer> original) {
 		int dimension = original.call(sampler);
-		return dimension == 2 ? 1 : dimension;
+		return dimension == 0 || dimension == 2 ? 1 : dimension;
 	}
 
 	/**
