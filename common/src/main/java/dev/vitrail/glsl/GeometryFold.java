@@ -26,6 +26,10 @@ import java.util.Set;
  * which is what it was before: triangles in, a strip of three vertices out, and a
  * {@code main} made of one loop over the three corners whose body writes {@code gl_Position} and each
  * output from the same corner of one input, then {@code EmitVertex}, then {@code EndPrimitive}.
+ * Bliss spells the same loop three ways more, and each is read as that shape: the counter declared
+ * on a line of its own ahead of the loop, the corner's position held in a local it hands on
+ * unchanged, and every varying handed on under the name it came in by once its interface blocks
+ * are flattened, which the fragment stage then reads as it stands.
  * The text read is the stage after the preprocessor, which {@code render/GeometryStage} runs first,
  * so a branch the settings do not take is not there to be matched.
  * <p>

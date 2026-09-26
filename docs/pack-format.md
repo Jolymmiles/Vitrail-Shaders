@@ -476,8 +476,10 @@ search table of one. Nothing is tiled and there is no margin, the coordinates be
 declaration gives; the channels are widened to the four the engine allocates, a channel the file has
 not got reading nought and a missing alpha reading one, which is what a texture short of channels
 answers. The file is read to the declared length, like a volume's. A blob declared one-dimensional or as a rectangle is
-not uploaded, the log saying so and the sampler reading one black pixel: those are read through
-samplers this backend does not bind, and no pack at hand declares either.
+not uploaded, the log saying so and the sampler reading one black pixel. A rectangle is read
+through a sampler this backend does not bind; a one-dimensional sampler is bound, but only over an
+image an `image` directive declares, and nothing uploads a line read from a file. No pack at hand
+ships either.
 
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.

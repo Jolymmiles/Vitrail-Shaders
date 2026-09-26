@@ -400,11 +400,12 @@ for that path, three different mechanisms, and it is worth knowing which:
 
 - **Samplers are refused by name.** The compiler takes one as two-dimensional or as a cube, or as a
   texel buffer where the pipeline declared that name as a uniform rather than as a sampler, and
-  rejects every other dimensionality. Three dimensions are the one exception, and it is this
-  engine's doing: a mixin makes that walk read the dimension as two, so a `sampler3D` naming a
-  volume an `image` directive fills, or the image itself, is bound and never refused. What stays
-  refused is a three-dimensional shape with nothing behind it, and a volume the pack ships as a
-  file escapes by being flattened onto a flat atlas long before it reaches here.
+  rejects every other dimensionality. One and three dimensions are the exceptions, and they are
+  this engine's doing: a mixin makes that walk read either as two, so a `sampler1D` or `sampler3D`
+  naming an image an `image` directive declares, or the image itself, is bound and never refused.
+  Bliss and the packs made from it keep their block data on such a line. What stays refused is a
+  one- or three-dimensional shape with nothing behind it, and a volume the pack ships as a file
+  escapes by being flattened onto a flat atlas long before it reaches here.
 - **Compute has nowhere to go through the Java facade.** The game's shader-type enumeration carries
   a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
   anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable

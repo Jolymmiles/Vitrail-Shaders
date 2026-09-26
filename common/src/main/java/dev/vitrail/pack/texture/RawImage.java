@@ -17,10 +17,11 @@ import dev.vitrail.pack.model.PixelType;
  * {@code R8} search table, both read as {@code .rg} and {@code .r}, and until they were served the
  * compute that samples them found no image under the name and was dropped whole.
  * <p>
- * A shape that is not two dimensional stays out. A {@code TEXTURE_1D} would be a
- * {@code sampler1D} and a {@code TEXTURE_RECTANGLE} a {@code sampler2DRect} indexed in texels
- * rather than in zero to one, and neither is a thing this backend binds or this engine rewrites;
- * no pack of the corpus declares either.
+ * A shape that is not two dimensional stays out. A {@code TEXTURE_RECTANGLE} would be a
+ * {@code sampler2DRect} indexed in texels rather than in zero to one, which this backend does not
+ * bind and this engine does not rewrite. A {@code TEXTURE_1D} would be a {@code sampler1D}, bound
+ * since Bliss's line of block data needed it, but only over an image an {@code image} directive
+ * declares: nothing uploads a line read from a file. No pack of the corpus ships either.
  */
 public final class RawImage {
 
