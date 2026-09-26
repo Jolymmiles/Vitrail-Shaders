@@ -29,6 +29,18 @@ what the next one holds.
 
 ### Fixed
 
+- **Bliss-based packs draw again, Eclipse among them.** Three things refused them, each on its
+  own enough to turn the whole pack off:
+  - A pack may keep data in a one dimensional image. Bliss keeps a line of block data that way,
+    and the game's shader checks refused every program reading it, the pack's composites among
+    them. One dimensional images now pass those checks, as three dimensional ones already did.
+  - A pack may define a macro twice with different bodies, which NVIDIA's driver accepts and the
+    compiler Vitrail uses does not. Eclipse's composite2 does it with `diagonal3`. Each use now
+    gets the body in force where it stands, which is the driver's reading.
+  - A geometry stage that only passes each corner on is folded into the stage after it on a Mac.
+    Eclipse's terrain writes that stage in a shape the fold did not read (a block of varyings read
+    one corner at a time, a counter declared ahead of its loop, the position held in a local), so
+    the pack's terrain program was set aside and the terrain drawn without it. It is folded now.
 - **World space reflections show the blocks they reflect instead of magenta.** A pack can name one
   of the game's atlases as a texture of its own, and Complementary Reimagined colours its world
   space reflections from the block atlas that way. An atlas is built while the game runs and is no
