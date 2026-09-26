@@ -4,6 +4,7 @@ import dev.vitrail.pack.load.PackLoader;
 import dev.vitrail.ScreenText;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
@@ -602,7 +603,7 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 
 		@Override
 		public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-			return event.button() == 0 && press();
+			return event.button() == InputConstants.MOUSE_BUTTON_LEFT && press();
 		}
 
 		@Override
