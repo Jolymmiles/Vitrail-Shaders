@@ -1192,6 +1192,7 @@ public final class GlslTranslator {
 	 * meaning for it, its own.
 	 */
 	private String body(Set<String> shadowed) {
+		undefineRedefinedMacros();
 		if (shadowed.isEmpty()) {
 			return this.tokens.join();
 		}
@@ -1705,6 +1706,63 @@ public final class GlslTranslator {
 				this.tokens.blankDirective(at.get(which));
 			}
 		});
+	}
+
+	/**
+	 * Puts an {@code #undef} in front of every live redefinition of a macro that
+	 * {@link #settleRedefinedMacros} had to leave standing, which is the reference's reading of it.
+	 * <p>
+	 * A driver that accepts the pair gives each use the body in force where it stands: the first
+	 * body before the redefinition and the second after it. An {@code #undef} right in front of the
+	 * redefinition says exactly that to a compiler that refuses the pair, so no use changes value.
+	 * The pairs left for this are the ones read in between, which settling cannot touch: Eclipse
+	 * writes {@code diagonal3} in its composite2 and reads it through {@code projMAD} for three
+	 * hundred lines before {@code lib/util.glsl} defines it again, a body apart, and the whole pack
+	 * was refused over it.
+	 * <p>
+	 * <strong>Here and not in the rewrite, because of what it costs.</strong> The {@code #undef}
+	 * needs a line of its own, and every pass of the rewrite reads liveness off line numbers
+	 * ({@link TokenStream#lineNumbers}) and indices it recorded earlier. So it is written into the
+	 * text of the {@code #} token of the redefinition, which keeps the tokens where they are, and
+	 * only when the body is joined, after which nothing reads a line number again. The one thing
+	 * that moves is the line the compiler names in its own messages, one per {@code #undef}.
+	 */
+	private void undefineRedefinedMacros() {
+		int[] lines = this.tokens.lineNumbers();
+		Map<String, String> inForce = new HashMap<>();
+		Map<Integer, String> redefinitions = new LinkedHashMap<>();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.HASH || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			boolean define = "define".equals(token.directive());
+			if (!define && !"undef".equals(token.directive())) {
+				continue;
+			}
+
+			int name = this.tokens.macroNameAfter(index);
+			if (name < 0) {
+				continue;
+			}
+
+			String named = this.tokens.get(name).text();
+			if (!define) {
+				inForce.remove(named);
+				continue;
+			}
+
+			String body = macroBody(name);
+			String previous = inForce.put(named, body);
+			// Only the "#" the lexer gave, so that joining a second time does not undefine twice.
+			if (previous != null && !previous.equals(body) && token.text().equals("#")) {
+				redefinitions.put(index, named);
+			}
+		}
+
+		redefinitions.forEach((index, named) ->
+				this.tokens.replace(index, "#undef " + named + "\n" + this.tokens.get(index).text()));
 	}
 
 	/**
