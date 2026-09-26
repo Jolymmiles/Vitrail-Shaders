@@ -805,7 +805,7 @@ final class PackPass {
 			// itself, in the .mcmeta beside the file.
 			GraphicsApi.bindTexture(pass, sampler, bound == null ? targets.black() : bound,
 					supplied != null
-							? sampler(source.repeat(), filter, false)
+							? sampler(source.repeat(), filter, source.mipmaps())
 							: sampler(binding.kind(), filter, mipmaps));
 		}
 

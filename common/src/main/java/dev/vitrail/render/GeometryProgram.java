@@ -1578,7 +1578,7 @@ final class GeometryProgram {
 		if (one.source != null && this.targets.packView(one.source.image()) != null) {
 			// A file of the pack's own is filtered and addressed as the pack asked, in the .mcmeta
 			// beside it, and the name it took over has nothing to say about either.
-			return PackPass.sampler(one.source.repeat(), one.source.filter(), false);
+			return PackPass.sampler(one.source.repeat(), one.source.filter(), one.source.mipmaps());
 		}
 
 		return PackPass.sampler(kind, filter(name), mipmapped(name, kind));

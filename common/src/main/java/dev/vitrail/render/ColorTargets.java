@@ -147,10 +147,10 @@ final class ColorTargets {
 
 	/**
 	 * What one sampler is handed for a texture the pack ships: the image, and how the pack asked for
-	 * it to be read. The three travel together because they are one answer, written in one directive
-	 * and the {@code .mcmeta} beside its file, rather than three questions for three places.
+	 * it to be read. They travel together because they are one answer, written in one directive and
+	 * the {@code .mcmeta} beside its file, rather than several questions for several places.
 	 */
-	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
+	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat, boolean mipmaps) {
 	}
 
 	/** The schedule the plan gave these targets, for a pass to settle its own step off. */
@@ -161,9 +161,10 @@ final class ColorTargets {
 	/**
 	 * What the pack supplies for a name, settled once: the image, and the filter and addressing
 	 * its directive and its .mcmeta asked for. Only the view behind the image moves after that,
-	 * and {@link #packView} answers it per frame.
+	 * and {@link #packView} answers it per frame. Only a texture the game holds climbs past level
+	 * nought, a file the pack ships being uploaded as one level.
 	 */
-	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat) {
+	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat, boolean mipmaps) {
 	}
 
 	private final TargetPlan plan;
@@ -1197,7 +1198,8 @@ final class ColorTargets {
 		PackSource source = packSource(stage, sampler);
 		GpuTextureView view = source == null ? null : packView(source.image());
 
-		return view == null ? null : new PackBinding(view, source.filter(), source.repeat());
+		return view == null ? null
+				: new PackBinding(view, source.filter(), source.repeat(), source.mipmaps());
 	}
 
 	/**
@@ -1212,7 +1214,16 @@ final class ColorTargets {
 
 		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
 
-		return new PackSource(image, filterFor(image), !flat && !image.texture().clamp());
+		// A texture the game holds is read the way Iris reads it, through MIPPED_NEAREST_REPEAT
+		// (gl/texture/TextureWrapper.java:27-29): nearest within a level, repeating, and down the
+		// levels the game built for it, which is what an atlas read from far away needs to stay
+		// the colour of its blocks rather than a shimmer of single texels. It has no .mcmeta of the
+		// pack's to ask otherwise.
+		if (image.live()) {
+			return new PackSource(image, FilterMode.NEAREST, !flat, true);
+		}
+
+		return new PackSource(image, filterFor(image), !flat && !image.texture().clamp(), false);
 	}
 
 	/**

@@ -1174,7 +1174,7 @@ final class PackCompute implements AutoCloseable {
 						: null;
 				if (supplied != null && supplied.view() instanceof VulkanGpuTextureView served) {
 					imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(supplied.repeat(),
-							supplied.filter(), false)).vkSampler());
+							supplied.filter(), supplied.mipmaps())).vkSampler());
 					imageInfo.imageView(served.vkImageView());
 					imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1264,7 +1264,7 @@ final class PackCompute implements AutoCloseable {
 						ColorTargets.PackBinding laid = targets.packTexture(this.textureStage, screen);
 						if (laid != null && laid.view() instanceof VulkanGpuTextureView served) {
 							imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(laid.repeat(),
-									laid.filter(), false)).vkSampler());
+									laid.filter(), laid.mipmaps())).vkSampler());
 							imageInfo.imageView(served.vkImageView());
 							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
