@@ -22,9 +22,8 @@ what the next one holds.
   and snow, particles and composites, and the game's translucent features the pack does not serve
   are composed into its image as on 26.2, and so is Distant Horizons' far terrain, land and water
   both, with the pack's own `dh_terrain` and `dh_water`. Compiled shader modules are kept on disk,
-  so a second load of a pack skips the compile. The game's improved transparency stays off while a
-  pack draws, as Iris keeps it off on the other backend, and the player's setting stands again as
-  soon as shaders are off. One thing is not carried over yet: a program with a geometry stage is
+  so a second load of a pack skips the compile. The game's improved transparency is turned off
+  while a pack draws, as Iris turns it off on the other backend and as on 26.2. One thing is not carried over yet: a program with a geometry stage is
   served only where that stage passes each corner on, which is folded into the stage after it, as on
   a Mac on either game, and any other such program is set aside with a line in the log.
 
@@ -39,14 +38,14 @@ what the next one holds.
 - **Coloured lighting works on a Mac.** Vitrail no longer tells a pack it is running on a Mac.
   Packs read that as Apple's OpenGL driver and switch off what it lacks: Complementary Reimagined
   turned its coloured lighting (Advanced Color Tracing) off and painted an error over the picture
-  when it was asked for. On a Mac Vitrail draws through Vulkan on Metal, which has everything
-  that needs, so the setting now works there, and so do the improved rain and the rest of what the
-  pack held back for Apple's driver.
-- **A Mac declares the shadow comparisons a pack asks for.** The sampler a pack's shadow lookups
-  compare through is one a Mac's Vulkan driver only accepts once a feature of its portability rules
-  is enabled, and nothing enabled it. The driver drew the lookups anyway, but a launch under the
-  Khronos validation layer had them refused, and the terrain then drawn with stale textures until the
-  game crashed. The feature is now enabled wherever those rules apply.
+  when it was asked for. On a Mac Vitrail draws through Vulkan on Metal, which has what the
+  setting needs, so it now works there, and so do the improved rain and the rest of what the pack
+  held back for Apple's driver.
+- **Shadow comparisons are enabled on a Mac.** The sampler a pack's shadow lookups compare through
+  is one a Mac's Vulkan driver only accepts once a feature of its portability rules is enabled, and
+  nothing enabled it. The driver drew the lookups anyway, but a launch under the Khronos validation
+  layer had them refused, and the terrain was then drawn with stale textures until the game
+  crashed. The feature is now enabled wherever those rules apply.
 - **Moving blocks are drawn through the shader pack instead of falling back to the game's shader.**
   Falling blocks such as sand and blocks carried by pistons use Minecraft's moving-block pipelines,
   which were not served by the pack. They are now routed to the same shader programs Iris uses for

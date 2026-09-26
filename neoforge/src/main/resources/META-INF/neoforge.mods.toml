@@ -42,8 +42,9 @@ config = "vitrail.mixins.json"
 config = "vitrail-game.mixins.json"
 
 # The engine's own mixins are in the common module and are listed above. This last config is
-# the handful that exist on this loader alone, which today is the refusal of the early loading
-# window: it names classes of NeoForge's, so it could not live where the Fabric module reads.
+# the handful that exist on this loader alone, which on 26.2 is the refusal of the early loading
+# window and on 26.3 is nothing: it names classes of NeoForge's, so it could not live where the
+# Fabric module reads.
 [[mixins]]
 config = "vitrail-neoforge.mixins.json"
 
