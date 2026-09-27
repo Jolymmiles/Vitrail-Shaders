@@ -11,6 +11,18 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Enchanted items and armour are drawn by the shader pack on 26.3.** 26.3 draws an enchanted item,
+  armour piece, trident or shield together with its glint in one pass, a kind of pass Vitrail did not
+  know. So these were drawn by the game and pasted into the pack's image. Under Complementary they
+  looked unshaded. Under Photon they became a purple smear, and a held pickaxe lost its own colours.
+  While a pack draws, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
+  The pack lights the piece and draws the glint with its own glint program. Without a pack the game
+  draws them as before.
+
 ## 0.12.0-beta
 
 ### Added
