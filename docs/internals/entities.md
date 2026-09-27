@@ -333,6 +333,16 @@ and a shield among the translucent ones. It is in the opaque half's coverage mas
 left out: it blends onto the pixels the piece under it just wrote, and those pixels are the pack's
 target now.
 
+**26.3 no longer submits a glint of its own, and it is given one back.** That game draws an enchanted
+item, a piece of armour, a trident and a shield in one draw each, through a render type whose pipeline
+samples the glint sheet beside the texture and adds it in the shader. No program of the model the
+packs are written for draws a piece and its glint at once, so while a pack draws, the submission is
+split back into 26.2's two: the plain piece, then the glint through 26.2's own three glint render
+types, rebuilt because 26.3 dropped them. The carriers then arrive on the moments listed above. The
+two glint render types 26.3 kept, for trims and banner patterns, force the solid phase and would put a
+mob's glint on the early row instead of the late one. Photon draws nothing of that row onto a mob,
+which is how that was found.
+
 Because those tables are keyed by pipeline and a texture is all that separates two rows, **two
 origins must not land in one draw**. There are two ways they could. The obvious one is the equality
 match inside the group's draw lookup; the one that costs a review is above it, where the group hands

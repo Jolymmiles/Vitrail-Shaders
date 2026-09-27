@@ -34,6 +34,13 @@ what the next one holds.
   saw with the depth the GPU stored. On a Mac the two can differ by a unit in the last place on
   some pixels of a sloped surface, so those pixels read as covered and got the game's colour in
   place of the pack's gbuffer. A difference that small no longer counts as something in front.
+- **Enchanted items and armour are drawn by the shader pack on 26.3.** 26.3 draws an enchanted item,
+  armour piece, trident or shield together with its glint in one pass, a kind of pass Vitrail did not
+  know. So these were drawn by the game and pasted into the pack's image. Under Complementary they
+  looked unshaded. Under Photon they became a purple smear, and a held pickaxe lost its own colours.
+  While a pack draws, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
+  The pack lights the piece and draws the glint with its own glint program. Without a pack the game
+  draws them as before.
 
 ## 0.12.0-beta
 
