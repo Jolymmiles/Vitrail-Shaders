@@ -214,6 +214,13 @@ pack's; a pixel the game has drawn a feature onto compares closer and is the see
 wrote nothing at all the mask holds a value outside zero to one, which every real depth is in front
 of, so those pixels take the game's picture through the same comparison.
 
+"Equal" allows a few units in the last place, and it has to. The mask is filled from what the
+fragment stage sees and the attachment from what the rasteriser stores, and on a Mac the two part by
+one unit on some pixels of a sloped surface, in a pattern that repeats with the GPU's 32 pixel tile.
+Compared strictly, each of those pixels read as covered by the game: Photon's held item, whose
+first draw buffer is a packed gbuffer, carried a light dash on every tile boundary while the player
+walked. A feature the game really draws in front stands millions of times further off than that.
+
 That is one comparison for two questions, and the second one is what a flag could not answer. The
 game still draws pieces of its own in front of the pack's geometry, and they have to arrive; the
 pack's own geometry must not be repainted. Only a depth tells those two pixels apart.

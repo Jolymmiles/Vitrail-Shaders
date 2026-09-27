@@ -27,6 +27,13 @@ what the next one holds.
     Eclipse's terrain writes that stage in a shape the fold did not read (a block of varyings read
     one corner at a time, a counter declared ahead of its loop, the position held in a local), so
     the pack's terrain program was set aside and the terrain drawn without it. It is folded now.
+- **A held item no longer streaks while the player walks, on a Mac.** Under Photon the item in hand
+  carried short light dashes, one column every 32 pixels, for as long as the walk bob kept it
+  moving. Vitrail puts the game's own picture wherever something the game drew stands in front of
+  the pack's geometry, and it tells the two apart by comparing the depth the pack's fragment stage
+  saw with the depth the GPU stored. On a Mac the two can differ by a unit in the last place on
+  some pixels of a sloped surface, so those pixels read as covered and got the game's colour in
+  place of the pack's gbuffer. A difference that small no longer counts as something in front.
 
 ## 0.12.0-beta
 
