@@ -72,6 +72,10 @@ what the next one holds.
   or `a != b` written between them, could not be worked out, so a uniform that compared vectors
   was dropped and named in the log. They now answer true or false, as the same comparison of two
   numbers does.
+- **A pack's own uniform nested thousands of levels deep no longer crashes the game as the pack
+  loads.** Working one out used up the stack, an error nothing on that road recovered from. A
+  uniform nested more than 128 levels deep, far past anything a pack is known to write, is now
+  dropped and named in the log, and the pack loads without it.
 
 ## 0.12.0-beta
 

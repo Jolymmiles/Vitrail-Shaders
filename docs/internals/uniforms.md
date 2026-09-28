@@ -243,8 +243,12 @@ compared as two numbers are.
 Three rules decide what happens when a pack gets it wrong, and all three exist so that a mistake
 stays **named** instead of turning into a permanently wrong image:
 
-- A declaration that does not parse, or that reads a name nothing answers, is dropped and named. It
-  is never evaluated as zero.
+- A declaration that does not parse, that nests too deep to be read, or that reads a name nothing
+  answers, is dropped and named. It is never evaluated as zero. Too deep is more than 128 levels,
+  where the deepest of BSL, Bliss, Photon and either Complementary is nine. Resolving and
+  evaluating a declaration both recurse, and a stack overflow is an error, which walks through a
+  catch of exceptions: the reference has no limit and catches only exceptions around both, and
+  here, before the limit, the overflow crashed the game over one line of the properties.
 - **Everything that depended on it is dropped and named with it.** Reading a zero from the middle of
   a graph is the failure this rule exists to prevent: the value it produces is in range, the image
   is only slightly different, and nothing in the log connects it to the declaration that actually

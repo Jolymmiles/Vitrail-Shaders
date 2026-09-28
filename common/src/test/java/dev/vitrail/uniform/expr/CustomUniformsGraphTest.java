@@ -1,5 +1,6 @@
 package dev.vitrail.uniform.expr;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -394,22 +395,30 @@ class CustomUniformsGraphTest {
 	}
 
 	@Test
-	void knownBug_anExpressionThousandsOfTermsLongOverflowsTheStackAtBuild() {
-		// Known defect, being fixed on another branch: no depth limit, so a very long or very deeply
-		// bracketed expression throws an Error out of build() and not a line into the problems.
-		// The parser walks it with a list, the resolver and the evaluator with the call stack.
+	void anExpressionThousandsOfTermsLongIsRefusedAtBuild() {
+		// The parser walks it with a list, the resolver and the evaluator with the call stack, so
+		// with no depth limit a very long or very deeply bracketed expression threw an Error out of
+		// build(). It is measured after it parses and refused, as a line in the problems.
 		String longSum = "fa" + "+fa".repeat(100_000);
+		List<String> problems = new ArrayList<>();
 
-		assertThrows(StackOverflowError.class,
-				() -> this.rig.build(new ArrayList<>(), "uniform.float.r = " + longSum));
+		CustomUniforms uniforms = assertDoesNotThrow(
+				() -> this.rig.build(problems, "uniform.float.r = " + longSum));
+
+		assertNull(uniforms.source("r"));
+		assertEquals(List.of("r: nests more than " + CustomUniforms.MAX_DEPTH
+				+ " levels deep, which is refused rather than read"), problems);
 	}
 
 	@Test
-	void anExpressionAFewHundredTermsLongBuildsAndEvaluates() {
-		CustomUniforms uniforms = this.rig.buildClean("uniform.float.r = fa" + "+fa".repeat(500));
+	void anExpressionAsLongAsTheDepthLimitBuildsAndEvaluates() {
+		// A sum nests on the left, one level a term, so this is exactly as deep as a declaration
+		// may be. Five hundred terms built here before the limit, and are refused now.
+		int terms = CustomUniforms.MAX_DEPTH;
+		CustomUniforms uniforms = this.rig.buildClean("uniform.float.r = fa" + "+fa".repeat(terms - 1));
 		this.rig.frame(uniforms);
 
-		assertEquals(1252.5F, this.rig.f(uniforms, "r"), "501 * 2.5");
+		assertEquals(terms * 2.5F, this.rig.f(uniforms, "r"), "128 * 2.5");
 	}
 
 	@Test

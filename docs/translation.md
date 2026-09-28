@@ -387,10 +387,14 @@ screenshot will ever show it.
 
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
-its dependents by name rather than being silently replaced by zero mid-graph, and a custom uniform
-that shadows a builtin name is refused rather than resolved by precedence. The functions those
-expressions call follow OptiFine's list where the reference misreads it, which is a divergence and
-is argued as one in [uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
+its dependents by name rather than being silently replaced by zero mid-graph, a custom uniform
+that shadows a builtin name is refused rather than resolved by precedence, and one nested more than
+128 levels deep is refused before it is resolved. That last one is a bound rather than a catch, for
+the reason given under [a pack is downloaded content](#a-pack-is-downloaded-content): resolving and
+evaluating a declaration both recurse, and a stack overflow is an error no catch around pack
+reading sees. The functions those expressions call follow OptiFine's list where the reference
+misreads it, which is a divergence and is argued as one in
+[uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
 
 ## What resists, and whose fault it is
 
