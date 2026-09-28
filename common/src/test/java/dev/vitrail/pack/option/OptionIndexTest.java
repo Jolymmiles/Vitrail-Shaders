@@ -255,6 +255,29 @@ class OptionIndexTest {
 	}
 
 	@Test
+	void theScanReadsInsideBranchesThatAreOffAndInsideBlockComments() {
+		OptionIndex index = index("#if 0", "#define DEAD_BRANCH 1 // [1 2]", "#endif", "#ifdef NEVER_DEFINED",
+				"//#define IN_THE_IF_ARM", "#else", "#define IN_THE_ELSE_ARM", "#endif", "/*", "#define IN_A_COMMENT",
+				"const int shadowDistance = 64; // [64 128]", "*/", "#ifdef X", "#define X", "#endif");
+
+		assertEquals(Set.of("DEAD_BRANCH", "IN_THE_IF_ARM", "IN_THE_ELSE_ARM", "IN_A_COMMENT", "shadowDistance", "X"),
+				index.names());
+		assertTrue(index.referenced("NEVER_DEFINED"));
+		assertTrue(index.referenced("X"));
+		assertEquals(List.of("64", "128"), index.get("shadowDistance").orElseThrow().values());
+	}
+
+	@Test
+	void aNameDeclaredInBothArmsOfAConditionalIsOneOptionAndTheFirstArmWins() {
+		OptionIndex index = index("#ifdef HIGH", "#define QUALITY 3 // [1 2 3]", "#else", "#define QUALITY 1 // [1 2 3]",
+				"#endif");
+
+		assertEquals(1, index.count());
+		assertEquals("3", index.get("QUALITY").orElseThrow().defaultText());
+		assertEquals(2, index.get("QUALITY").orElseThrow().line());
+	}
+
+	@Test
 	void linesAreNumberedFromOne() {
 		OptionIndex index = index("", "// nothing", "#define A", "", "#define B 1");
 
