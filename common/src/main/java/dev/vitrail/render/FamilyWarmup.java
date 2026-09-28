@@ -437,6 +437,10 @@ final class FamilyWarmup {
 	/**
 	 * Stops the workers of this chain: they read the flag between two programs and between two
 	 * families, so what is already under way finishes and nothing after it starts.
+	 * <p>
+	 * Final for this object: {@link #start} runs once and nothing lowers the flag, so a chain whose
+	 * families are to be read again is replaced and not restarted. {@link PackChain#leaveWorld}
+	 * says why the one release that leaves its chain standing does not need that.
 	 */
 	void release() {
 		this.released = true;

@@ -1313,6 +1313,15 @@ public final class PackChain {
 	 * {@link #beforeLevel} asks that question at the head of the frame instead, so the reload a
 	 * join owes stands before the first allocation rather than after it, and the frame the world
 	 * appears on pays once.
+	 * <p>
+	 * <strong>Nothing here starts the pack-load workers again, and nothing has to.</strong> A
+	 * {@code FamilyWarmup} runs once and its release is final, so a chain that lived on into the
+	 * next world would read none of the six families and the game's own shaders would draw them. It
+	 * does not live on: the first frame of every world reads the pack again ({@link #beforeLevel},
+	 * and {@link #draw} where that road is off), because {@link PackDefines#stale} finds the
+	 * identity hash of the world's registry access different from the one of the last read, and each
+	 * connection is given a registry access of its own. A change that lets a chain outlive a join
+	 * has to start its warm-up again here first.
 	 */
 	public static void leaveWorld() {
 		PackChain chain = active;
