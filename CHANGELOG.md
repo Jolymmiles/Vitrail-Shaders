@@ -142,6 +142,11 @@ what the next one holds.
   listed their settings in an order that changed every time the game started. They now come in
   the order the pack's shaders declare them, which stays put, although it is not the order Iris
   lists them in.
+- **Distant Horizons' far water comes back when the shaders are turned off.** A pack asks that
+  mod to hold its water back for the pack's own water pass, and turning the pack off hands it
+  back. A pack turned off before any far terrain had been drawn, or one that could not take the far
+  terrain over, left it held back, and with no pack there is nothing to draw it: the far water
+  was gone for the rest of the session. It is handed back whenever a pack is turned off now.
 
 ## 0.12.0-beta
 

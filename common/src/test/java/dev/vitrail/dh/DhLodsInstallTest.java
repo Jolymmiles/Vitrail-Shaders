@@ -190,12 +190,12 @@ class DhLodsInstallTest {
 	}
 
 	/**
-	 * The water-defer switch is thrown before DH's renderer is read, but {@code handBack} does
-	 * nothing until it has read one, so a pack released in that window leaves DH deferring its water
-	 * half for the rest of the session.
+	 * The water-defer switch is thrown before DH's renderer is read, so a pack released while DH
+	 * has bound none yet still owes the switch back, and nothing else: no renderer was read, so
+	 * none is written.
 	 */
 	@Test
-	void knownBug_handBackLeavesTheDeferSwitchThrownWhileDhHasNoRenderer() {
+	void handBackPutsTheDeferSwitchBackWhileDhHasNoRenderer() {
 		DhWorld world = DhWorld.standard();
 		world.stage("publishProxy");
 		world.stage("publishConfigs");
@@ -204,12 +204,13 @@ class DhLodsInstallTest {
 
 		world.handBack();
 
-		assertEquals(List.of(), world.events());
+		assertEquals(List.of("proxy.defer(false)"), world.events());
+		assertNull(world.standing());
 	}
 
-	/** The same window, reached by a substitution that throws after the switch was thrown. */
+	/** The same debt, reached by a read of the renderer that throws after the switch was thrown. */
 	@Test
-	void knownBug_handBackLeavesTheDeferSwitchThrownWhenTheReadOfTheRendererFailed() {
+	void handBackPutsTheDeferSwitchBackWhenTheReadOfTheRendererFailed() {
 		DhWorld world = DhWorld.edited(new Edit(LOD_RENDERER, "new LodRenderer()", "null"));
 		world.stage("publishProxy");
 		world.stage("publishConfigs");
@@ -223,7 +224,7 @@ class DhLodsInstallTest {
 
 		world.handBack();
 
-		assertEquals(List.of("LodRenderer.init", "proxy.defer(true)"), world.events());
+		assertEquals(List.of("LodRenderer.init", "proxy.defer(true)", "proxy.defer(false)"), world.events());
 	}
 
 	@Test
@@ -431,7 +432,8 @@ class DhLodsInstallTest {
 
 		world.handBack();
 
-		// Here the switch does go back: the renderer had been read, so the bridge knows what to hand back.
+		// The renderer had been read, so writing it back is tried and fails on a line of its own,
+		// and the switch goes back all the same.
 		assertEquals(List.of("proxy.defer(true)", "proxy.defer(false)"), world.events());
 		assertLine(world, 3, "DEBUG", "far terrain renderer cannot be put back");
 	}
