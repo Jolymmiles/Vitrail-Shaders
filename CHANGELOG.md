@@ -125,6 +125,13 @@ what the next one holds.
   read-only, the whole cache was turned off, and every pack load compiled everything from scratch
   at every launch until the file went. Now the cache stays on, whatever can go is deleted, and
   the next launch tries again with the rest.
+- **A pack whose storage buffers run out of graphics memory is no longer drawn with some of them
+  missing.** Complementary Reimagined's world space reflections ask for a buffer of hundreds of
+  megabytes. When the memory ran out partway through a pack's buffers, the pack was set aside at
+  that window size as it should be, but the buffers made before the failure were kept, and at the
+  next size the pack was drawn with those alone: the rest were bound as a small stand-in of the
+  wrong kind, which a graphics driver may answer with a wrong picture, a hang or a crash. A failure
+  now gives every buffer back, so the next size asks for the whole set again.
 
 ## 0.12.0-beta
 
