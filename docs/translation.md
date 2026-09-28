@@ -9,9 +9,10 @@ Every GLSL unit a pack ships is rewritten before it can draw, then handed to the
 already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
 chain's own units go at selection, and the six families that draw the world and the sky follow on a
 worker as soon as the pack is loaded, read one after another on that one worker and compiled by a
-task each. A first draw that outruns it reads its own family, which is the fallback rather than the
-road it normally takes. What is translated is never *patched* afterwards: a setting that moves
-rebuilds its units from the pack's source, and so does a change of dimension, which rebuilds the lot.
+task each. Nothing else reads a family: one the worker does not reach stays unread for that load,
+and the game's own shaders draw it. What is translated is never *patched* afterwards: a setting that
+moves rebuilds its units from the pack's source, and so does a change of dimension, which rebuilds
+the lot.
 
 Two properties follow, and both are load-bearing:
 

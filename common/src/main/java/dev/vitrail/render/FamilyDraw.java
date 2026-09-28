@@ -14,6 +14,11 @@ import java.util.Collection;
  * wants its field, its constructor call and its accessor there, and then the one line of the list.
  * The class of defect this closes has no signature of its own: a ring rotated for the wrong
  * family leaves the right one on the buffer the GPU is still reading.
+ * <p>
+ * <strong>The worker is the only reader.</strong> Nothing reads a family at its first draw, so one
+ * the worker does not reach stays unread for the load and the game's own shaders draw it. It is
+ * also why no family keeps the chosen values and the profile its constructor is still handed: the
+ * worker opens the pack with them once, for all six.
  */
 abstract class FamilyDraw {
 

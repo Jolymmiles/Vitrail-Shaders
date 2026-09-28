@@ -1543,8 +1543,6 @@ public final class EntityDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -1594,8 +1592,6 @@ public final class EntityDraw extends FamilyDraw {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -1635,17 +1631,11 @@ public final class EntityDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for the entities and the hand, without compiling. One call is enough. The chain
-	 * asks during its warm-up so shaderc does not land on the first draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * Reads the pack for the entities and the hand, without compiling. One call is enough.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -2277,8 +2267,8 @@ public final class EntityDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for every piece at once, at the first entity or hand the game draws, and settles
-	 * where the outputs of each of them go.
+	 * Reads the pack for every piece at once, on the load worker, and settles where the outputs of
+	 * each of them go.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason the sky reads all six: the moment
 	 * a piece is first drawn is the world's to choose, and some of them wait a long time. Nothing
@@ -2390,9 +2380,7 @@ public final class EntityDraw extends FamilyDraw {
 
 		try {
 			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
-			Map<String, PackProgram.Loaded> loaded = shared != null
-					? PackProgram.loadGeometry(shared, this.place, names)
-					: PackProgram.loadGeometry(this.packPath, this.place, names, this.chosen, this.profile);
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(shared, this.place, names);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the entities, the hand or the "
 						+ "glint, so the game keeps its own shader for them",

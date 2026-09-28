@@ -131,8 +131,6 @@ public final class WeatherDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -164,8 +162,6 @@ public final class WeatherDraw extends FamilyDraw {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -189,17 +185,11 @@ public final class WeatherDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
-	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
-	 * draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -261,8 +251,9 @@ public final class WeatherDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Everything that has to happen before the weather renderer opens its pass: the program read, the
-	 * pipeline compiled, the frame opened and this frame's block written.
+	 * Everything that has to happen before the weather renderer opens its pass: the pipeline
+	 * compiled, the frame opened and this frame's block written. The program is the load worker's to
+	 * read, and weather it has not read is left to the game.
 	 *
 	 * @param game   the pipeline the renderer picked earlier in the same method, which is where
 	 *               every state this engine does not decide comes from
@@ -443,8 +434,8 @@ public final class WeatherDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for both elements at once, at the first frame it rains, and settles where their
-	 * outputs go.
+	 * Reads the pack for both elements at once, on the load worker, and settles where their outputs
+	 * go.
 	 * <p>
 	 * Both and not the one being asked for, for the reason the sky reads all six: the moment the
 	 * second one is first wanted is the player's, a graphics setting away, and read one at a time the
@@ -454,9 +445,7 @@ public final class WeatherDraw extends FamilyDraw {
 	private void read(OpenedPack shared) {
 		try {
 			List<PackProgram.GeometryElement> asked = ELEMENTS.values().stream().map(Element::asked).toList();
-			Map<String, PackProgram.Loaded> loaded = shared != null
-					? PackProgram.loadGeometry(shared, this.place, asked)
-					: PackProgram.loadGeometry(this.packPath, this.place, asked, this.chosen, this.profile);
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(shared, this.place, asked);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the weather, so the game keeps its "
 						+ "own shader for the rain and the snow", this.packPath.getFileName(),

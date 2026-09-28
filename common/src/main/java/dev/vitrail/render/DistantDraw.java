@@ -281,8 +281,6 @@ public final class DistantDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -413,8 +411,6 @@ public final class DistantDraw extends FamilyDraw {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -659,9 +655,8 @@ public final class DistantDraw extends FamilyDraw {
 	private void recordShadow(GpuDevice device, Element element, List<DhLods.Section> sections,
 			Vec3 camera) {
 		// Never read from here. The reading opens the pack and expands every include of it, which is
-		// not something to do inside the light's own stage; the camera's own halves read at the
-		// first frame the far terrain is drawn, and a map is only worth filling for a far terrain
-		// something is drawing.
+		// not something to do inside the light's own stage; the load worker reads every half, and a
+		// map is only worth filling for a far terrain something is drawing.
 		DistantProgram program = this.programs.get(element.element());
 		if (program == null || sections.isEmpty()) {
 			return;
@@ -1051,17 +1046,11 @@ public final class DistantDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for the far terrain, without compiling. One call is enough; a reading that
-	 * served nothing is still one. The chain asks during its warm-up so shaderc does not land on
-	 * the first draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * served nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -1071,7 +1060,7 @@ public final class DistantDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for every half at once, at the first frame the far terrain is drawn.
+	 * Reads the pack for every half at once, on the load worker.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason every other family reads all of
 	 * its pieces: they are one frame apart at most, and a reading is an opening and an expansion of
@@ -1082,9 +1071,7 @@ public final class DistantDraw extends FamilyDraw {
 		try {
 			List<Element> asked = ELEMENTS.values().stream().filter(this::wanted).toList();
 			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
-			PackProgram.Distant distant = shared != null
-					? PackProgram.loadDistant(shared, this.place, names)
-					: PackProgram.loadDistant(this.packPath, this.place, names, this.chosen, this.profile);
+			PackProgram.Distant distant = PackProgram.loadDistant(shared, this.place, names);
 			if (distant.programs().isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the far terrain, so Distant "
 						+ "Horizons keeps drawing it with its own shader", this.packPath.getFileName(),

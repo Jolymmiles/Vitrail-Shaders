@@ -192,7 +192,8 @@ final class FamilyWarmup {
 				// One opening for the six, so the plan of the place, the program tree and every
 				// header they share are worked out once on this worker rather than once per family:
 				// the families used to be five of every six walks a warm load made of the archive.
-				// A family that reads later on its own, at a first draw, still opens for itself.
+				// This walk is the only reader: a family it does not reach is not read at all for
+				// this load, and the game's own shaders draw it.
 				try (OpenedPack shared = OpenedPack.open(this.packPath, this.chosen, this.profile)) {
 					for (int family = 0; family < this.families.size(); family++) {
 						FamilyDraw read = this.families.get(family);
@@ -203,8 +204,8 @@ final class FamilyWarmup {
 					// prefetchFamily catches the RuntimeException of one translation; anything
 					// harder would otherwise take this stage down EXCEPTIONALLY, and the whole
 					// would then complete while the tasks already spawned still run, out of the
-					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked
-					// and the families never reached keep their first-draw path.
+					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked;
+					// the families never reached stay unread, nothing reading them later.
 					Vitrail.logger().error("The pack-load worker died", e);
 				}
 
@@ -212,9 +213,8 @@ final class FamilyWarmup {
 			}, Util.backgroundExecutor()).thenCompose(compiles ->
 					CompletableFuture.allOf(compiles.toArray(new CompletableFuture<?>[0])));
 		} catch (RejectedExecutionException e) {
-			// The executor only refuses while the client shuts down. The families keep their
-			// first-draw path, and the flag closes the mark rather than leaving one that can
-			// never go out.
+			// The executor only refuses while the client shuts down. No family is read then,
+			// and the flag closes the mark rather than leaving one that can never go out.
 			this.warmedAt = Util.getMillis();
 			this.familiesWarmed = true;
 
@@ -225,8 +225,8 @@ final class FamilyWarmup {
 			if (e != null) {
 				// handle() and not a catch: the futures swallow what their runnables throw, so
 				// anything that dies unlogged reads as the workers having finished. The families
-				// they did not reach fall back to the first-draw path either way, and one
-				// family's failure no longer stops the five others.
+				// they did not reach stay unread either way, and one family's failure no longer
+				// stops the five others.
 				Vitrail.logger().error("The pack-load worker died", e);
 			}
 
@@ -278,8 +278,9 @@ final class FamilyWarmup {
 
 	/**
 	 * The Vulkan backend the compile tasks build against, or null with the reason logged: no
-	 * task is spawned then, and every family keeps its first-draw path. Resolved on the worker
-	 * rather than at the call, because the load's own road can run before rendering is up.
+	 * task is spawned then, and every family the worker reads is compiled at its first draw
+	 * instead. Resolved on the worker rather than at the call, because the load's own road can run
+	 * before rendering is up.
 	 */
 	private static GpuDevice compileDevice(boolean keepOld) {
 		GpuDevice front = RenderSystem.tryGetDevice();
