@@ -289,7 +289,10 @@ because lifting makes it unconditional and can collide with a same-named ordinar
 live branch. And a scan for a statement boundary has to be bounded on both sides, or an
 unterminated declaration makes it sweep the rest of the file once per declaration; running out of
 budget has to be told apart from reaching the start of the file, because the first means "give up on
-this declaration" and the second is a real answer. Guessing a boundary would erase valid code.
+this declaration" and the second is a real answer. The scan for the end also stops at a closing
+bracket it never opened. Every parameter of a function is asked about, a parameter being a name
+behind a type like any declaration, and a scan that walked out of the list would take the first
+semicolon of some later `for` header for the end of it. Guessing a boundary would erase valid code.
 
 ## Deciding where a fragment stage writes
 

@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitrail.glsl.GlslLexer.Kind;
@@ -14,7 +13,6 @@ import dev.vitrail.glsl.GlslLexer.Token;
 import dev.vitrail.glsl.TokenStream.Closing;
 import dev.vitrail.glsl.TokenStream.Insertion;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -538,16 +536,20 @@ class TokenStreamTest {
 		assertEquals(-1, far.statementEnd(0));
 	}
 
-	/** A fix for the missing exit at a negative depth is on another branch; the answer is pinned as it is. */
+	/**
+	 * A closing bracket the walk never opened ends it with no end, which is what a name inside a
+	 * parameter list or an argument meets. Past that bracket no semicolon stands at depth nought
+	 * until an opening one brings the depth back, and the first semicolon after that belongs to
+	 * another statement: in a function, the header of a loop in its body.
+	 */
 	@Test
-	void knownBug_statementEndNeverFindsASemicolonAfterAnUnmatchedClosingBracket() {
-		assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-			TokenStream stream = stream("a ) ; b ;");
-			assertEquals(-1, stream.statementEnd(0));
+	void statementEndStopsAtAClosingBracketItNeverOpened() {
+		assertEquals(-1, stream("a ) ; b ;").statementEnd(0));
+		assertEquals(-1, stream("a ) " + "x ; ".repeat(5000)).statementEnd(0));
+		assertEquals(-1, stream("a ] ( ; b ;").statementEnd(0));
 
-			TokenStream unbounded = stream("a ) " + "x ; ".repeat(5000));
-			assertEquals(-1, unbounded.statementEnd(0));
-		});
+		TokenStream parameter = stream("void f(vec3 x) { for (int i = 0; i < 4; i++) {} }");
+		assertEquals(-1, parameter.statementEnd(at(parameter, "x")));
 	}
 
 	@Test

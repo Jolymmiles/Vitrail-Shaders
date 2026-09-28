@@ -9,18 +9,23 @@ import java.util.Arrays;
  * Where every statement of a token list ends, worked out once for a pass that only reads, and
  * answering exactly what {@link TokenStream#statementEnd} answers for the list as it stands.
  * <p>
- * The walk {@code statementEnd} makes is short for a declaration and as long as its window for a
- * parameter: the parenthesis that closes the list takes the depth below the nought the search wants
- * a semicolon at, and nothing in the body of the function brings it back, so the search runs its
- * four thousand tokens and answers that there is no end. Every parameter of every function paid
- * that, and so did every {@code in} and {@code out} that qualifies one: on a stage of some
- * twenty-seven thousand lines about a fifth of the translation was that walk.
+ * The walk {@code statementEnd} makes is asked at every name that follows a type, which is every
+ * parameter of every function, and at every {@code in} and {@code out} that qualifies one. A
+ * parameter has no end to find: the parenthesis that closes its list takes the depth below the
+ * nought the search wants a semicolon at, and the walk answers that there is none right there. It
+ * has to stop there rather than read on, because the body of the function does bring the depth
+ * back: the first {@code for} header in it opens a parenthesis, and its first semicolon would be
+ * answered as the end of the parameter's statement. The corpus shows it: read on, the parameter
+ * that starts at token 104 of {@code pin-composite} reaches the semicolon at 136, the first of the
+ * header of the loop in its function.
  * <p>
  * The depth is a running sum over the list, so the walk from a token ends at the first semicolon or
- * opening brace after it that stands at the depth the token stood at, and those are found by
- * bisection among the ones at that depth. Everything the walk does is kept: the operators of a
- * preprocessor line neither count nor end anything, the window is the same, a brace ends the search
- * with no end and only a semicolon is one.
+ * opening brace after it that stands at the depth the token stood at, unless a bracket that closes
+ * below that depth comes first. Both are found by bisection, the endings among those at the depth
+ * the token stood at and the closers among those that leave the depth one below it, since the first
+ * bracket to close below a depth is the first to leave the one under it. Everything the walk does
+ * is kept: the operators of a preprocessor line neither count nor end anything, the window is the
+ * same, a brace or a closer below the depth ends the search with no end and only a semicolon is one.
  * <p>
  * The depth before a token is kept for every {@link #BLOCK}th token only and finished from there by
  * reading the few tokens between, which is what keeps the index from costing a word for every token
@@ -51,6 +56,14 @@ final class StatementEnds {
 	private final long[] endings;
 	private final int endingCount;
 
+	/**
+	 * The places of the closing parentheses and brackets, packed and sorted as {@link #endings} are,
+	 * each with the depth it leaves behind rather than the one it closes. Only the first
+	 * {@link #closerCount} are in use.
+	 */
+	private final long[] closers;
+	private final int closerCount;
+
 	StatementEnds(TokenStream tokens) {
 		this.tokens = tokens;
 		int size = tokens.size();
@@ -58,6 +71,8 @@ final class StatementEnds {
 
 		long[] found = new long[size / 16 + 16];
 		int count = 0;
+		long[] closed = new long[size / 16 + 16];
+		int closedCount = 0;
 		int depth = 0;
 		for (int at = 0; at < size; at++) {
 			if (at % BLOCK == 0) {
@@ -74,6 +89,11 @@ final class StatementEnds {
 				depth++;
 			} else if (text.equals(")") || text.equals("]")) {
 				depth--;
+				if (closedCount == closed.length) {
+					closed = Arrays.copyOf(closed, closedCount * 2);
+				}
+
+				closed[closedCount++] = pack(depth, at);
 			} else if (text.equals("{") || text.equals(";")) {
 				if (count == found.length) {
 					found = Arrays.copyOf(found, count * 2);
@@ -86,6 +106,9 @@ final class StatementEnds {
 		this.endings = found;
 		this.endingCount = count;
 		Arrays.sort(this.endings, 0, count);
+		this.closers = closed;
+		this.closerCount = closedCount;
+		Arrays.sort(this.closers, 0, closedCount);
 	}
 
 	private static long pack(int depth, int at) {
@@ -114,7 +137,8 @@ final class StatementEnds {
 
 	/**
 	 * The semicolon that closes the statement the token at this index is in, or -1 where a brace
-	 * opens first or none is within reach: {@link TokenStream#statementEnd}, for any index of the list.
+	 * opens first, a bracket closes below the token's depth first, or none is within reach:
+	 * {@link TokenStream#statementEnd}, for any index of the list.
 	 */
 	int after(int index) {
 		int size = this.tokens.size();
@@ -131,6 +155,15 @@ final class StatementEnds {
 
 		int at = (int) this.endings[first];
 		if (at >= Math.min(size, index + WINDOW)) {
+			return -1;
+		}
+
+		// The first bracket from here on to leave the depth one below the token's is the first to
+		// close below it, and a closer at the token itself counts, as the walk reads that one too.
+		int closing = Arrays.binarySearch(this.closers, 0, this.closerCount, pack(depth - 1, index));
+		int firstClosing = closing >= 0 ? closing : -closing - 1;
+		if (firstClosing < this.closerCount && (int) (this.closers[firstClosing] >> 32) == depth - 1
+				&& (int) this.closers[firstClosing] < at) {
 			return -1;
 		}
 

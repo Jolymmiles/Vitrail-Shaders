@@ -116,6 +116,45 @@ class StatementEndsTest {
 		assertEquals(tokens.statementEnd(c), ends.after(c));
 	}
 
+	@Test
+	void aParameterListEndsBeforeTheLoopInItsBody() {
+		// The parenthesis that closes the list takes the depth below the parameter's, and the loop's
+		// header brings it back: the walk must stop at the first and never read the second.
+		String text = """
+				vec3 bloom(vec2 uv) {
+					vec3 sum = vec3(0.0);
+					for (int i = -2; i <= 2; i++) {
+						sum += vec3(uv, float(i));
+					}
+					return sum;
+				}
+				""";
+		TokenStream tokens = new TokenStream(GlslLexer.lex(text));
+		StatementEnds ends = new StatementEnds(tokens);
+		int uv = indexOf(tokens, "uv");
+
+		assertEquals(-1, tokens.statementEnd(uv));
+		assertEquals(-1, ends.after(uv));
+	}
+
+	@Test
+	void theParameterOfTheCompositeBloomHasNoEnd() {
+		// Token 104 of pin-composite is the vec2 of bloom(vec2 uv). A walk that read past the list
+		// answered 136, the first semicolon of the for header in bloom's body.
+		TokenStream tokens = new TokenStream(GlslLexer.lex(GlslTranslatorCases.everySingle().stream()
+				.filter(one -> one.name().equals("pin-composite"))
+				.findFirst()
+				.orElseThrow()
+				.source()));
+		StatementEnds ends = new StatementEnds(tokens);
+
+		assertTrue(tokens.get(104).identifier("vec2") && tokens.get(106).identifier("uv"),
+				"token 104 is " + tokens.get(104));
+		assertTrue(tokens.get(136).operator(";"), "token 136 is " + tokens.get(136));
+		assertEquals(-1, tokens.statementEnd(104));
+		assertEquals(-1, ends.after(104));
+	}
+
 	private static int indexOf(TokenStream tokens, String identifier) {
 		for (int index = 0; index < tokens.size(); index++) {
 			if (tokens.get(index).identifier(identifier)) {

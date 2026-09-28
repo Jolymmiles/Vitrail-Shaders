@@ -454,7 +454,20 @@ final class TokenStream implements Iterable<Token> {
 		return start;
 	}
 
-	/** The semicolon closing this statement, or -1 if a brace opens first or none is found. */
+	/**
+	 * The semicolon closing this statement, or -1 if a brace opens first or none is found.
+	 * <p>
+	 * Also -1 where a bracket closes that the scan never opened, which is a token asked about from
+	 * inside a parameter list or an argument list: whatever statement holds it ends past that
+	 * bracket, where this walk cannot tell its semicolon from anybody else's. Walking on would meet
+	 * no brace and no semicolon at depth nought until some later {@code for} header opened a
+	 * parenthesis, so it would answer that header's first semicolon, or read its whole budget for
+	 * nothing where there is none, and every parameter of every function is asked about.
+	 * <p>
+	 * {@link StatementEnds} answers the same question from an index, for a pass that asks it again
+	 * and again and edits nothing, and has to keep every rule this walk keeps: a rule added here is
+	 * one it answers differently until it is added there too.
+	 */
 	int statementEnd(int index) {
 		int depth = 0;
 		int last = Math.min(this.tokens.size(), index + MAX_STATEMENT_TOKENS);
@@ -470,6 +483,9 @@ final class TokenStream implements Iterable<Token> {
 				depth++;
 			} else if (text.equals(")") || text.equals("]")) {
 				depth--;
+				if (depth < 0) {
+					return -1;
+				}
 			} else if (depth == 0 && text.equals("{")) {
 				return -1;
 			} else if (depth == 0 && text.equals(";")) {
