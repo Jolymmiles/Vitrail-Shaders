@@ -13,6 +13,20 @@ what the next one holds.
 
 ## Unreleased
 
+### Changed
+
+- **Reading a pack's shader files takes about half the time.** Before a pack can draw, Vitrail
+  reads each of its shader files and pastes in the shared files they include, which is part of the
+  wait before the picture appears when you choose a pack, apply a setting or step through a portal.
+  On a large pack built for the measurement, of 400 programs, that reading now takes about half the
+  processor time it did and leaves about a quarter of the throwaway memory for the game to clear up
+  afterwards. Nothing about the picture changes.
+- **The largest shaders are translated about five times faster.** Vitrail rewrites each of a
+  pack's shaders into the form the game's renderer compiles, and on a very large one that work grew
+  far faster than the shader did. A shader of some 80,000 lines took nearly two seconds and now
+  takes under four tenths of one; smaller ones gain less. It is felt most on the first load of a
+  pack, since the translations are kept on disk after that. Nothing about the picture changes.
+
 ### Fixed
 
 - **Bliss-based packs draw again, Eclipse among them.** Three things refused them, each on its
