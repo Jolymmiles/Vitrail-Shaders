@@ -514,6 +514,13 @@ Any map that is **iterated** must have a defined iteration order. A common immut
 deliberately randomises iteration with a per-process salt, which makes uniform block members and
 vertex attributes come out in a different order on each launch: a defect that reproduces only
 across process boundaries, and looks like nondeterministic hardware behaviour. Tables that are
-iterated go through an insertion-ordered map; the randomising factory is for tables queried by key
-only. It also rejects null values, which matters wherever a table legitimately holds a "no parent"
-entry.
+iterated go through an insertion-ordered map, or one ordered by its key where the key is an
+enumeration; the randomising factory is for tables queried by key only. It also rejects null values,
+which matters wherever a table legitimately holds a "no parent" entry.
+
+A translated program carries two such tables, and it puts both in order itself rather than trusting
+whoever builds it. Its stages are walked for the storage blocks the bind group lays out, and are
+written to disk in the order they are walked in; a program read back from disk has to come out in
+the order a fresh translation has, whatever order the file holds, so they follow the order of the
+stage kinds rather than the order they were put in. The vertex inputs it synthesises keep the order
+the stages declared them in.
