@@ -20,8 +20,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -215,6 +218,146 @@ class FrameCutsTest {
 				taken += Reach.PAST_END.takes(waiting, size) ? 1 : 0;
 				assertEquals(1, taken, "at " + at + " in a range of " + size);
 			}
+		}
+	}
+
+	@Test
+	void standsAComputeAfterTheLastPassThatSortsBeforeIt() {
+		List<String> drawn = List.of("composite", "composite1", "composite2", "composite4");
+		TargetSchedule schedule = scheduleOf(drawn, List.of("composite3"));
+
+		List<Standalone> standing = FrameCuts.standaloneOf(Set.of("composite3"), schedule, drawn);
+
+		assertEquals(1, standing.size());
+		Standalone waiting = standing.get(0);
+		assertEquals("composite3", waiting.program());
+		assertEquals(3, waiting.at(), "after composite2 and before composite4");
+		assertEquals(Cut.AFTER_TRANSLUCENTS, waiting.cut());
+		assertEquals(schedule.passing("composite3").orElseThrow(), waiting.step());
+		assertEquals(Set.of(0), waiting.step().readsAlt(), "the half three flips have left it on");
+	}
+
+	@Test
+	void standsAComputeBeyondTheLastPassAtTheLengthOfTheList() {
+		List<String> drawn = List.of("composite", "composite1");
+
+		List<Standalone> standing = FrameCuts.standaloneOf(Set.of("composite7"),
+				scheduleOf(drawn, List.of("composite7")), drawn);
+
+		assertEquals(2, standing.get(0).at());
+	}
+
+	@Test
+	void standsAComputeOfAnEarlierFamilyAheadOfEveryPassInItsOwnCut() {
+		List<String> drawn = List.of("composite", "composite1");
+
+		List<Standalone> standing = FrameCuts.standaloneOf(Set.of("prepare"),
+				scheduleOf(drawn, List.of("prepare")), drawn);
+
+		assertEquals(0, standing.get(0).at(), "Pegasus: a prepare compute in an all composite chain");
+		assertEquals(Cut.BEFORE_WORLD, standing.get(0).cut());
+	}
+
+	@Test
+	void standsAComputeOfAPlaceThatDrawsNoPassAtNought() {
+		List<Standalone> standing = FrameCuts.standaloneOf(Set.of("composite3"),
+				scheduleOf(List.of(), List.of("composite3")), List.of());
+
+		assertEquals(0, standing.get(0).at());
+	}
+
+	@Test
+	void answersNothingForAPlaceWithNoStandaloneCompute() {
+		List<String> drawn = List.of("composite", "composite1");
+
+		assertEquals(List.of(), FrameCuts.standaloneOf(Set.of(), scheduleOf(drawn, List.of()), drawn));
+	}
+
+	@Test
+	void settlesComputesOnTheSameIndexInFrameOrderWhateverOrderTheSetGivesThem() {
+		List<String> alone = List.of("begin", "prepare", "deferred", "composite", "composite3");
+		TargetSchedule schedule = scheduleOf(List.of(), alone);
+		List<Cut> cuts = List.of(Cut.AHEAD_OF_SHADOWS, Cut.BEFORE_WORLD, Cut.BEFORE_TRANSLUCENTS,
+				Cut.AFTER_TRANSLUCENTS, Cut.AFTER_TRANSLUCENTS);
+
+		List<List<String>> orders = new ArrayList<>();
+		permute(new ArrayList<>(alone), 0, orders);
+		assertEquals(120, orders.size());
+		for (List<String> order : orders) {
+			List<Standalone> standing = FrameCuts.standaloneOf(new LinkedHashSet<>(order), schedule,
+					List.of());
+
+			assertEquals(alone, standing.stream().map(Standalone::program).toList(), order.toString());
+			assertEquals(cuts, standing.stream().map(Standalone::cut).toList(), order.toString());
+			assertTrue(standing.stream().allMatch(waiting -> waiting.at() == 0), order.toString());
+		}
+	}
+
+	@Test
+	void leavesOutAComputeTheScheduleGivesNoHalves() {
+		List<String> drawn = List.of("composite", "composite5");
+		TargetSchedule schedule = scheduleOf(drawn, List.of("composite4"));
+
+		List<Standalone> standing = FrameCuts.standaloneOf(Set.of("composite3", "composite4"),
+				schedule, drawn);
+
+		assertEquals(List.of("composite4"), standing.stream().map(Standalone::program).toList());
+	}
+
+	@Test
+	void countsThePassesThatSortBeforeAComputeOnRandomChains() {
+		Random random = new Random(20260928L);
+		List<String> pool = new ArrayList<>();
+		for (String family : List.of("begin", "prepare", "deferred", "composite")) {
+			pool.add(family);
+			for (int slot = 1; slot <= 12; slot++) {
+				pool.add(family + slot);
+			}
+		}
+
+		for (int round = 0; round < 200; round++) {
+			List<String> drawn = new ArrayList<>();
+			for (String name : pool) {
+				if (random.nextInt(3) == 0) {
+					drawn.add(name);
+				}
+			}
+
+			drawn.sort(ProgramNames.frameOrder());
+			String program = pool.get(random.nextInt(pool.size()));
+			TargetSchedule schedule = scheduleOf(drawn, List.of(program));
+
+			List<Standalone> standing = FrameCuts.standaloneOf(Set.of(program), schedule, drawn);
+
+			// The reading that needs no walk: how many drawn passes the name sorts after.
+			long before = drawn.stream().filter(name -> ProgramNames.before(name, program)).count();
+			assertEquals(1, standing.size(), program);
+			assertEquals(before, standing.get(0).at(), program + " among " + drawn);
+			assertEquals(Cut.of(program), standing.get(0).cut(), program);
+		}
+	}
+
+	/** The schedule of a place that draws those programs, each a full screen write of colortex0. */
+	private static TargetSchedule scheduleOf(List<String> drawn, List<String> alone) {
+		List<TargetSchedule.Step> steps = drawn.stream()
+				.map(program -> new TargetSchedule.Step(program, List.of(0), true)).toList();
+		List<String> passing = new ArrayList<>(alone);
+		passing.sort(ProgramNames.frameOrder());
+
+		return TargetSchedule.of(steps, List.of(), passing);
+	}
+
+	private static void permute(List<String> names, int from, List<List<String>> into) {
+		if (from == names.size()) {
+			into.add(List.copyOf(names));
+
+			return;
+		}
+
+		for (int at = from; at < names.size(); at++) {
+			Collections.swap(names, from, at);
+			permute(names, from + 1, into);
+			Collections.swap(names, from, at);
 		}
 	}
 
