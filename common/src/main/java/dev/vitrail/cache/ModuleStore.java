@@ -1,18 +1,25 @@
 package dev.vitrail.cache;
 
+import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.SamplerReach;
+import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.Vitrail;
 
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.Version;
 
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -43,7 +50,7 @@ final class ModuleStore {
 	private static final String EDITION_SEPARATOR = "+";
 
 	/** SHA-256, sitting behind the module in every file and answering for it. */
-	static final int DIGEST_BYTES = 32;
+	private static final int DIGEST_BYTES = 32;
 
 	/** Off by property rather than by rebuild, so a before and an after come out of one jar. */
 	private static final boolean ENABLED = Boolean.parseBoolean(
@@ -70,37 +77,51 @@ final class ModuleStore {
 
 	/** The debug names of the units this load built, the first {@link #NAMED_MISSES} of them. */
 	private static final List<String> BUILT_NAMES = new ArrayList<>();
-	static final String SUFFIX = ".mod";
-	static final String PART_SUFFIX = ".part";
+	private static final String SUFFIX = ".mod";
+	private static final String PART_SUFFIX = ".part";
 
 	/** How long the compiler has to stay quiet before a load is taken to be over. */
 	private static final long QUIET_NANOS = 2_000_000_000L;
 
-	static final AtomicLong SERVED = new AtomicLong();
+	private static final AtomicLong SERVED = new AtomicLong();
 	private static final AtomicLong COMPILED = new AtomicLong();
-	static final AtomicLong SERVED_SINCE_LAUNCH = new AtomicLong();
+	private static final AtomicLong SERVED_SINCE_LAUNCH = new AtomicLong();
 	private static final AtomicLong COMPILED_SINCE_LAUNCH = new AtomicLong();
-	static final AtomicLong BYTES = new AtomicLong();
+	private static final AtomicLong BYTES = new AtomicLong();
 
 	/** Held for the first look at the directory and for every sweep, which are the two scans. */
 	private static final Object LOCK = new Object();
 
 	private static volatile @Nullable Path directory;
 	private static volatile boolean unavailable;
-	static volatile long lastUnitNanos;
+	private static volatile long lastUnitNanos;
 	private static volatile long nextSweepNanos;
 	private static volatile boolean saidAboutReading;
 	private static volatile boolean saidAboutStoring;
 	private static volatile boolean saidAboutWriting;
 
+	/** First word of any SPIR-V module, and the cheapest proof that a blob is one. */
+	private static final int MAGIC = 0x07230203;
+
+	/** Five words is the header alone, so nothing shorter can be a module. */
+	private static final int SHORTEST = 20;
+
+	/**
+	 * How large a file may be before it is refused unread. The largest module of the corpus is
+	 * under a megabyte, so this is two orders of magnitude of room; what it is really for is a
+	 * file that grew for a reason nothing here can name, which would otherwise be read whole
+	 * into the heap before anything got the chance to refuse it.
+	 */
+	private static final long MOST_BYTES = 64L * 1024L * 1024L;
+
 	private ModuleStore() {
 	}
 
-	static byte[] sha256(byte[] raw) {
+	private static byte[] sha256(byte[] raw) {
 		return sha256().digest(raw);
 	}
 
-	static MessageDigest sha256() {
+	private static MessageDigest sha256() {
 		try {
 			return MessageDigest.getInstance("SHA-256");
 		} catch (NoSuchAlgorithmException e) {
@@ -129,7 +150,7 @@ final class ModuleStore {
 	}
 
 	/** The neighbour and then the move, which is what makes a half written file impossible. */
-	static void move(Path part, Path file) throws IOException {
+	private static void move(Path part, Path file) throws IOException {
 		try {
 			Files.move(part, file, StandardCopyOption.ATOMIC_MOVE);
 		} catch (AtomicMoveNotSupportedException e) {
@@ -147,7 +168,7 @@ final class ModuleStore {
 	 * that hit on everything wrote nothing and would read as abandoned by the very next build.
 	 * Between the two, the stamp is the last time the edition was used at all.
 	 */
-	static void touch(Path file) {
+	private static void touch(Path file) {
 		try {
 			Files.setLastModifiedTime(file, FileTime.from(Instant.now()));
 		} catch (IOException ignored) {
@@ -155,7 +176,7 @@ final class ModuleStore {
 		}
 	}
 
-	static String megabytes(long amount) {
+	private static String megabytes(long amount) {
 		return String.format(Locale.ROOT, "%.1f", amount / 1048576.0D);
 	}
 
@@ -166,7 +187,7 @@ final class ModuleStore {
 	 * boundary keeps both, and what a cut module reaches next is a native parser with nothing
 	 * between it and the process. This is the check that makes the class's promise true.
 	 */
-	static boolean answersForItself(byte[] raw, int length) {
+	private static boolean answersForItself(byte[] raw, int length) {
 		MessageDigest digest = sha256();
 		digest.update(raw, 0, length);
 
@@ -383,7 +404,7 @@ final class ModuleStore {
 		return (long) mib * 1024L * 1024L;
 	}
 
-	static long ceilingBytes() {
+	private static long ceilingBytes() {
 		return bytesOf(ceilingMib());
 	}
 
@@ -530,6 +551,161 @@ final class ModuleStore {
 		}
 	}
 
+	/** A stored file its own digest answers for, still to be turned into what the game keeps. */
+	record Hit(Path file, byte[] raw, int length) {
+	}
+
+	/**
+	 * The file a key names, read and checked against the digest behind it, or null when there is no
+	 * such file, it is too large, or it cannot be vouched for. Absent is the ordinary case and says
+	 * nothing; the rest are said once a run.
+	 * <p>
+	 * A hit costs a file read and nothing native. Counting it as served waits for {@link #served},
+	 * because a file that answers for itself can still be a shape this build cannot rebuild.
+	 */
+	static @Nullable Hit read(@Nullable String key) {
+		Path root = directory();
+		if (key == null || root == null) {
+			return null;
+		}
+
+		Path file = root.resolve(key + SUFFIX);
+		byte[] raw;
+		try {
+			if (Files.size(file) > MOST_BYTES) {
+				sayAboutReading("a stored module is larger than any module is");
+
+				return null;
+			}
+
+			raw = Files.readAllBytes(file);
+		} catch (IOException e) {
+			// Absent is the ordinary case and unreadable the rare one, and neither is worth a word:
+			// what follows either way is the compile that would have happened anyway.
+			return null;
+		} catch (OutOfMemoryError e) {
+			// The size was asked for above, so this is a heap that was already at its edge rather
+			// than a file that lied about itself. It is still a miss and never a dead load.
+			sayAboutReading("there was no room to read a stored module");
+
+			return null;
+		}
+
+		int length = raw.length - DIGEST_BYTES;
+		if (length <= 0 || !answersForItself(raw, length)) {
+			sayAboutReading("a stored module did not answer for its own bytes");
+
+			return null;
+		}
+
+		return new Hit(file, raw, length);
+	}
+
+	/** Stamps a unit as asked for, which is what the sweep keeps it for, and counts it served. */
+	static void served(Path file) {
+		touch(file);
+		SERVED.incrementAndGet();
+		SERVED_SINCE_LAUNCH.incrementAndGet();
+		lastUnitNanos = System.nanoTime();
+	}
+
+	/**
+	 * The words at the head of a stored file, read and checked to be SPIR-V: a plausible length, a
+	 * whole number of words, and the magic word first. The game's own tables, where it keeps any,
+	 * follow them in the stream.
+	 *
+	 * @param length the bytes of the file before the digest, which no claim may exceed
+	 */
+	static byte[] readWords(DataInputStream in, int length) throws IOException {
+		int size = in.readInt();
+		if (size < SHORTEST || size % 4 != 0 || size > length) {
+			throw new IOException("a stored module claims " + size + " bytes of SPIR-V");
+		}
+
+		byte[] words = new byte[size];
+		in.readFully(words);
+		if (ByteBuffer.wrap(words).order(ByteOrder.nativeOrder()).getInt(0) != MAGIC) {
+			throw new IOException("a stored module does not open on the SPIR-V magic word");
+		}
+
+		return words;
+	}
+
+	/**
+	 * Writes a unit under its key, and sweeps when that took the store over its ceiling.
+	 * <p>
+	 * The module, then the digest that answers for it, into a file of the writer's own, and a move
+	 * onto the key. A file written twice under one key is added twice to the count and subtracted
+	 * once, which the sweep's rescan puts right.
+	 *
+	 * @param raw everything a unit is except the digest
+	 */
+	static void keep(Path root, String key, byte[] raw) {
+		Path file = root.resolve(key + SUFFIX);
+		Path part = root.resolve(key + "-"
+				+ Long.toHexString(Thread.currentThread().threadId()) + PART_SUFFIX);
+
+		try {
+			// The module, then the digest that answers for it. Behind rather than in front, so
+			// nothing inside has to move to make room for it.
+			Files.write(part, raw);
+			Files.write(part, sha256(raw), StandardOpenOption.APPEND);
+			move(part, file);
+			BYTES.addAndGet(raw.length + (long) DIGEST_BYTES);
+		} catch (IOException e) {
+			sayAboutWriting("a module could not be stored", e);
+
+			try {
+				Files.deleteIfExists(part);
+			} catch (IOException ignored) {
+				// The next sweep collects it: every scan deletes the neighbours it comes across.
+			}
+
+			return;
+		}
+
+		if (BYTES.get() > ceilingBytes()) {
+			sweep(root);
+		}
+	}
+
+	/**
+	 * The digest of a key up to the words both games agree on: the format, every version that decides
+	 * what the compiler makes of a text, and the engine's own switches. The caller adds what only its
+	 * game keys, and the text last.
+	 *
+	 * @param format the token that changes when the layout of a stored file does
+	 */
+	static MessageDigest keyStart(String format) {
+		MessageDigest digest = sha256();
+
+		feed(digest, format);
+		feed(digest, Vitrail.cacheVersion());
+
+		// The commit, on a development build and only there. The folder already keeps two such
+		// builds apart, and this is the same claim made where the class makes every other one: the
+		// key IS the input, and on a development build the version alone does not name the
+		// translator that produced the text. A release feeds nothing extra, which is what leaves
+		// every key a player already holds exactly where it was.
+		String build = Vitrail.buildIdentity();
+		if (!build.isEmpty()) {
+			feed(digest, build);
+		}
+
+		feed(digest, Vitrail.platform().minecraftVersion());
+		feed(digest, Vitrail.platform().loaderName());
+		feed(digest, Vitrail.platform().loaderVersion());
+		feed(digest, Version.getVersion());
+		// The two switches that change the bytes a compile produces without changing its text: each
+		// state keeps its own set of blobs, and a reading taken under one never draws another's.
+		feed(digest, RawLocals.cacheWord());
+		feed(digest, LocalZeroes.VERSION);
+		feed(digest, ShaderDebugInfo.cacheWord());
+		feed(digest, PackNames.cacheWord());
+
+		return digest;
+	}
+
 	/**
 	 * Every unit on disk, oldest stamp first.
 	 * <p>
@@ -602,7 +778,7 @@ final class ModuleStore {
 	 * is late to catch. What the difference can do instead is count a unit the listing saw twice,
 	 * which is the direction the count already errs in, and the next sweep's rescan puts it right.
 	 */
-	static void sweep(Path root) {
+	private static void sweep(Path root) {
 		synchronized (LOCK) {
 			if (System.nanoTime() < nextSweepNanos) {
 				return;
@@ -662,7 +838,7 @@ final class ModuleStore {
 		}
 	}
 
-	static void sayAboutWriting(String what, IOException cause) {
+	private static void sayAboutWriting(String what, IOException cause) {
 		if (!saidAboutWriting) {
 			saidAboutWriting = true;
 			Vitrail.logger().warn("In the module cache, {}: {}. Said once a run: the next load pays "

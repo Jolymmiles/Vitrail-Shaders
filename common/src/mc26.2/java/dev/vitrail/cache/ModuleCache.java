@@ -1,17 +1,13 @@
 package dev.vitrail.cache;
 
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
-import dev.vitrail.glsl.LocalZeroes;
 import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
 import dev.vitrail.render.PackChain;
-import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.SamplerReach;
-import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.Vitrail;
 
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.Version;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.ByteArrayInputStream;
@@ -22,10 +18,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -116,26 +109,12 @@ import java.util.List;
  */
 public final class ModuleCache {
 
-	/** First word of any SPIR-V module, and the cheapest proof that a blob is one. */
-	private static final int MAGIC = 0x07230203;
-
-	/** Five words is the header alone, so nothing shorter can be a module. */
-	private static final int SHORTEST = 20;
-
 	/**
 	 * How many entries of one kind a stored module may claim before the file is read as damaged
 	 * rather than as a module. Far above what any pack reaches, and low enough that a wild count
 	 * cannot ask for an allocation that the digest was going to refuse a moment later anyway.
 	 */
 	private static final int MOST_ENTRIES = 65_536;
-
-	/**
-	 * How large a file may be before it is refused unread. The largest module of the corpus is
-	 * under a megabyte, so this is two orders of magnitude of room; what it is really for is a
-	 * file that grew for a reason nothing here can name, which would otherwise be read whole
-	 * into the heap before anything got the chance to refuse it.
-	 */
-	private static final long MOST_BYTES = 64L * 1024L * 1024L;
 
 	/**
 	 * How large the store may grow, in mebibytes, offered on the Sodium page. Half a gigabyte is
@@ -201,31 +180,9 @@ public final class ModuleCache {
 			return null;
 		}
 
-		MessageDigest digest = ModuleStore.sha256();
-
-		ModuleStore.feed(digest, FORMAT);
-		ModuleStore.feed(digest, Vitrail.cacheVersion());
-
-		// The commit, on a development build and only there. The folder already keeps two such
-		// builds apart, and this is the same claim made where the class makes every other one: the
-		// key IS the input, and on a development build the version alone does not name the
-		// translator that produced the text. A release feeds nothing extra, which is what leaves
-		// every key a player already holds exactly where it was.
-		String build = Vitrail.buildIdentity();
-		if (!build.isEmpty()) {
-			ModuleStore.feed(digest, build);
-		}
-
-		ModuleStore.feed(digest, Vitrail.platform().minecraftVersion());
-		ModuleStore.feed(digest, Vitrail.platform().loaderName());
-		ModuleStore.feed(digest, Vitrail.platform().loaderVersion());
-		ModuleStore.feed(digest, Version.getVersion());
-		// The two switches that change the bytes a compile produces without changing its text: each
-		// state keeps its own set of blobs, and a reading taken under one never draws another's.
-		ModuleStore.feed(digest, RawLocals.cacheWord());
-		ModuleStore.feed(digest, LocalZeroes.VERSION);
-		ModuleStore.feed(digest, ShaderDebugInfo.cacheWord());
-		ModuleStore.feed(digest, PackNames.cacheWord());
+		MessageDigest digest = ModuleStore.keyStart(FORMAT);
+		// The last of those switches, and the one 26.3 leaves out of its key: the samplers it drops from
+		// a table are stored here, where 26.3 applies it to the words a served unit already is.
 		ModuleStore.feed(digest, SamplerReach.cacheWord());
 		// Whose unit this is: a unit of the game's that shares its text with one of ours is walked
 		// by none of those passes, so the same text is two modules.
@@ -257,49 +214,17 @@ public final class ModuleCache {
 	 * nobody else's.
 	 */
 	public static @Nullable IntermediaryShaderModule lookup(@Nullable String key, String filename) {
-		Path root = ModuleStore.directory();
-		if (key == null || root == null) {
+		ModuleStore.Hit hit = ModuleStore.read(key);
+		if (hit == null) {
 			return null;
 		}
 
-		Path file = root.resolve(key + ModuleStore.SUFFIX);
-		byte[] raw;
-		try {
-			if (Files.size(file) > MOST_BYTES) {
-				ModuleStore.sayAboutReading("a stored module is larger than any module is");
-
-				return null;
-			}
-
-			raw = Files.readAllBytes(file);
-		} catch (IOException e) {
-			// Absent is the ordinary case and unreadable the rare one, and neither is worth a word:
-			// what follows either way is the compile that would have happened anyway.
-			return null;
-		} catch (OutOfMemoryError e) {
-			// The size was asked for above, so this is a heap that was already at its edge rather
-			// than a file that lied about itself. It is still a miss and never a dead load.
-			ModuleStore.sayAboutReading("there was no room to read a stored module");
-
-			return null;
-		}
-
-		int length = raw.length - ModuleStore.DIGEST_BYTES;
-		if (length <= 0 || !ModuleStore.answersForItself(raw, length)) {
-			ModuleStore.sayAboutReading("a stored module did not answer for its own bytes");
-
-			return null;
-		}
-
-		IntermediaryShaderModule module = rebuild(filename, raw, length);
+		IntermediaryShaderModule module = rebuild(filename, hit.raw(), hit.length());
 		if (module == null) {
 			return null;
 		}
 
-		ModuleStore.touch(file);
-		ModuleStore.SERVED.incrementAndGet();
-		ModuleStore.SERVED_SINCE_LAUNCH.incrementAndGet();
-		ModuleStore.lastUnitNanos = System.nanoTime();
+		ModuleStore.served(hit.file());
 
 		return module;
 	}
@@ -317,16 +242,7 @@ public final class ModuleCache {
 			int length) {
 		ByteBuffer spirv = null;
 		try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(raw, 0, length))) {
-			int size = in.readInt();
-			if (size < SHORTEST || size % 4 != 0 || size > length) {
-				throw new IOException("a stored module claims " + size + " bytes of SPIR-V");
-			}
-
-			byte[] words = new byte[size];
-			in.readFully(words);
-			if (ByteBuffer.wrap(words).order(ByteOrder.nativeOrder()).getInt(0) != MAGIC) {
-				throw new IOException("a stored module does not open on the SPIR-V magic word");
-			}
+			byte[] words = ModuleStore.readWords(in, length);
 
 			List<Object> uniformBuffers = new ArrayList<>();
 			for (int left = count(in); left > 0; left--) {
@@ -348,7 +264,7 @@ public final class ModuleCache {
 				inputs.add(ModuleShape.variable(in.readUTF(), in.readInt()));
 			}
 
-			spirv = MemoryUtil.memAlloc(size);
+			spirv = MemoryUtil.memAlloc(words.length);
 			spirv.put(words);
 			spirv.flip();
 
@@ -408,32 +324,7 @@ public final class ModuleCache {
 			return;
 		}
 
-		Path file = root.resolve(key + ModuleStore.SUFFIX);
-		Path part = root.resolve(key + "-"
-				+ Long.toHexString(Thread.currentThread().threadId()) + ModuleStore.PART_SUFFIX);
-
-		try {
-			// The module, then the digest that answers for it. Behind rather than in front, so
-			// nothing inside has to move to make room for it.
-			Files.write(part, raw);
-			Files.write(part, ModuleStore.sha256(raw), StandardOpenOption.APPEND);
-			ModuleStore.move(part, file);
-			ModuleStore.BYTES.addAndGet(raw.length + (long) ModuleStore.DIGEST_BYTES);
-		} catch (IOException e) {
-			ModuleStore.sayAboutWriting("a module could not be stored", e);
-
-			try {
-				Files.deleteIfExists(part);
-			} catch (IOException ignored) {
-				// The next sweep collects it: every scan deletes the neighbours it comes across.
-			}
-
-			return;
-		}
-
-		if (ModuleStore.BYTES.get() > ModuleStore.ceilingBytes()) {
-			ModuleStore.sweep(root);
-		}
+		ModuleStore.keep(root, key, raw);
 	}
 
 	/** Everything a module is, in the order {@link #rebuild} reads it back. */
@@ -497,7 +388,6 @@ public final class ModuleCache {
 	static String dropOtherEditions(Path root, Path mine, String family) {
 		return ModuleStore.dropOtherEditions(root, mine, family);
 	}
-
 
 	/**
 	 * The three record types a module is made of, reached by reflection because they are package
