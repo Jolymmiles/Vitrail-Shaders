@@ -113,6 +113,11 @@ what the next one holds.
   or `image` had the parameter renamed while its use inside the macro kept the old name, so the
   shader named something it never declared and the program was refused. The macro is now kept as
   the pack wrote it.
+- **A full-screen pass that picks its GLSL version under a conditional is read by the version it
+  picked.** Vitrail went by the last version line in the file, even one on a branch that is not
+  taken, and that line decides whether `vaPosition` is a corner of the screen or a constant. A pack
+  whose chosen version was a core one and whose other one was not had every corner of the pass
+  placed at one point, and the pass drew nothing.
 
 ## 0.12.0-beta
 

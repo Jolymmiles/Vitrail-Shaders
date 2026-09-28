@@ -701,8 +701,9 @@ final class GlslTranslatorCases {
 				"""));
 
 		// --- How the version line is read: only a fullscreen vertex stage shows it, through the names of
-		// the core profile the quad answers for. What the last of several version lines, or a dead one,
-		// says is pinned as it stands: it is the reading a change of the translator is expected to move.
+		// the core profile the quad answers for. What the last of several live version lines says is
+		// pinned as it stands, and a dead one says nothing: it is the reading a change of the translator
+		// is expected to move.
 
 		String quad = """
 				in vec3 vaPosition;

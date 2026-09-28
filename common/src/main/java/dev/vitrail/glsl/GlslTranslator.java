@@ -530,7 +530,9 @@ public final class GlslTranslator {
 
 	/**
 	 * Whether the unit's version line sends it down Iris's core path: a {@code core} profile, or
-	 * version 150 and up with no profile named ({@code TransformPatcher.java:151}).
+	 * version 150 and up with no profile named ({@code TransformPatcher.java:151}). The live line,
+	 * which is the one the expander kept as {@link ExpandedUnit#version()}, and never a version on a
+	 * branch it did not take, however far below the live one it is written.
 	 */
 	private boolean coreProfile;
 
@@ -1631,6 +1633,7 @@ public final class GlslTranslator {
 	 * ({@link #hideAbsentExtensionMacros}, {@link VendorExtensions}).
 	 */
 	private void dropVersionAndExtensions() {
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.HASH) {
@@ -1649,7 +1652,10 @@ public final class GlslTranslator {
 				}
 			} else if (!token.directive().equals("version")) {
 				continue;
-			} else {
+			} else if (this.unit.isLive(lines[index])) {
+				// The expander writes a version on a branch it did not take out as it stands, so a
+				// pack choosing its version under a conditional leaves the one it did not choose in
+				// the text, and reading every line would give the last of them the say.
 				this.coreProfile = declaresCoreProfile(index);
 			}
 

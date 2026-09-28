@@ -17,9 +17,7 @@ import org.junit.jupiter.params.provider.MethodSource;
  * They are a test of their own and their inputs are not in the recombinations, so that when either
  * reading is changed on purpose the goldens named here can be written again without touching any
  * other, and a failure anywhere else still means the translator moved where nobody meant it to.
- * What each case records is what the code does today, including the one that looks wrong:
- * {@code version-dead-last-line}, where a version line on a branch nobody takes still decides the
- * profile.
+ * What each case records is what the code does today.
  */
 class GlslTranslatorFencedGoldenTest {
 

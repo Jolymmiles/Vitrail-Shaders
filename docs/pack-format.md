@@ -440,6 +440,14 @@ after it is wrong. So the version and every `#extension` are emptied where they 
 taking its version from the header the engine writes, and it is the extensions that are counted, so
 an unexpected one shows up in the totals instead of vanishing.
 
+One thing is still read off the pack's version before it goes: whether it takes the reference's core
+path, which a `core` profile does and so does version 150 or later naming no profile. That decides
+whether a full screen vertex stage reads `vaPosition` as the corner of the quad or is handed a
+constant, and it is read off the live line alone. A version on a branch nobody took is written out
+as it stands, like every other line of that branch, so a pack choosing its version under a
+conditional leaves the other one in the text, and reading every version line would let the last of
+them decide.
+
 ## Textures a pack supplies itself
 
 A pack can declare its own textures under two key families: one naming a texture by name, one

@@ -17,8 +17,8 @@ in vec2 UV0;
 #define of_MultiTexCoord7 vec4(0.0, 0.0, 0.0, 1.0)
 #define of_Color vec4(1.0)
 #define of_Normal vec3(0.0, 0.0, 1.0)
-#define vaPosition Position
-#define vaUV0 UV0
+vec3 vaPosition = vec3(0.0);
+vec2 vaUV0 = vec2(0.0);
 invariant gl_Position;
 
 
