@@ -123,6 +123,12 @@ Three patterns run over each line: a define that may itself be commented out, a 
 a scalar type, and an `#ifdef` or `#ifndef` naming one symbol and nothing else, which records that
 something tests that name. The first declaration of a name wins.
 
+**The index keeps its names in the order it met them**, a name declared twice staying where it was
+declared first. A page's `*` pours the settings out in that order, and so does the one page of a
+pack that lays out none, so the index is copied into an insertion-ordered map and never through the
+immutable-map factory: that one salts its iteration per process, and would give the same pack a
+different menu at every start of the game.
+
 **The kind of a setting is decided by whether the rest of the line is empty** once the trailing
 comment is stripped, not by whether a list of allowed values is present. Empty is a switch; anything
 else is a value, even with no list beside it. A define carrying a value and no list is a value with

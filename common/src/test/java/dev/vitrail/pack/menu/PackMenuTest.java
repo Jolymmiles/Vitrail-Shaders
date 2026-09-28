@@ -2,7 +2,6 @@ package dev.vitrail.pack.menu;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -342,12 +341,11 @@ class PackMenuTest {
 	}
 
 	/**
-	 * The pour walks the index in its own order, and the index does not keep the order the pack
-	 * declared them in, so a screen built from {@code *} lists the settings differently from one JVM
-	 * start to the next while the doc and the comment say declaration order.
+	 * Forty settings, because an order that changes from one start of the game to the next still
+	 * lands on the declared one now and then for three or four.
 	 */
 	@Test
-	void knownBug_theStarDoesNotPourInDeclarationOrder(@TempDir Path dir) throws IOException {
+	void theStarPoursInDeclarationOrder(@TempDir Path dir) throws IOException {
 		Random random = new Random(3);
 		StringBuilder glsl = new StringBuilder();
 		List<String> declared = new ArrayList<>();
@@ -359,9 +357,7 @@ class PackMenuTest {
 
 		PackMenu menu = menu(dir, "screen=*\n", glsl.toString());
 
-		List<String> poured = words(menu.main());
-		assertEquals(Set.copyOf(declared), Set.copyOf(poured));
-		assertNotEquals(declared, poured);
+		assertEquals(declared, words(menu.main()));
 	}
 
 	// ---- columns -----------------------------------------------------------------------------

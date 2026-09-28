@@ -2,7 +2,6 @@ package dev.vitrail.pack.option;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -391,12 +390,11 @@ class OptionIndexTest {
 	}
 
 	/**
-	 * {@code all()} is documented by its callers as "the order the pack declares them"
-	 * ({@code PackMenu} pours the {@code *} slot out of it) and it is not: the index copies its map
-	 * with {@code Map.copyOf}, whose iteration order changes with each JVM start.
+	 * Forty names, because an order salted per process lands on the declared one now and then for
+	 * three or four, and a test that passes by luck proves nothing about the next start.
 	 */
 	@Test
-	void knownBug_allIsNotInDeclarationOrder() {
+	void allIsInDeclarationOrder() {
 		Random random = new Random(7);
 		List<String> declared = new ArrayList<>();
 		List<String> lines = new ArrayList<>();
@@ -406,10 +404,20 @@ class OptionIndexTest {
 			lines.add("#define " + name + " 1 // [1 2]");
 		}
 
-		List<String> listed = index(lines.toArray(String[]::new)).all().stream().map(PackOption::name).toList();
+		OptionIndex index = index(lines.toArray(String[]::new));
 
-		assertEquals(Set.copyOf(declared), Set.copyOf(listed));
-		assertNotEquals(declared, listed);
+		assertEquals(declared, index.all().stream().map(PackOption::name).toList());
+		assertEquals(declared, List.copyOf(index.names()));
+	}
+
+	@Test
+	void aNameDeclaredAgainInALaterFileKeepsThePlaceOfItsFirstDeclaration() {
+		OptionIndex.Reader reader = new OptionIndex.Reader();
+		reader.read("a.glsl", List.of("#define ZETA", "#define SHARED 1 // [1 2]", "#define ALPHA 2"));
+		reader.read("b.glsl", List.of("#define BETA", "#define SHARED 9 // [8 9]", "#define ALPHA"));
+
+		assertEquals(List.of("ZETA", "SHARED", "ALPHA", "BETA"),
+				reader.index().all().stream().map(PackOption::name).toList());
 	}
 
 	@Test

@@ -137,6 +137,11 @@ what the next one holds.
   answered a version it could not make sense of by leaving the far terrain flat, except the very
   first, which let the error through when those classes failed as they loaded. It now leaves the
   far terrain flat as well, and says so once in the log.
+- **The settings a pack does not place itself keep their order from one start to the next.** A
+  page built from the pack's `*` token, and the one page a pack without a `screen=` line gets,
+  listed their settings in an order that changed every time the game started. They now come in
+  the order the pack's shaders declare them, which stays put, although it is not the order Iris
+  lists them in.
 
 ## 0.12.0-beta
 

@@ -2,6 +2,7 @@ package dev.vitrail.pack.option;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,7 +60,12 @@ public final class OptionIndex {
 	private final Set<String> conditionalReferences;
 
 	private OptionIndex(Map<String, PackOption> byName, Set<String> conditionalReferences) {
-		this.byName = Map.copyOf(byName);
+		// Copied in the order the reader met them rather than through Map.copyOf, whose iteration
+		// order is salted afresh in every process. The settings are walked in that order, by the *
+		// of a page and by a pack that lays out no page at all, and through Map.copyOf the same pack
+		// listed them differently at every start of the game. The names a conditional tests are only
+		// ever asked about one at a time, so that set can stay what it is.
+		this.byName = Collections.unmodifiableMap(new LinkedHashMap<>(byName));
 		this.conditionalReferences = Set.copyOf(conditionalReferences);
 	}
 
@@ -184,11 +190,20 @@ public final class OptionIndex {
 		};
 	}
 
+	/**
+	 * Every declaration, in the order the pack declares them: file after file in the order
+	 * {@link dev.vitrail.pack.source.ShaderPackSource#sourceFiles()} walks them, line after line
+	 * within a file, and a name declared twice where it was declared first. That is the order the
+	 * {@code *} of a settings page pours them out in, so it is the order a player reads.
+	 */
 	public Collection<PackOption> all() {
 		return this.byName.values();
 	}
 
-	/** Every name the pack declares, for a caller that only has to tell declared from not. */
+	/**
+	 * Every name the pack declares, in the order of {@link #all()}, for a caller that only has to
+	 * tell declared from not.
+	 */
 	public Set<String> names() {
 		return this.byName.keySet();
 	}

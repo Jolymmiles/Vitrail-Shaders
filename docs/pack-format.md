@@ -365,7 +365,10 @@ and what is left over still has to land somewhere: the `*` token pours out every
 page names, where it stands, and what the main screen names comes out of it again, because the
 reference builds its leftover list only after its main screen and packs laid their columns against
 that. A pack that writes no root screen key at all is read as a main screen holding exactly that
-token, one page with everything on it rather than an empty one. A name exposed
+token, one page with everything on it rather than an empty one. What the token pours comes in the
+order the pack declares it, which is the order the settings index keeps. That is this engine's
+order and not the reference's, which pours every switch and then every value, each half in
+whatever order a hash table keyed by name leaves them in. A name exposed
 on a screen may be declared nowhere in the pack,
 so the screen has to tolerate an orphan name: neither crash on it nor fabricate a setting for it.
 
