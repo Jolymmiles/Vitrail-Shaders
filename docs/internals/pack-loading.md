@@ -332,8 +332,17 @@ turns the message itself into the runaway.
 The nesting budget inside the expression evaluator is shared between brackets and prefix operators,
 because a bracket limit alone bounds nothing: a long run of prefix operators costs the same stack
 frames with no bracket in sight. Name resolution and expression evaluation are mutually recursive, so
-their budget travels through the whole nest instead of restarting at each hop; two settings defined
-in terms of each other would otherwise reach the stack limit.
+their budgets travel through the whole nest instead of restarting at each hop, and there are two of
+them. The depth is one: two settings defined in terms of each other would otherwise reach the stack
+limit. The number of names resolved is the other, because a name is read again from its text
+wherever it is met: a setting written as a wide sum of the next, and that one of the next, costs the
+width to the power of the levels, and four levels sit well inside the depth. A condition that runs
+out of names has no answer, which is read as taken, as any condition that cannot be worked out is.
+
+Substituting symbols into a line of a properties file has the same shape, where what grows is the
+line itself: a symbol written as many others, a few rounds deep, reaches gigabytes. A round that
+would take the line past a length is abandoned, and the line is handed on as the round before left
+it, names and all, so the reader says which name it could not read.
 
 Profile expansion has the same shape and needs the same pairing. Profiles form a graph, not a tree,
 so a profile naming the next one several times multiplies at every level and can run for minutes

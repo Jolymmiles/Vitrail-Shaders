@@ -93,6 +93,12 @@ what the next one holds.
   out of memory. A pack is now refused with a message saying so once it holds more than 64 MB of
   text or more than 20,000 files and folders. Real packs are far below both: the largest ones hold
   a few megabytes of text in under a thousand files.
+- **A pack's defines can no longer freeze the game or run it out of memory.** A setting defined as
+  a sum of many others, each of those a sum of many more, was worked out again wherever it was met,
+  so four levels of it could hold the game for minutes behind a single `#if`, and the same shape
+  in a properties file could grow one line to gigabytes. A condition that takes more than a
+  thousand names to work out is now treated as true, as any condition Vitrail cannot work out
+  already is, and a line stops growing before it passes 256 KB. No real pack comes near either.
 
 ## 0.12.0-beta
 

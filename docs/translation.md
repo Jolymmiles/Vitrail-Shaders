@@ -62,7 +62,10 @@ and the entries one walk of the pack meets are bounded as totals too.
 
 **Recursion budgets must travel through the expression evaluator.** Macro resolution and expression
 evaluation are mutually recursive; resetting the budget on each hop lets two defines that reference
-each other overflow the stack.
+each other overflow the stack. The depth is not the only budget it needs: a name is read again
+wherever it is met, so a define written as a wide sum of the next costs the width to the power of
+the levels, well inside the depth. The names one condition resolves are counted across the nest too,
+and a condition that runs out is given no answer.
 
 **Why bounding rather than catching.** Stack overflow and out-of-memory are errors, not runtime
 exceptions, so a catch around pack reading does not see them. The fix is to make sure the error is
