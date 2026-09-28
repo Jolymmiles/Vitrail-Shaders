@@ -84,11 +84,22 @@ public final class RawImage {
 		int out = texelBytes();
 		byte[] one = RawTexels.one(this.type);
 		byte[] image = new byte[texels * out];
-		for (int texel = 0; texel < texels; texel++) {
-			int to = texel * out;
-			System.arraycopy(blob, texel * in, image, to, in);
-			if (this.components <= RawTexels.ALPHA) {
-				System.arraycopy(one, 0, image, to + RawTexels.ALPHA * channelBytes(), one.length);
+		if (this.components > RawTexels.ALPHA) {
+			// Four channels are what goes up, so there is nothing to widen and the blob is the image.
+			System.arraycopy(blob, 0, image, 0, texels * in);
+
+			return image;
+		}
+
+		// Byte by byte and not one arraycopy a texel: a texel is one to twelve bytes, and the call
+		// costs more than the copy it makes.
+		int alpha = RawTexels.ALPHA * channelBytes();
+		for (int texel = 0, from = 0, to = 0; texel < texels; texel++, from += in, to += out) {
+			for (int b = 0; b < in; b++) {
+				image[to + b] = blob[from + b];
+			}
+			for (int b = 0; b < one.length; b++) {
+				image[to + alpha + b] = one[b];
 			}
 		}
 
