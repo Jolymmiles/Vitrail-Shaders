@@ -42,12 +42,14 @@ class PassTimingsCensusTest {
 
 	private Capture capture;
 	private Logger logger;
+	private Level before;
 
 	@BeforeEach
 	void listen() {
 		PassTimings.resetCensus();
-		Configurator.setLevel(Vitrail.MOD_NAME, Level.INFO);
 		this.logger = (Logger) LogManager.getLogger(Vitrail.MOD_NAME);
+		this.before = this.logger.getLevel();
+		Configurator.setLevel(Vitrail.MOD_NAME, Level.INFO);
 		this.capture = new Capture();
 		this.capture.start();
 		this.logger.addAppender(this.capture);
@@ -57,6 +59,7 @@ class PassTimingsCensusTest {
 	void stopListening() {
 		this.logger.removeAppender(this.capture);
 		this.capture.stop();
+		Configurator.setLevel(Vitrail.MOD_NAME, this.before);
 		PassTimings.resetCensus();
 	}
 
