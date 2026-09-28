@@ -286,10 +286,19 @@ public final class ExprFunctions {
 				// ExprFunctions.addUnaryOpJOML("frac", VectorType.VEC4, Vector4f::??);
 
 				// optifine
-				// TODO: why does Math.round give an int?
-				// ExprFunctions.<F2FFunction>addVectorizable("round", (a) -> (float) Math.round(a));
-				// TODO maybe add round with a specifyable precission?
-				// ExprFunctions.<F2IFunction>addVectorizable("round", (a) -> (int) Math.round(a));
+				// OptiFine's round is Java's: Math.round of a float, widened back to a float
+				// (FunctionType.eval, case ROUND). So a half goes up, towards positive infinity:
+				// round(1.5) is 2 and round(-1.5) is -1, where GLSL leaves the direction of a half
+				// to the driver. The int form is there for an int declaration, as floor's is.
+				// Iris leaves both lines commented out (parsing/IrisFunctions.java:274-277) and
+				// resolves no call of round at all, so a declaration that uses it is dropped there
+				// with a "No such function" and its program reads nought. It answers here, as it
+				// does under OptiFine, whose list at the top of this class names it: nothing can
+				// have been tuned against a value the reference never gives. What it costs the
+				// image: a pack that calls round draws with its value where it had nought, and
+				// no declaration of BSL, Bliss, Photon or either Complementary calls it.
+				ExprFunctions.<F2FFunction>add("round", (a) -> (float) Math.round(a));
+				ExprFunctions.<F2IFunction>add("round", Math::round);
 
 
 				// mod is also already an operator

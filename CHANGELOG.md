@@ -64,6 +64,10 @@ what the next one holds.
   before the two were added, so the sum came out as twice the second one. The same went for `+`,
   `-`, `*`, `/`, `floor`, `ceil`, `min`, `max` and `clamp` on vectors, and for sums of integer
   vectors. Each call now keeps its answer apart.
+- **A pack's own uniform may call `round()`.** OptiFine lists it among the functions a custom
+  uniform may use, and Vitrail did not know it, so a uniform that called it was dropped and named
+  in the log. It now rounds as OptiFine does, a half going up: `round(1.5)` is 2 and `round(-1.5)`
+  is -1.
 
 ## 0.12.0-beta
 

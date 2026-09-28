@@ -450,11 +450,13 @@ class ExprFunctionsTest {
 	// the gaps, one per TODO in ExprFunctions
 
 	@Test
-	void knownBug_roundIsListedInOptiFinesGrammarAndNotRegistered() {
-		// Known defect, being fixed on another branch: round(x) is in the header list and in OptiFine.
-		assertEquals("r: No such function: round", this.rig.refusal("float", "round(2.5)"));
-		assertEquals("r: No such function: round", this.rig.refusal("int", "round(2)"));
-		assertFalse(ExprFunctions.functions.names().contains("round"));
+	void roundIsRegisteredAsOptiFineEvaluatesIt() {
+		// round(x) is in the header list and in OptiFine, and it used to be registered by nothing,
+		// as in Iris, so both of these were refused with "No such function: round". The halves
+		// either side of nought are in RoundAsOptiFineTest.
+		assertEquals(3.0F, this.rig.floatOf("round(2.5)"), "a half goes up");
+		assertEquals(2, this.rig.intOf("round(2)"), "an int declaration takes the int form");
+		assertTrue(ExprFunctions.functions.names().contains("round"));
 	}
 
 	@Test

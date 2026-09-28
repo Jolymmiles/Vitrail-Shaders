@@ -233,7 +233,9 @@ Photon's phase of the moon being the one long `if` among them, with a constant f
 `min` or a `max` of three values or more compares only its first two there, and the fallback of a
 long `if` is evaluated as above. Two calls of one vector function in one expression share one answer
 there, as above; that defect is no misreading of OptiFine, vectors being the reference's own
-addition to the list, but it answers something the pack did not write all the same.
+addition to the list, but it answers something the pack did not write all the same. And `round`
+is not registered there at all, so a declaration that calls it is dropped and its program reads
+nought; here it rounds as OptiFine does, a half going up, towards positive infinity.
 
 Three rules decide what happens when a pack gets it wrong, and all three exist so that a mistake
 stays **named** instead of turning into a permanently wrong image:
