@@ -81,6 +81,10 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      # Read-only on a tag, which is the action's own default and is kept on purpose, unlike in
+      # build.yml. A tag run reads the cache main wrote, and an entry it wrote itself would be
+      # scoped to that one tag: read by nothing but a re-run of it, and crowding out the entries
+      # build.yml keeps for dev and main.
       - uses: gradle/actions/setup-gradle@v4
 
       # Read out of gradle.properties rather than asked of Gradle, so that a tag that disagrees

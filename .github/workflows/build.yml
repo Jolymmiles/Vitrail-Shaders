@@ -48,7 +48,16 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      # A run on either long-lived branch writes the cache, and no other run does. Left to itself
+      # the action writes on the default branch alone, which is main, and main moves only at a
+      # release: every run in between started from what the last release left, so whatever dev had
+      # added since, a dependency or a whole game, was fetched and decompiled again by each of them.
+      # A request reads what dev wrote, a run on a request being allowed its base branch's cache,
+      # and still writes nothing: an entry of its own would be scoped to its merge ref, and read by
+      # nothing but a re-run of that same request.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}
 
       # What this refuses is whatever build.gradle refuses on the day it runs. Naming the gates here
       # as well would only give them a third home to drift out of step with.
