@@ -1491,9 +1491,6 @@ public final class GlslTranslator {
 	 * refuses a member declared twice.
 	 */
 	private void collectDeclarations() {
-		// Every parameter of every function is a name after a type, and the walk for its statement's
-		// end has no end to find: asked of the index once, for a pass that edits nothing.
-		StatementEnds ends = new StatementEnds(this.tokens);
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
@@ -1506,7 +1503,7 @@ public final class GlslTranslator {
 			}
 
 			this.declaredNames.add(token.text());
-			this.declaredNames.addAll(continuationDeclarators(index, ends.after(index)));
+			this.declaredNames.addAll(continuationDeclarators(index));
 			if (LegacyGlsl.POST_120_BUILTINS.contains(token.text()) && this.tokens.callOpener(index) >= 0) {
 				this.shadowedBuiltins.add(token.text());
 			}
@@ -1529,10 +1526,9 @@ public final class GlslTranslator {
 	 * and belongs to a batch of its own.
 	 *
 	 * @param first the first declarator of the statement, the one the type stands in front of
-	 * @param end   where that statement ends, {@link TokenStream#statementEnd} of {@code first}, or
-	 *              -1 where it does not
 	 */
-	private List<String> continuationDeclarators(int first, int end) {
+	private List<String> continuationDeclarators(int first) {
+		int end = this.tokens.statementEnd(first);
 		if (end < 0) {
 			return List.of();
 		}
@@ -4583,10 +4579,6 @@ public final class GlslTranslator {
 			return;
 		}
 
-		// A storage word that qualifies a parameter is asked about as well, and the walk for the end of
-		// its statement has none to find: the index answers for the text as it stands, which nothing
-		// here edits.
-		StatementEnds ends = new StatementEnds(this.tokens);
 		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -4596,13 +4588,13 @@ public final class GlslTranslator {
 
 			String storage = storageWord(token, this.macroAliases);
 			if ("out".equals(storage)) {
-				FileScope declared = fileScopeDeclaration(index, LegacyGlsl.TYPE_NAMES, ends.after(index));
+				FileScope declared = fileScopeDeclaration(index);
 				if (declared != null) {
 					this.declaredOutputs.addAll(declared.names());
 					this.declaredOutputScopes.add(declared);
 				}
 			} else if ("in".equals(storage) && this.stage != ProgramStage.VERTEX) {
-				FileScope declared = fileScopeDeclaration(index, LegacyGlsl.TYPE_NAMES, ends.after(index));
+				FileScope declared = fileScopeDeclaration(index);
 				if (declared != null) {
 					this.declaredInputs.add(declared);
 				}
@@ -4929,16 +4921,7 @@ public final class GlslTranslator {
 	 * and nothing else asks for.
 	 */
 	private FileScope fileScopeDeclaration(int keyword, Set<String> types) {
-		return fileScopeDeclaration(keyword, types, this.tokens.statementEnd(keyword));
-	}
-
-	/**
-	 * The same, told where the statement ends, for a pass that has worked that out for every keyword
-	 * at once.
-	 *
-	 * @param end {@link TokenStream#statementEnd} of {@code keyword}
-	 */
-	private FileScope fileScopeDeclaration(int keyword, Set<String> types, int end) {
+		int end = this.tokens.statementEnd(keyword);
 		int start = end < 0 ? -1 : this.tokens.statementStart(keyword);
 		if (start < 0) {
 			return null;

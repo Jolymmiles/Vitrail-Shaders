@@ -463,10 +463,6 @@ final class TokenStream implements Iterable<Token> {
 	 * no brace and no semicolon at depth nought until some later {@code for} header opened a
 	 * parenthesis, so it would answer that header's first semicolon, or read its whole budget for
 	 * nothing where there is none, and every parameter of every function is asked about.
-	 * <p>
-	 * {@link StatementEnds} answers the same question from an index, for a pass that asks it again
-	 * and again and edits nothing, and has to keep every rule this walk keeps: a rule added here is
-	 * one it answers differently until it is added there too.
 	 */
 	int statementEnd(int index) {
 		int depth = 0;
