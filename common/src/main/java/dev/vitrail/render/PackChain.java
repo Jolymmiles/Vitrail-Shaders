@@ -1034,25 +1034,38 @@ public final class PackChain {
 			return;
 		}
 
-		// The frame opens HERE, not at the first draw, and the compute's correctness hangs on it.
-		// The values only move at beginFrame, so without this the dispatch reads the PREVIOUS
-		// frame's numbers: the floodfill then runs under the old frameCounter parity and writes
-		// the half this frame's gbuffers do not read, and every voxel light flickers as the
-		// player moves. Idempotent for the rest of the frame, which sees the same numbers it
-		// always did, only settled a moment earlier.
-		chain.beginFrame();
-		chain.reanchorCustomImages();
-		chain.compute.dispatch(chain.values, chain.targets);
+		try {
+			// The frame opens HERE, not at the first draw, and the compute's correctness hangs on it.
+			// The values only move at beginFrame, so without this the dispatch reads the PREVIOUS
+			// frame's numbers: the floodfill then runs under the old frameCounter parity and writes
+			// the half this frame's gbuffers do not read, and every voxel light flickers as the
+			// player moves. Idempotent for the rest of the frame, which sees the same numbers it
+			// always did, only settled a moment earlier.
+			chain.beginFrame();
+			chain.reanchorCustomImages();
+			chain.compute.dispatch(chain.values, chain.targets);
 
-		// And the table goes back to the window every block of the chain is written under, because
-		// the dispatch above leaves the light's standing behind it. This stage stands between the
-		// two ranges the frame opens with, and a compute of the prepares writes its block off the
-		// live table at the moment it is dispatched, where a pass reads a block written once at the
-		// head of the frame: left flipped, a place with a begin ahead of this stage and a shadow
-		// compute in it hands every compute of its prepares the light's window instead of the
-		// screen's. Put back where it is flipped rather than at the head of each range, so that a
-		// range drawn here later cannot forget what it never has to know.
-		chain.values.convention(ClipSpace.REVERSED);
+			// And the table goes back to the window every block of the chain is written under,
+			// because the dispatch above leaves the light's standing behind it. This stage stands
+			// between the two ranges the frame opens with, and a compute of the prepares writes its
+			// block off the live table at the moment it is dispatched, where a pass reads a block
+			// written once at the head of the frame: left flipped, a place with a begin ahead of this
+			// stage and a shadow compute in it hands every compute of its prepares the light's window
+			// instead of the screen's. Put back where it is flipped rather than at the head of each
+			// range, so that a range drawn here later cannot forget what it never has to know.
+			chain.values.convention(ClipSpace.REVERSED);
+		} catch (RuntimeException e) {
+			// The table is NOT put back on this road, and no undo stands in for it, unlike
+			// openFeatures. What that one takes back is the game's own state, which outlives the
+			// chain and swallows every later feature draw of the frame; this one is the chain's own
+			// store, and the chain is stopped and released here. Nothing reads it afterwards: the
+			// prepares that follow this stage return on the stop, every family answers null once
+			// the chain is stopped, and a writer of a block sets the convention before it writes,
+			// this dispatch, writeBlocks and GeometryProgram.writeBlock alike. So a throw between
+			// the flip and the line above leaves the light's window standing where nothing can read
+			// it.
+			FAILURE.abandon(e, chain::release);
+		}
 	}
 
 	/**
