@@ -158,16 +158,33 @@ public final class ExprFunctions {
 			ExprFunctions.<II2BFunction>addBooleanVectorizable("equals", (a, b) -> a == b);
 			ExprFunctions.<FF2BFunction>add("equals", (a, b) -> a == b);
 
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, false, Vector2f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, false, Vector3f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, false, Vector4f::equals);
+			// Float vectors, one boolean for the whole vector. Each group of three sits after the
+			// scalar lines of an operator and was meant to extend it, the first to equals and the
+			// second to notEquals. Both were named "equal" instead, and both declared a vector
+			// where they answer a boolean, as Iris still has them
+			// (parsing/IrisFunctions.java:146-155): a call wanting a boolean, which is every use
+			// there is, found no match, and one wanting a vector found two and threw "Ambiguity".
+			// So == and != answer for vectors now, and equal stays a name as well, since the note
+			// at the top of this class names it. The components compare as the scalar == does:
+			// -0.0 equals 0.0 and NaN equals nothing, where JOML's equals has it the other way.
+			// The reference never answers a comparison of two vectors, so no pack can have been
+			// tuned against one. What it costs the image: a pack that compares two draws with a
+			// boolean where the declaration was dropped and its program read nought, and no
+			// declaration of BSL, Bliss, Photon or either Complementary compares two.
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC2, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC3, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC4, false, ExprFunctions::sameComponents);
+
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, false, ExprFunctions::sameComponents);
 
 			ExprFunctions.<II2BFunction>addBooleanVectorizable("notEquals", (a, b) -> a != b);
 			ExprFunctions.<FF2BFunction>add("notEquals", (a, b) -> a != b);
 
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, true, Vector2f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, true, Vector3f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, true, Vector4f::equals);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC2, true, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC3, true, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC4, true, ExprFunctions::sameComponents);
 
 			ExprFunctions.<II2BFunction>add("lessThanOrEquals", (a, b) -> a <= b);
 			ExprFunctions.<FF2BFunction>add("lessThanOrEquals", (a, b) -> a <= b);
@@ -1066,13 +1083,17 @@ public final class ExprFunctions {
 		});
 	}
 
+	/**
+	 * A test of two float vectors, answering one boolean. It keeps nothing between calls, so one
+	 * instance serves every call site.
+	 */
 	static <T> void addBinaryToBooleanOpJOML(
 		String name,
 		VectorType.JOMLVector<T> type,
 		boolean inverted,
 		ObjectObject2BooleanFunction<T, T> function) {
 		builder.add(name, new AbstractTypedFunction(
-			type,
+			Type.Boolean,
 			new Type[]{type, type}
 		) {
 			@SuppressWarnings("unchecked")
@@ -1084,9 +1105,21 @@ public final class ExprFunctions {
 				params[1].evaluateTo(context, functionReturn);
 				T b = (T) functionReturn.objectReturn;
 
-				functionReturn.objectReturn = function.apply(a, b) != inverted;
+				functionReturn.booleanReturn = function.apply(a, b) != inverted;
 			}
 		});
+	}
+
+	private static boolean sameComponents(Vector2f a, Vector2f b) {
+		return a.x == b.x && a.y == b.y;
+	}
+
+	private static boolean sameComponents(Vector3f a, Vector3f b) {
+		return a.x == b.x && a.y == b.y && a.z == b.z;
+	}
+
+	private static boolean sameComponents(Vector4f a, Vector4f b) {
+		return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
 	}
 
 	static <T extends TypedFunction> void add(String name, T function) {

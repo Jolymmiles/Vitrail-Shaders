@@ -235,7 +235,10 @@ long `if` is evaluated as above. Two calls of one vector function in one express
 there, as above; that defect is no misreading of OptiFine, vectors being the reference's own
 addition to the list, but it answers something the pack did not write all the same. And `round`
 is not registered there at all, so a declaration that calls it is dropped and its program reads
-nought; here it rounds as OptiFine does, a half going up, towards positive infinity.
+nought; here it rounds as OptiFine does, a half going up, towards positive infinity. Nor does a
+comparison of two vectors resolve there, whether it is written as `equal` or with `==` and `!=`,
+and it is dropped the same way; here it answers one boolean for the whole vector, its components
+compared as two numbers are.
 
 Three rules decide what happens when a pack gets it wrong, and all three exist so that a mistake
 stays **named** instead of turning into a permanently wrong image:

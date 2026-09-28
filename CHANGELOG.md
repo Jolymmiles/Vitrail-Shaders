@@ -68,6 +68,10 @@ what the next one holds.
   uniform may use, and Vitrail did not know it, so a uniform that called it was dropped and named
   in the log. It now rounds as OptiFine does, a half going up: `round(1.5)` is 2 and `round(-1.5)`
   is -1.
+- **A pack's own uniform may compare two vectors.** `equal(a, b)` over two vectors, and `a == b`
+  or `a != b` written between them, could not be worked out, so a uniform that compared vectors
+  was dropped and named in the log. They now answer true or false, as the same comparison of two
+  numbers does.
 
 ## 0.12.0-beta
 

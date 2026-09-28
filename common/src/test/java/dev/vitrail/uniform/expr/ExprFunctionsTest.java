@@ -517,11 +517,13 @@ class ExprFunctionsTest {
 	}
 
 	@Test
-	void knownBug_theVectorEqualityNameIsRegisteredTwiceAndNotEqualNotAtAll() {
-		// Known defect, being fixed on another branch: "equal" is added once as equality and once as
-		// its inverse, where the second was meant to be "notEqual".
+	void theVectorEqualityIsNamedEqualAndItsInverseNotEquals() {
+		// "equal" used to be added once as equality and once as its inverse. The inverse now goes
+		// by the name of the != operator, notEquals, beside the other types, and no "notEqual" is
+		// registered for it.
 		List<String> names = ExprFunctions.functions.names();
 		assertTrue(names.contains("equal"));
+		assertTrue(names.contains("notEquals"));
 		assertFalse(names.contains("notEqual"));
 	}
 }

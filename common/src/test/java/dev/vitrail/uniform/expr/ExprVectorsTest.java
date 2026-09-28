@@ -198,22 +198,25 @@ class ExprVectorsTest {
 	}
 
 	@Test
-	void knownBug_vectorsHaveNoEqualityBecauseTheEqualFunctionIsMisnamed() {
-		// Known defect, being fixed on another branch: the vector equality is registered as "equal"
-		// where the operator looks for "equals", so no way of writing it reaches it.
-		for (String expression : new String[] {"va == va", "va != va", "equals(va, va)", "equal(va, va)",
-				"notEquals(va, va)"}) {
-			assertTrue(this.rig.refusal("bool", expression).contains("Couldn't resolve"), expression);
-		}
+	void vectorsCompareWithTheOperatorsAndWithEqual() {
+		// The vector equality used to be registered only as "equal", where the operators look for
+		// "equals" and "notEquals", and as a vector type, so no way of writing it reached it.
+		assertTrue(this.rig.boolOf("va == va"));
+		assertFalse(this.rig.boolOf("va != va"));
+		assertTrue(this.rig.boolOf("equals(va, va)"));
+		assertTrue(this.rig.boolOf("equal(va, va)"));
+		assertFalse(this.rig.boolOf("notEquals(va, va)"));
+		assertFalse(this.rig.boolOf("va == vec3(1, 2, 4)"), "the last component differs");
+		assertTrue(this.rig.boolOf("va != vec3(1, 2, 4)"));
 	}
 
 	@Test
-	void knownBug_theVectorEqualFunctionIsAmbiguousWithItself() {
-		// Known defect, being fixed on another branch: "equal" is registered twice with one
-		// signature, once as equality and once as its inverse, and its return type is the vector
-		// type where a bool was meant. So neither an operator nor a call reaches it.
+	void theVectorEqualFunctionAnswersABoolAndNotAVector() {
+		// "equal" used to be registered twice with one signature, once as equality and once as its
+		// inverse, and with the vector type as its return type, so asked for a vector it threw
+		// "Ambiguity". It answers a bool now, and a vector is simply not what it gives.
 		String reason = this.rig.refusal("vec3", "equal(va, va)");
-		assertTrue(reason.contains("Ambiguity"), reason);
+		assertTrue(reason.contains("Couldn't resolve"), reason);
 	}
 
 	// functions on vectors
