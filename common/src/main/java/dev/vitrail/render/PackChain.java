@@ -147,6 +147,13 @@ public final class PackChain {
 
 	private static volatile boolean chainWanted = true;
 
+	/**
+	 * What every hook of the frame does with an exception that got out of its work, so that the
+	 * order of the steps is written once. A hook that differs says how at its own catch.
+	 */
+	private static final HookFailure FAILURE = new HookFailure(PackChain::stop,
+			(text, error) -> Vitrail.logger().error(text, error));
+
 	/** Puts a chain up as the one the frame draws from, once the load has read it whole. */
 	static void activate(PackChain chain) {
 		active = chain;
@@ -793,12 +800,8 @@ public final class PackChain {
 				// of it: closeFrame turns them below, drawn or not.
 				chain.beginFrame();
 			}
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 
 		// Outside the try: a frame that failed halfway still owes its flags and its ring buffers.
@@ -963,18 +966,12 @@ public final class PackChain {
 
 				return;
 			} while (System.nanoTime() < deadline);
-		} catch (GpuDeviceLossException e) {
-			// Not about this pack: the device is gone, and PackChoice rethrows it out of a release
-			// for the same reason.
-			throw e;
 		} catch (RuntimeException e) {
 			// A pipeline the driver will not build throws out of precompilePipeline rather than coming
 			// back invalid, which is what MoltenVK does with a stage Metal refuses, and nothing between
 			// here and the game loop caught it. The reference stops drawing the pack and draws the
 			// game's own picture on an exception while it builds its pipeline, and so does this.
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1622,12 +1619,8 @@ public final class PackChain {
 
 		try {
 			chain.drawBegins(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1657,12 +1650,8 @@ public final class PackChain {
 
 		try {
 			chain.drawPrepares(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1693,12 +1682,8 @@ public final class PackChain {
 
 		try {
 			chain.drawEarly(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1758,12 +1743,8 @@ public final class PackChain {
 
 			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
 					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1870,12 +1851,8 @@ public final class PackChain {
 		try {
 			chain.targets.depth().takePreHand(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1925,12 +1902,8 @@ public final class PackChain {
 						+ "always-on-top features, so what this pack reads as depthtex0 is the world "
 						+ "rather than the far plane");
 			}
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -2047,12 +2020,8 @@ public final class PackChain {
 
 		try {
 			chain.takeReadCopies(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -2121,12 +2090,8 @@ public final class PackChain {
 			// the layer would sit on stale texels and be erased with them at the deferred flush.
 			chain.features.compose(device.createCommandEncoder(), chain.quad, view,
 					chain.targets.takeClear(view));
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
