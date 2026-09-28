@@ -311,7 +311,16 @@ public final class ExprFunctions {
 				ExprFunctions.addBinaryOpJOML("max", VectorType.VEC4, Vector4f::max);
 
 				{
-					// Fake vararg
+					// Fake vararg. Each loop reads its arguments by their own index, and that is a
+					// divergence: Iris reads params[1] on every turn of all four
+					// (parsing/IrisFunctions.java:311, :328, :345, :362), so that min(3, 2, 1) is 2
+					// there and nothing past the second argument is ever read. That is not a
+					// defect a pack can be tuned against, its answer following the order the values
+					// were listed in rather than the values, and the list at the top of this class
+					// is OptiFine's, which compares every argument (FunctionType.getMin) for the
+					// same pack. What it costs the image: a pack whose third or later value is the
+					// smallest, or the largest, now draws with that one. No declaration of BSL,
+					// Bliss, Photon or either Complementary calls min or max with more than two.
 					for (int length = 3; length <= 16; length++) {
 						{
 							// min float
@@ -323,7 +332,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									float min = functionReturn.floatReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										min = Math.min(min, functionReturn.floatReturn);
 									}
 									functionReturn.floatReturn = min;
@@ -340,7 +349,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									float max = functionReturn.floatReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										max = Math.max(max, functionReturn.floatReturn);
 									}
 									functionReturn.floatReturn = max;
@@ -357,7 +366,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									int min = functionReturn.intReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										min = Math.min(min, functionReturn.intReturn);
 									}
 									functionReturn.intReturn = min;
@@ -374,7 +383,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									int max = functionReturn.intReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										max = Math.max(max, functionReturn.intReturn);
 									}
 									functionReturn.intReturn = max;
@@ -503,8 +512,24 @@ public final class ExprFunctions {
 												params[i + 1].evaluateTo(context, functionReturn);
 												return;
 											}
-											params[finalLength].evaluateTo(context, functionReturn);
 										}
+
+										// Read once, and only when no condition held. Iris reads
+										// it inside the loop (parsing/IrisFunctions.java:491),
+										// once for every condition that fails and before a later
+										// one wins. The value still comes out right, the winning
+										// branch being read last, but a smooth() written there
+										// steps once per failed condition on every frame and
+										// fades that many times faster, and a random() draws
+										// that many times. OptiFine reads it once, after the
+										// loop, and so does this. What it costs the image is
+										// the fade of such a smooth(), now at the rate the pack
+										// wrote; a fallback with nothing in it that steps gives
+										// the same value either way. Photon's
+										// moon_phase_brightness is the one long if in BSL,
+										// Bliss, Photon and either Complementary, and its
+										// fallback is a constant, so none of them changes.
+										params[finalLength].evaluateTo(context, functionReturn);
 									}
 								});
 							}

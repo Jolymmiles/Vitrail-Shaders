@@ -213,26 +213,25 @@ class ExprFunctionsTest {
 	}
 
 	@Test
-	void knownBug_minAndMaxOfThreeOrMoreReadOnlyTheFirstTwo() {
-		// Known defect, being fixed on another branch: this pins today's wrong values.
-		// OptiFine's min(x, y, ...) is the least of all of them. The loop in ExprFunctions reads
-		// params[1] on every turn where it means params[i], so the third argument onward never
-		// counts. The message of each line is the value the function should give.
-		assertEquals(2.0F, this.rig.floatOf("min(3, 2, 1)"), "should be 1");
-		assertEquals(2.0F, this.rig.floatOf("max(1, 2, 3)"), "should be 3");
-		assertEquals(2.0F, this.rig.floatOf("max(1, 2, 9, 3)"), "should be 9");
-		assertEquals(8.0F, this.rig.floatOf("min(9, 8, 1, 0)"), "should be 0");
-		assertEquals(1.5F, this.rig.floatOf("min(1.5, 2.5, 0.5)"), "should be 0.5");
-		assertEquals(2.5F, this.rig.floatOf("max(1.5, 2.5, 9.5)"), "should be 9.5");
-		assertEquals(2, this.rig.intOf("min(3, 2, 1)"), "the int form has the same loop: should be 1");
-		assertEquals(2, this.rig.intOf("max(1, 2, 3)"), "should be 3");
-		assertEquals(2.0F, this.rig.floatOf("max(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)"),
-				"sixteen arguments and only two are read: should be 16");
+	void minAndMaxOfThreeOrMoreReadEveryArgument() {
+		// OptiFine's min(x, y, ...) is the least of all of them. The loop in ExprFunctions used to
+		// read params[1] on every turn, as Iris's still does, so the third argument onward never
+		// counted: each of these gave the second argument.
+		assertEquals(1.0F, this.rig.floatOf("min(3, 2, 1)"));
+		assertEquals(3.0F, this.rig.floatOf("max(1, 2, 3)"));
+		assertEquals(9.0F, this.rig.floatOf("max(1, 2, 9, 3)"));
+		assertEquals(0.0F, this.rig.floatOf("min(9, 8, 1, 0)"));
+		assertEquals(0.5F, this.rig.floatOf("min(1.5, 2.5, 0.5)"));
+		assertEquals(9.5F, this.rig.floatOf("max(1.5, 2.5, 9.5)"));
+		assertEquals(1, this.rig.intOf("min(3, 2, 1)"), "the int form has a loop of its own");
+		assertEquals(3, this.rig.intOf("max(1, 2, 3)"));
+		assertEquals(16.0F, this.rig.floatOf("max(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)"),
+				"sixteen arguments, all of them read");
 	}
 
 	@Test
 	void minAndMaxOfThreeAreRightWhenTheAnswerIsAmongTheFirstTwo() {
-		// Right today and after any fix, which is why a pack that orders its arguments happens to work.
+		// Right with the old loop too, which is why a pack that ordered its arguments happened to work.
 		assertEquals(1.0F, this.rig.floatOf("min(3, 1, 2)"));
 		assertEquals(5.0F, this.rig.floatOf("max(1, 5, 3)"));
 		assertEquals(1, this.rig.intOf("min(1, 2, 3)"));

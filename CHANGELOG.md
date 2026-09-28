@@ -53,6 +53,12 @@ what the next one holds.
   them at the old moment, so the game drew them on its own picture, which the pack's image covers.
   Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack draws,
   they are now sent to the moment 26.2 used, and the pack draws them with its own program.
+- **A pack's own `min`, `max` and long `if` read every value they are given.** A custom uniform
+  written as `min(a, b, c)`, or as a `max` of three values or more, compared the first value with
+  the second over and over and never looked at the rest, so it could come out wrong. And the last
+  value of an `if(cond, value, cond2, value2, fallback)` was worked out once for every condition
+  that failed, so a `smooth()` written there faded several times faster than the pack asked. Both
+  now work as in OptiFine.
 
 ## 0.12.0-beta
 

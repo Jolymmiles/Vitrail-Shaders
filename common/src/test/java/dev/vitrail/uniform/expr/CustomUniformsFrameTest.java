@@ -330,27 +330,25 @@ class CustomUniformsFrameTest {
 	}
 
 	@Test
-	void knownBug_theElseOfAManyBranchIfRunsBeforeEachTestAfterTheFirst() {
-		// Known defect, being fixed on another branch: this pins today's behaviour.
-		// The loop evaluates the else after every test that fails, before it reads the next one.
-		// Nothing shows in a pure expression. Here the else throws, and the first test is false, so
-		// the declaration is dropped even though the second test is true and the answer was 2.
-		List<String> drained = this.rig.throwing("int", "if(ia < 0, 1, ia > 0, 2, 1 % (ia - 7))");
-		assertTrue(drained.getFirst().contains("/ by zero"), drained.toString());
+	void ifWithManyBranchesDoesNotReadTheElseWhenALaterTestIsTrue() {
+		// The else throws if it runs. The loop used to evaluate it after every test that failed,
+		// before it read the next one, as Iris's still does, so this was dropped on the first
+		// test although the second one is true and the answer is 2.
+		assertEquals(2, this.rig.intOf("if(ia < 0, 1, ia > 0, 2, 1 % (ia - 7))"));
 	}
 
 	@Test
 	void ifWithManyBranchesDoesNotReadTheElseWhenTheFirstTestIsTrue() {
-		// Right today and after any fix: a first test that is true returns before the else is read.
+		// A first test that is true returned before the else was read with the old loop too.
 		assertEquals(1, this.rig.intOf("if(ia > 0, 1, ia > 0, 2, 1 % (ia - 7))"));
 	}
 
 	@Test
-	void knownBug_theElseOfAManyBranchIfSmoothsOncePerFailedTest() {
-		// Known defect, being fixed on another branch: this pins today's behaviour.
-		// smooth() in the else advances every time it is evaluated. With two tests that both fail
-		// it is evaluated twice a frame, so it moves 3/4 of the way to its target in a frame where
-		// it should move 1/2. With one test (the three-argument form) it is right.
+	void theElseOfAManyBranchIfSmoothsOnceAFrame() {
+		// smooth() in the else advances every time it is evaluated, and it is evaluated once a
+		// frame whatever the number of tests before it: half the way to its target in a frame,
+		// here from 4 to 2. The old loop evaluated it once per failed test, so two tests moved it
+		// to 1 and three to 0.5.
 		CustomUniforms uniforms = this.rig.buildClean(
 				"uniform.float.two = if(ia < 0, 1.0, ia < 1, 2.0, smooth(fa))",
 				"uniform.float.three = if(ia < 0, 1.0, ia < 1, 2.0, ia < 2, 3.0, smooth(fa))",
@@ -360,9 +358,9 @@ class CustomUniformsFrameTest {
 		this.rig.fa = 0.0F;
 		this.rig.frame(uniforms);
 
-		assertEquals(2.0F, this.rig.f(uniforms, "one"), 1.0E-5F, "should be 2 for all three");
-		assertEquals(1.0F, this.rig.f(uniforms, "two"), 1.0E-5F, "4 -> 2 -> 1: two steps in one frame");
-		assertEquals(0.5F, this.rig.f(uniforms, "three"), 1.0E-5F, "4 -> 2 -> 1 -> 0.5: three steps");
+		assertEquals(2.0F, this.rig.f(uniforms, "one"), 1.0E-5F, "the three-argument form");
+		assertEquals(2.0F, this.rig.f(uniforms, "two"), 1.0E-5F, "two tests fail, one step");
+		assertEquals(2.0F, this.rig.f(uniforms, "three"), 1.0E-5F, "three tests fail, one step");
 	}
 
 	// failing at run time

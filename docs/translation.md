@@ -388,7 +388,9 @@ screenshot will ever show it.
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
 its dependents by name rather than being silently replaced by zero mid-graph, and a custom uniform
-that shadows a builtin name is refused rather than resolved by precedence.
+that shadows a builtin name is refused rather than resolved by precedence. The functions those
+expressions call follow OptiFine's list where the reference misreads it, which is a divergence and
+is argued as one in [uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
 
 ## What resists, and whose fault it is
 

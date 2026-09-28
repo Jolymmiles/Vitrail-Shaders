@@ -207,6 +207,23 @@ engine values are current and before any program writes its block. Once a frame 
 program, for the same reason as everything else here: a smoothing function inside an expression
 would otherwise advance every time a pass read it.
 
+The same holds inside one expression: **an argument is evaluated once a frame, and only when the
+function reads it**. The long form of `if`, conditions and values in pairs with a fallback at the
+end, evaluated that fallback once for every condition that failed, as the reference still does, so
+a smoothing function written there advanced several times a frame and faded that many times faster
+than the pack asked. It is evaluated once now, after the last condition has failed, which is how
+OptiFine reads it.
+
+**Where the reference misreads OptiFine's list of functions, the list is read as OptiFine reads
+it.** That goes against reproducing the reference's defects, so it is argued rather than slipped
+in: none of these is a behaviour a pack can have been tuned against, since each either answers
+something that does not follow from what the pack wrote or answers nothing at all, and OptiFine,
+which runs the same packs, answers what was written. What it costs the image was measured, and is
+nothing: no declaration of BSL, Bliss, Photon or either Complementary does any of what follows,
+Photon's phase of the moon being the one long `if` among them, with a constant for its fallback. A
+`min` or a `max` of three values or more compares only its first two there, and the fallback of a
+long `if` is evaluated as above.
+
 Three rules decide what happens when a pack gets it wrong, and all three exist so that a mistake
 stays **named** instead of turning into a permanently wrong image:
 
