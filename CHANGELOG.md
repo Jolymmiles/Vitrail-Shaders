@@ -11,6 +11,18 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **The sky no longer turns one flat pink when far terrain is loaded and none of it is in view.**
+  With Distant Horizons, or a mod standing in for it, a pack is told there is far terrain and reads
+  its depth. On a frame where none of it is on screen, such as looking at the sky from above the
+  world's build height, Vitrail handed that depth over as a single texel. Photon reads it pixel by
+  pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
+  one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
+  image is under Iris.
+
 ## 0.12.0-beta
 
 ### Added
