@@ -23,7 +23,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -521,30 +520,6 @@ class TranslationCacheTest {
 		}
 
 		assertEquals(base, baseKey());
-	}
-
-	@Test
-	void utf8LengthIsWhatGetBytesYieldsForEveryKindOfStringIncludingBrokenSurrogates() throws Exception {
-		Method length = TranslationCache.class.getDeclaredMethod("utf8Length", String.class);
-		length.setAccessible(true);
-		String[] fixed = {"", "a", "\u007f", "\u0080", "\u07ff", "\u0800", "\uffff", "\ud83d\ude00", "\uD83D", "\uDE00",
-			"\uD83Da", "\uDE00\uD83D", "\uD83D\ud83d\ude00", "a\uD83D", "x\u00e9\u4e2d\ud83d\ude00y\n"};
-		for (String text : fixed) {
-			assertEquals(text.getBytes(StandardCharsets.UTF_8).length, (int) length.invoke(null, text), text);
-		}
-
-		char[] alphabet = {'a', '\n', '\u00e9', '\u07ff', '\u0800', '\u4e2d', '\uD83D', '\uDE00', '\uDBFF', '\uDC00', '\uffff'};
-		Random random = new Random(0x8);
-		for (int round = 0; round < 20_000; round++) {
-			char[] chars = new char[random.nextInt(12)];
-			for (int at = 0; at < chars.length; at++) {
-				chars[at] = alphabet[random.nextInt(alphabet.length)];
-			}
-
-			String text = new String(chars);
-			assertEquals(text.getBytes(StandardCharsets.UTF_8).length, (int) length.invoke(null, text),
-					"round " + round);
-		}
 	}
 
 	// ---------------------------------------------------------------------------------- sweep

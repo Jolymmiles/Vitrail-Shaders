@@ -516,44 +516,29 @@ public final class TranslationCache {
 	 * time: the joined text of a unit runs to megabytes and was built, and copied again into
 	 * bytes, for every stage of every program of a load, cache hits included. The length prefix
 	 * is counted first, so the key does not move.
+	 * <p>
+	 * <strong>Each line is encoded once</strong>, and the arrays are kept between the count and the
+	 * feed. Counting the bytes by walking the characters and then encoding them walked every line
+	 * twice, and that was most of what a key cost apart from the digest itself. What the arrays
+	 * hold is the unit's text once, and only for the length of this call. The count is theirs, so
+	 * it is what the encoder actually wrote, a lone surrogate's replacement included.
 	 */
 	private static void feedLines(MessageDigest digest, List<String> lines) {
+		byte[][] encoded = new byte[lines.size()][];
 		int length = Math.max(0, lines.size() - 1);
-		for (String line : lines) {
-			length += utf8Length(line);
+		for (int at = 0; at < encoded.length; at++) {
+			encoded[at] = lines.get(at).getBytes(StandardCharsets.UTF_8);
+			length += encoded[at].length;
 		}
 
 		digest.update(intBytes(length));
-		for (int at = 0; at < lines.size(); at++) {
+		for (int at = 0; at < encoded.length; at++) {
 			if (at > 0) {
 				digest.update((byte) '\n');
 			}
 
-			digest.update(lines.get(at).getBytes(StandardCharsets.UTF_8));
+			digest.update(encoded[at]);
 		}
-	}
-
-	/** How many bytes {@code getBytes(UTF_8)} yields, a lone surrogate counting as its replacement. */
-	private static int utf8Length(String text) {
-		int length = 0;
-		for (int at = 0; at < text.length(); at++) {
-			char c = text.charAt(at);
-			if (c < 0x80) {
-				length += 1;
-			} else if (c < 0x800) {
-				length += 2;
-			} else if (Character.isHighSurrogate(c) && at + 1 < text.length()
-					&& Character.isLowSurrogate(text.charAt(at + 1))) {
-				length += 4;
-				at++;
-			} else if (Character.isSurrogate(c)) {
-				length += 1;
-			} else {
-				length += 3;
-			}
-		}
-
-		return length;
 	}
 
 	private static byte[] intBytes(int value) {
