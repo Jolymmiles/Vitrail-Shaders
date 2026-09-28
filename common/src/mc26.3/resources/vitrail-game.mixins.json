@@ -22,6 +22,7 @@
 		"RenderTypesGlintMixin",
 		"SkyRendererMixin",
 		"SPIRVModuleMixin",
+		"SubmitNodeCollectionCrumblingMixin",
 		"SubmitNodeCollectionGlintMixin",
 		"VulkanRenderPipelineAccessor"
 	]

@@ -48,6 +48,11 @@ what the next one holds.
   pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
   one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
   image is under Iris.
+- **The cracks over a block being mined show again under a shader pack on 26.3.** 26.3 draws the
+  cracks over an opaque block at a different moment of the frame from 26.2. Vitrail only looked for
+  them at the old moment, so the game drew them on its own picture, which the pack's image covers.
+  Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack draws,
+  they are now sent to the moment 26.2 used, and the pack draws them with its own program.
 
 ## 0.12.0-beta
 
