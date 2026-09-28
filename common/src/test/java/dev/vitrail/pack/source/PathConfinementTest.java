@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -318,26 +317,15 @@ class PathConfinementTest {
 	/**
 	 * The one target whose parent is not inside {@code shaders/} is {@code shaders/} itself, and the
 	 * case-insensitive fallback lists a target's parent. An archive can hold a regular file beside
-	 * {@code shaders/} whose name differs from it only by case, and a path that names the root then
-	 * finds that file: {@code #include ".."}, {@code #include "/"} and a texture key of {@code .} all
-	 * answer it, and the text of a file that is not under {@code shaders/} is read.
+	 * {@code shaders/} whose name differs from it only by case, and a path that names the root found
+	 * that file: {@code #include ".."}, {@code #include "/"} and a texture key of {@code .} all answered
+	 * it, and the text of a file that is not under {@code shaders/} was read.
 	 * <p>
-	 * The file stays inside the pack, so this is not a road to the player's disk. Pins what happens now;
-	 * the fix is a one-line refusal of a target that is the root in {@code resolveIgnoringCase}.
+	 * The file stays inside the pack, so this was not a road to the player's disk. The fallback now
+	 * refuses a target that is the root, and every one of those roads finds nothing.
 	 */
 	@Test
-	void knownBug_aPathNamingTheShadersRootFindsAFileBesideItIgnoringCase() throws IOException {
-		List<String> found = rootRoadsInto(shadersRootBesideAFile());
-
-		assertEquals(List.of("inside:=/SHADERS", "inside:.=/SHADERS", "inside:/=/SHADERS", "inside:lib/..=/SHADERS",
-				"inside://./lib/../=/SHADERS", "rel:..=/SHADERS", "rel:../../shaders=/SHADERS", "rel:../=/SHADERS"),
-				found);
-	}
-
-	/** What the pin above should say once the root is refused: nothing found. */
-	@Test
-	@Disabled("A path naming shaders/ itself finds a file BESIDE shaders/ whose name matches ignoring case")
-	void knownBug_aPathNamingTheShadersRootFindsAFileBesideItIgnoringCase_expected() throws IOException {
+	void aPathNamingTheShadersRootFindsNothingBesideIt() throws IOException {
 		assertEquals(List.of(), rootRoadsInto(shadersRootBesideAFile()));
 	}
 
@@ -365,34 +353,18 @@ class PathConfinementTest {
 	}
 
 	/**
-	 * A symlink INSIDE a directory pack is followed, and what it names can be anywhere the game can read.
+	 * A symlink INSIDE a directory pack is not followed out of it, wherever it points.
 	 * <p>
-	 * The confinement compares the normalised text of a path, and a link is invisible to that. Nothing
-	 * resolves a real path, so a directory pack that carries {@code shaders/lib/link.glsl} pointing at a
-	 * file outside the pack has that file opened by {@code #include "lib/link.glsl"}, and its text lands
-	 * in the unit handed to the compiler. A zip cannot do this: its filesystem holds no links. A directory
-	 * gets links when a pack is extracted by a tool that honours the mode bits of an archive entry.
-	 * <p>
-	 * Pins what happens now; a fix is coming elsewhere (fix/pack-reading-limits, a real-path check), and
-	 * this method goes with it.
+	 * The confinement compares the normalised text of a path, and a link is invisible to that; the read
+	 * after it follows the link. So a directory pack that carried {@code shaders/lib/link.glsl} pointing
+	 * at a file outside the pack had that file opened by {@code #include "lib/link.glsl"}, and its text
+	 * landed in the unit handed to the compiler. A directory pack is now also asked where a path really
+	 * lands, links followed, and refused past its own folder. A zip cannot do this: its filesystem holds
+	 * no links. A directory gets links when a pack is extracted by a tool that honours the mode bits of an
+	 * archive entry.
 	 */
 	@Test
-	void knownBug_aSymlinkInsideADirectoryPackIsFollowedOutOfIt() throws IOException {
-		try (ShaderPackSource source = ShaderPackSource.open(symlinkedPack())) {
-			Path entry = source.resolveInsideShaders("composite.fsh").orElseThrow();
-			IncludeExpander.ExpandedUnit unit = new IncludeExpander(source, SettingSet.defaults()).expand(entry);
-
-			assertTrue(unit.text().contains(OUTSIDE), "the text of a file beside the pack reached the unit");
-			assertTrue(source.resolveInsideShaders("lib/link.glsl").isPresent());
-			assertTrue(source.resolveInsideShaders("linked/outside-secret.glsl").isPresent());
-			assertTrue(source.sourceFiles().stream().anyMatch(file -> source.rel(file).equals("lib/link.glsl")));
-		}
-	}
-
-	/** What the pin above should say once a path that ends outside the pack is refused whatever it is spelled as. */
-	@Test
-	@Disabled("URGENT: a symlink inside a directory pack leads out of it and the target is read")
-	void knownBug_aSymlinkInsideADirectoryPackIsFollowedOutOfIt_expected() throws IOException {
+	void aSymlinkInsideADirectoryPackIsNotFollowedOutOfIt() throws IOException {
 		try (ShaderPackSource source = ShaderPackSource.open(symlinkedPack())) {
 			Path entry = source.resolveInsideShaders("composite.fsh").orElseThrow();
 			IncludeExpander.ExpandedUnit unit = new IncludeExpander(source, SettingSet.defaults()).expand(entry);

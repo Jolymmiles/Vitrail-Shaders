@@ -72,6 +72,25 @@ public final class ShaderPackSource implements AutoCloseable {
 	private final Path shadersRoot;
 	private final FileSystem ownedFileSystem;
 
+	/**
+	 * The pack's folder as the disk resolves it, every link along the way followed, or null for an
+	 * archive.
+	 * <p>
+	 * What {@link #confine} compares against the shader root is the TEXT of a path, and the text
+	 * says nothing about where a link inside the pack leads. The read that follows does follow it:
+	 * a folder pack carrying {@code shaders/lib} as a link to {@code /} passed every check with
+	 * {@code #include "lib/..."} and then read whatever it named, and a zip of such a pack unpacked
+	 * by a tool that keeps its links, as the usual ones on a Mac and on Linux do, is exactly that
+	 * folder. So a folder pack is also asked where a path really lands, against this. An archive is
+	 * not: the zip filesystem has no links to follow, and an entry that was one reads as a file
+	 * holding the target's name.
+	 * <p>
+	 * The pack's own folder and not its shader root, so that a link between two of its own
+	 * directories goes on working, and the folder resolved rather than written, so that a
+	 * {@code shaderpacks} that is itself a link to another disk does not refuse every pack in it.
+	 */
+	private final Path realRoot;
+
 	// Directory listings, lower-cased, kept for the case-insensitive fallback below. Built on
 	// demand because most packs never need it.
 	private final Map<String, Map<String, Path>> listingsByDirectory = new HashMap<>();
@@ -117,10 +136,12 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	private int caseInsensitiveHits;
 
-	private ShaderPackSource(String packName, Path shadersRoot, FileSystem ownedFileSystem) {
+	private ShaderPackSource(String packName, Path shadersRoot, FileSystem ownedFileSystem,
+			Path realRoot) {
 		this.packName = packName;
 		this.shadersRoot = shadersRoot;
 		this.ownedFileSystem = ownedFileSystem;
+		this.realRoot = realRoot;
 	}
 
 	/**
@@ -190,7 +211,8 @@ public final class ShaderPackSource implements AutoCloseable {
 	public static ShaderPackSource open(Path packPath) throws IOException {
 		OPENINGS.incrementAndGet();
 		if (Files.isDirectory(packPath)) {
-			return new ShaderPackSource(nameOf(packPath), findShadersRoot(packPath), null);
+			return new ShaderPackSource(nameOf(packPath), findShadersRoot(packPath), null,
+					packPath.toRealPath());
 		}
 
 		String fileName = packPath.getFileName() == null ? "" : packPath.getFileName().toString();
@@ -200,7 +222,8 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		FileSystem zip = FileSystems.newFileSystem(packPath);
 		try {
-			return new ShaderPackSource(nameOf(packPath), findShadersRoot(zip.getPath("/")), zip);
+			return new ShaderPackSource(nameOf(packPath), findShadersRoot(zip.getPath("/")), zip,
+					null);
 		} catch (IOException | RuntimeException e) {
 			zip.close();
 			throw e;
@@ -259,6 +282,7 @@ public final class ShaderPackSource implements AutoCloseable {
 		try (Stream<Path> tree = Files.walk(this.shadersRoot)) {
 			List<Path> files = new ArrayList<>(tree.filter(Files::isRegularFile)
 					.filter(path -> SOURCE_EXTENSIONS.contains(extensionOf(path)))
+					.filter(this::landsInside)
 					.toList());
 			files.sort(Comparator.comparing(this::rel));
 
@@ -287,6 +311,7 @@ public final class ShaderPackSource implements AutoCloseable {
 			List<Path> files = new ArrayList<>(tree.filter(Files::isRegularFile)
 					.filter(path -> !sources.contains(path))
 					.filter(this::withinCeiling)
+					.filter(this::landsInside)
 					.toList());
 			files.sort(Comparator.comparing(this::rel));
 
@@ -428,7 +453,9 @@ public final class ShaderPackSource implements AutoCloseable {
 			return target;
 		}
 
-		return resolveIgnoringCase(target.get());
+		// Asked again of what the listing found, which is a different file from the one confined:
+		// FOO.glsl can be a link out of the pack where foo.glsl was nothing at all.
+		return resolveIgnoringCase(target.get()).filter(this::landsInside);
 	}
 
 	/**
@@ -438,6 +465,9 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * A pack is downloaded content. Without this check a crafted include could walk out of the pack
 	 * with ".." and have the engine read any file the game can reach. It is the one place the
 	 * shader root is compared against, so that every road into the pack passes it exactly once.
+	 * <p>
+	 * A folder pack is asked a second question here, where its links lead, and a link out of the
+	 * pack is refused exactly as a ".." out of it is: {@link #realRoot} says why.
 	 */
 	private Optional<Path> confine(Path base, String spec) {
 		Path target;
@@ -447,7 +477,51 @@ public final class ShaderPackSource implements AutoCloseable {
 			return Optional.empty();
 		}
 
-		return target.startsWith(this.shadersRoot) ? Optional.of(target) : Optional.empty();
+		return target.startsWith(this.shadersRoot) && landsInside(target)
+				? Optional.of(target)
+				: Optional.empty();
+	}
+
+	/**
+	 * Whether a path of a folder pack still lands inside the pack once every link on it is
+	 * followed, which an archive always does.
+	 * <p>
+	 * Asked of a path that need not exist, because {@link #insidePack} answers for a file the pack
+	 * forgot as well as for one it ships: a name under a link to {@code /} is outside the pack
+	 * whether or not anything answers to it there. So the deepest part of the path that does exist
+	 * is resolved, and the names under it are put back on as written, which cannot climb since the
+	 * path was normalised first. A link that leads nowhere counts as a name that is not there, and
+	 * nothing can be read through it either.
+	 * <p>
+	 * The two walks of the tree ask it too, and have to: they do not descend into a linked
+	 * directory, but a linked FILE is a regular file to them, and {@link #readLines} would read
+	 * whatever it points at into the option index. A path whose existing part will not resolve is
+	 * outside, which leaves nothing to read.
+	 */
+	private boolean landsInside(Path path) {
+		if (this.realRoot == null) {
+			return true;
+		}
+
+		Path existing = path;
+		Path unresolved = null;
+		while (existing != null && !Files.exists(existing)) {
+			Path name = existing.getFileName();
+			unresolved = unresolved == null ? name : name.resolve(unresolved);
+			existing = existing.getParent();
+		}
+
+		if (existing == null) {
+			return false;
+		}
+
+		try {
+			Path real = existing.toRealPath();
+
+			return (unresolved == null ? real : real.resolve(unresolved)).startsWith(this.realRoot);
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
 	}
 
 	/**
@@ -470,8 +544,18 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * opens. Inside a zip it does not, so the same pack that works as a folder would fail as an
 	 * archive. Matching without case keeps both working; the hits are counted so that a pack
 	 * relying on it can be named in the log.
+	 * <p>
+	 * The listing is of the target's parent, which for every confined path is inside the shader
+	 * root but one: the root itself, whose parent is the pack's own root. A path naming the root is
+	 * never a file, and without this refusal {@code #include ".."}, {@code #include "/"} or a texture
+	 * key of {@code .} found whatever file beside {@code shaders/} is called {@code SHADERS}, which an
+	 * archive, or a folder on a disk that tells case apart, can hold beside it.
 	 */
 	private Optional<Path> resolveIgnoringCase(Path target) {
+		if (target.equals(this.shadersRoot)) {
+			return Optional.empty();
+		}
+
 		Path parent = target.getParent();
 		Path name = target.getFileName();
 		if (parent == null || name == null || !Files.isDirectory(parent)) {

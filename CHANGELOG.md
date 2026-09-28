@@ -80,6 +80,13 @@ what the next one holds.
   written as `a || b && c` was read left to right, as `(a || b) && c`, where OptiFine, and the
   GLSL the same pack is written in, read it as `a || (b && c)`. It is now read as they read it.
   None of the packs Vitrail is usually tried with writes the two together without brackets.
+- **A pack folder can no longer read files outside itself through a link.** A pack kept as a
+  folder can carry a link to somewhere else on the disk, and unzipping a pack on a Mac or on Linux
+  keeps any link it was packed with. An include or a texture path that went through such a link
+  read whatever the link led to, anywhere the game could reach. It is now refused as a path that
+  climbs out of the pack with `..` is: the include is not found and the texture reads black. A
+  link from one folder of a pack to another of the same pack still works, and a pack in a .zip was
+  never affected.
 
 ## 0.12.0-beta
 

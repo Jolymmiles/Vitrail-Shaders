@@ -51,7 +51,10 @@ Only a fixed list of extensions is read as source. Widening it is not free: pack
 for other mods that contains lines beginning with an include directive, and scanning those changes
 every number the loader reports. The extension list is the only filter on what becomes source, and
 everything it leaves out is still reachable: proving that a name is mentioned nowhere in a pack
-means reading those files too, by a second walk that filters on the size ceiling instead.
+means reading those files too, by a second walk that filters on the size ceiling instead. Neither
+walk descends into a linked directory, but both would read a linked file as one of the pack's, so
+in a folder pack both leave out a file whose link leads outside the pack, for the reason the
+resolution below gives.
 
 The walk is then **sorted by pack-relative path**, and that sort is part of the contract. The
 settings index keeps the first declaration of a name and drops later ones, and packs do declare the
@@ -74,6 +77,19 @@ reason. A pack is downloaded content; without a check that the normalised target
 GLSL root, a specification made of dots and slashes has the engine read any file the game can reach
 and hand it to a shader.
 
+**In a folder, the text of a path is not where it leads.** A pack kept as a folder can carry links,
+and the usual tools on a Mac and on Linux keep the links of a zip they unpack. The read that comes
+after the check follows a link, so a `shaders/lib` linked to the root of the disk passed a check on
+the text and read whatever an include named under it. A folder pack is therefore asked a second
+question in the same body: where the path lands once every link on it is followed, against the
+pack's own folder resolved the same way, and a link out of the pack is refused exactly as a climb
+out of it is. A path that does not exist is resolved from its deepest part that does, so a name
+under a link out of the pack is outside whether or not anything answers to it there. The pack's
+folder and not its GLSL root, so a link between two of its own directories keeps working, and the
+folder resolved rather than as written, so a pack reached through a link of the player's own is not
+refused whole. A zip has none of this to answer: its filesystem reads an entry that was a link as a
+file holding the target's name.
+
 One detail there is easy to get wrong and silent when wrong: **the leading slashes come off before
 the resolution, not after.** Resolving an absolute-looking path against a base discards the base, so
 the search drops to the root of the archive and finds nothing, and a texture that is not found is
@@ -82,7 +98,12 @@ black rather than an error. Packs do write every one of their texture paths that
 When the exact name does not exist, the parent directory is listed once, cached by directory, and
 matched ignoring case. Packs are authored where a name that disagrees with the file on disk still
 opens; inside a zip it does not, so the same pack works as a folder and fails as an archive. The
-hits are counted so a pack that depends on it can be named rather than merely tolerated.
+hits are counted so a pack that depends on it can be named rather than merely tolerated. What the
+listing finds is asked where it leads before it is handed back, being a different file from the one
+confined: a name in another case can be a link out of the pack where the name asked for was nothing.
+A path naming the GLSL root itself is not matched at all. Its parent is the root of the pack, outside
+the GLSL root, and a file there called `SHADERS`, which an archive can hold beside `shaders/`, would
+otherwise answer `#include ".."`.
 
 ## The settings index
 

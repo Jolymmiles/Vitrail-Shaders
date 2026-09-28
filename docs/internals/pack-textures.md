@@ -55,6 +55,12 @@ both, a path that climbs out of the pack has the engine read a file the game pro
 hand its bytes to a shader as a picture. That is an arbitrary read driven by downloaded content, and
 it happens while the client is still starting up.
 
+In a pack kept as a folder the normalised text is not enough on its own, because the read that
+follows it follows a link: a folder linked out of the pack reads whatever lies under it however
+tidy the path naming it looks. So a folder pack's path is also resolved to where it really lands,
+links followed, and refused unless that is inside the pack's own folder, which is the same refusal
+as a climb with dots and reads black the same way. A zip has no links to follow.
+
 The parade is not a check but a **single resolution road**. Texture paths go through the same
 resolution an include takes, rather than being given one of their own, because a second road has to
 be found and secured separately and is the one that gets forgotten. The same door serves the
@@ -92,7 +98,12 @@ named rather than silently accommodated.
 The ordering is what keeps the fallback harmless: confinement is decided on the normalised path
 first, so the fallback only ever lists the parent of a path already inside the pack. Placed before
 the check, it would be a second and weaker resolution road, which is the very thing the single-road
-rule exists to prevent.
+rule exists to prevent. The one confined path whose parent lies outside the shader root is that root
+itself, and the fallback is never asked about it: a path naming the root is never a file, and the
+listing of its parent is the pack's own root, where a file beside `shaders/` called `SHADERS` would
+otherwise answer a texture key of `.`. In a folder pack what the listing finds is confined once more
+before it is handed back: it is another file than the one checked, and a name in another case can be
+a link out of the pack where the name the directive wrote was nothing at all.
 
 ## A cap on the file does not cap the decode
 
