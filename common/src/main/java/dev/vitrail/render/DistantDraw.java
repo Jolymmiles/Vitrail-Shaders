@@ -1266,6 +1266,11 @@ public final class DistantDraw extends FamilyDraw {
 		return drop;
 	}
 
+	@Override
+	String named() {
+		return "Distant Horizons' far terrain";
+	}
+
 	/** The programs once the far terrain has been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<DistantProgram> programs() {

@@ -2690,6 +2690,11 @@ public final class EntityDraw extends FamilyDraw {
 		return loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
 	}
 
+	@Override
+	String named() {
+		return "the entities and the hand";
+	}
+
 	/** The programs once the entities have been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<EntityProgram> programs() {

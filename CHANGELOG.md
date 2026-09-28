@@ -156,6 +156,13 @@ what the next one holds.
   whole rather than piece by piece, the opaque and the translucent particles are set up apart, and
   a half of Distant Horizons' far terrain that cannot be set up sends the whole far terrain back to
   Distant Horizons instead of leaving one half to each.
+- **Programs of a pack that could not be read in the background are named.** The sky, the entities
+  and the hand, the clouds, the weather, the particles and Distant Horizons' far terrain are read
+  in the background once a world is joined, and nothing reads them anywhere else. When that
+  reading stopped early, whatever it had not reached was drawn by the game's own shaders with a
+  single line in the log to say the reader had stopped, which on screen looks like the pack's own
+  choice. The settings screen now names what was left to the game, in red, and the log names it as
+  an error.
 
 ## 0.12.0-beta
 

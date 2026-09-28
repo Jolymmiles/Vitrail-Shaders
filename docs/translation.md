@@ -10,9 +10,9 @@ already embeds, which produces SPIR-V and performs reflection and binding remapp
 chain's own units go at selection, and the six families that draw the world and the sky follow on a
 worker as soon as the pack is loaded, read one after another on that one worker and compiled by a
 task each. Nothing else reads a family: one the worker does not reach stays unread for that load,
-and the game's own shaders draw it. What is translated is never *patched* afterwards: a setting that
-moves rebuilds its units from the pack's source, and so does a change of dimension, which rebuilds
-the lot.
+and the game's own shaders draw it, which the log and the settings screen both name as an error.
+What is translated is never *patched* afterwards: a setting that moves rebuilds its units from the
+pack's source, and so does a change of dimension, which rebuilds the lot.
 
 Two properties follow, and both are load-bearing:
 

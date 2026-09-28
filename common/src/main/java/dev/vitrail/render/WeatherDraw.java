@@ -514,6 +514,11 @@ public final class WeatherDraw extends FamilyDraw {
 		return pass.attachments();
 	}
 
+	@Override
+	String named() {
+		return "the weather";
+	}
+
 	/** The programs once the weather has been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<WeatherProgram> programs() {

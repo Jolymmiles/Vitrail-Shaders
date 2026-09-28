@@ -350,6 +350,11 @@ public final class CloudDraw extends FamilyDraw {
 		return program.prepare(device);
 	}
 
+	@Override
+	String named() {
+		return "the clouds";
+	}
+
 	/** The programs once the clouds have been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<CloudProgram> programs() {

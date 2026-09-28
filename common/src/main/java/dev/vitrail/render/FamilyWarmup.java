@@ -94,6 +94,13 @@ final class FamilyWarmup {
 	private volatile boolean released;
 
 	/**
+	 * Whether the families the worker left unread have been named, which is done once: the
+	 * worker's own catch names them the moment it dies, and the end of the whole would otherwise
+	 * name them again once a compile task had failed as well.
+	 */
+	private volatile boolean unreadNamed;
+
+	/**
 	 * Whether this chain's pack-load workers are done, whatever they managed: what moves
 	 * {@link dev.vitrail.screen.CompileCard} from its pulse to its closing words. Raised on every
 	 * road out of the workers, the refused and the stopped included, because a mark that can never
@@ -205,8 +212,10 @@ final class FamilyWarmup {
 					// harder would otherwise take this stage down EXCEPTIONALLY, and the whole
 					// would then complete while the tasks already spawned still run, out of the
 					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked;
-					// the families never reached stay unread, nothing reading them later.
+					// the families never reached stay unread, nothing reading them later, and
+					// they are named now rather than once the compiles already spawned are over.
 					Vitrail.logger().error("The pack-load worker died", e);
+					nameUnread("it died");
 				}
 
 				return compiles;
@@ -214,7 +223,9 @@ final class FamilyWarmup {
 					CompletableFuture.allOf(compiles.toArray(new CompletableFuture<?>[0])));
 		} catch (RejectedExecutionException e) {
 			// The executor only refuses while the client shuts down. No family is read then,
-			// and the flag closes the mark rather than leaving one that can never go out.
+			// which is said all the same, and the flag closes the mark rather than leaving one
+			// that can never go out.
+			nameUnread("the game's executor refused it");
 			this.warmedAt = Util.getMillis();
 			this.familiesWarmed = true;
 
@@ -228,6 +239,7 @@ final class FamilyWarmup {
 				// they did not reach stay unread either way, and one family's failure no longer
 				// stops the five others.
 				Vitrail.logger().error("The pack-load worker died", e);
+				nameUnread("it died");
 			}
 
 			this.warmedAt = Util.getMillis();
@@ -376,6 +388,44 @@ final class FamilyWarmup {
 		}
 
 		this.familiesReady++;
+	}
+
+	/**
+	 * Names the families this chain's worker did not read, as an error in the log and on the
+	 * settings screen: every one from the first it did not finish, in the chain's order.
+	 * <p>
+	 * Nothing else reads a family, so each one named here is drawn by the game's own shaders until
+	 * the pack is loaded again, and a dying worker used to say that it died and nothing about what
+	 * that cost. What it costs reads on screen as the pack's own choice rather than as a fault:
+	 * mobs, sky, clouds and rain as the game draws them, beside terrain the pack lights. A family
+	 * switched off in the options is named with the others, the game drawing it either way.
+	 * <p>
+	 * A release or a stop ends the walk on purpose, for a chain nothing will draw again, and is not
+	 * a failure to name.
+	 *
+	 * @param why what ended the walk, said of the worker
+	 */
+	private void nameUnread(String why) {
+		if (this.unreadNamed || this.released || PackChain.stopped()) {
+			return;
+		}
+
+		int ready = Math.min(this.familiesReady, this.families.size());
+		if (ready == this.families.size()) {
+			return;
+		}
+
+		this.unreadNamed = true;
+		List<String> names = this.families.subList(ready, this.families.size()).stream()
+				.map(FamilyDraw::named)
+				.toList();
+		String unread = names.size() == 1 ? names.getFirst()
+				: String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.getLast();
+		Vitrail.logger().error("The pack-load worker read nothing of {} for {}, because {}, and "
+				+ "nothing else reads a family: the game's own shaders draw them until the pack is "
+				+ "loaded again", unread, this.packPath.getFileName(), why);
+		PackChoice.error(this.packPath.getFileName() + " leaves " + unread + " to the game's own "
+				+ "shaders: they could not be read, see the log");
 	}
 
 	Collection<? extends DumpedProgram> familyPrograms(int index) {

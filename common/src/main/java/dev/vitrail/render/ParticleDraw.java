@@ -653,6 +653,11 @@ public final class ParticleDraw extends FamilyDraw {
 		return pass.attachments();
 	}
 
+	@Override
+	String named() {
+		return "the particles";
+	}
+
 	/** The programs once the particles have been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<ParticleProgram> programs() {

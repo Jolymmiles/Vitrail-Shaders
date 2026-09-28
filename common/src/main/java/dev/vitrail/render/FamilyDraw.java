@@ -22,6 +22,12 @@ import java.util.Collection;
  */
 abstract class FamilyDraw {
 
+	/**
+	 * What the log and the settings screen call this family in the middle of a sentence, which is
+	 * how a family the worker never read is named.
+	 */
+	abstract String named();
+
 	/** The programs read so far, empty until the family is read. */
 	abstract Collection<? extends DumpedProgram> programs();
 

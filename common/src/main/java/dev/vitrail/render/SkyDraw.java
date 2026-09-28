@@ -646,6 +646,11 @@ public final class SkyDraw extends FamilyDraw {
 		return pipeline;
 	}
 
+	@Override
+	String named() {
+		return "the sky";
+	}
+
 	/** The programs once the sky has been read, for the decoded dump. Empty until then. */
 	@Override
 	Collection<SkyProgram> programs() {
