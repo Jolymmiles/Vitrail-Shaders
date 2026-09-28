@@ -286,6 +286,15 @@ public final class PassTimings {
 	}
 
 	/**
+	 * Whether the timed report is on, which is the switch every other instrument of this package that
+	 * only prints beside it is asked of, {@link FrameCensus} among them. One property read for the
+	 * lot, so the two cannot disagree about whether they are running.
+	 */
+	static boolean enabled() {
+		return ENABLED;
+	}
+
+	/**
 	 * Said once a frame by the one place that settles whether the shadow map is drawn, and only
 	 * from a frame that reached that decision.
 	 *
@@ -377,6 +386,7 @@ public final class PassTimings {
 		censusIntervalsHeld = 0;
 		censusFramesMissingMap = 0;
 		censusFramesDecidingMap = 0;
+		FrameCensus.reset();
 		// Read again, so an arming file written or changed while the game runs is picked up by the
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
@@ -631,6 +641,7 @@ public final class PassTimings {
 		}
 
 		frameEnds++;
+		FrameCensus.endFrame();
 		Frame frame = current;
 		if (frame != null) {
 			current = null;
@@ -894,8 +905,9 @@ public final class PassTimings {
 			}
 		}
 
-		// Outside the branch above, because how evenly the frames arrived is a reading of the wall
-		// clock and does not need the card to have answered a single query.
+		// Outside the branch above, because the census counts calls and needs no answer from the card,
+		// and how evenly the frames arrived is a reading of the wall clock and needs none either.
+		FrameCensus.report(seconds);
 		printSpread();
 		printMissedMaps();
 

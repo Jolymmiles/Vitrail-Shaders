@@ -347,6 +347,22 @@ state, and remember that the game lowers its own frame rate after a while withou
 inactivity limit in the video settings), which moves every per-second number and none of the
 per-pass milliseconds.
 
+**What a frame binds, pushes and writes is counted under that table.** The same switch prints a
+`Frame census over N s` block after each pass table, every figure an average over the frames of the
+window, and it counts calls where the table above times them, so it needs no answer from the card
+and is the same number twice. Pipeline binds are counted where the pass takes them, whoever made the
+call, so the game's and Sodium's are in it beside this engine's, in a row of their own; a bind is
+*redundant* when the pass already held that pipeline, and nought is the number to want. Draws are
+counted the same way and filed under the family of the pipeline their pass holds. **Terrain draws are
+the one gap and it shows as a dash**: Sodium records them into the command buffer itself, past the
+pass. Descriptor pushes are counted at the game's push, with the descriptors each carried, and a
+push bound as an allocated set instead is named apart. Uniform block writes are split into the
+geometry programs', the chain's and the far terrain's, and the geometry line says how many programs
+wrote their block more than once in a frame, which is nought when the block is written once for the
+run of draws it serves. Every ring turned by this engine is a fence created and is counted as one. The
+census costs one read of a static final per hook while the switch is off, and allocates nothing
+while it is on. It says how often, not how dear: read it beside the frame rate.
+
 **The Khronos validation layer reads the whole frame on request.** The game's own
 `--vulkanValidation` argument turns it on wherever the layer is installed, and `glDebugVerbosity:2`
 in `options.txt` adds its warnings to its errors in the log. On a Mac, where the game loads the

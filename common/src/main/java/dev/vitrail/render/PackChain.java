@@ -16,6 +16,7 @@ import dev.vitrail.render.FrameCuts.Cut;
 import dev.vitrail.render.FrameCuts.Reach;
 import dev.vitrail.render.FrameCuts.Standalone;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.HostReport;
 import dev.vitrail.ScreenText;
@@ -1256,6 +1257,7 @@ public final class PackChain {
 		this.targets.depth().forgetDistant();
 
 		if (this.block != null) {
+			FrameCensus.rotated();
 			this.block.rotate();
 		}
 
@@ -1364,6 +1366,7 @@ public final class PackChain {
 	 * drawn at all. Cheap and idempotent, so both halves of the frame may ask.
 	 */
 	private Ready ready(GpuDevice device) {
+		FrameCensus.ready();
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
 		if (main == null || main.getColorTexture() == null) {
@@ -1388,6 +1391,7 @@ public final class PackChain {
 		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
 		// into the very command buffer a pass would be recording into, and the clears refuse
 		// outright while one is open.
+		FrameCensus.readyPrepared();
 		if (!prepare(device, main) || !warm(device)) {
 			return null;
 		}
@@ -1411,6 +1415,7 @@ public final class PackChain {
 		}
 
 		openTargets(device);
+		FrameCensus.readyDone();
 
 		return new Ready(main, mainView, GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null,
 				seeding);
@@ -2871,6 +2876,7 @@ public final class PackChain {
 		this.values.passColour(null);
 		this.values.projection(null);
 
+		FrameCensus.chainBlockWritten();
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
 			for (PackPass pass : this.programs) {

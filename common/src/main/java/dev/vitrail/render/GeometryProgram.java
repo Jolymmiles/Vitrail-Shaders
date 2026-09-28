@@ -18,6 +18,7 @@ import dev.vitrail.render.pbr.PbrMap;
 import dev.vitrail.render.pbr.PbrTextures;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -450,6 +451,9 @@ final class GeometryProgram {
 
 	private MappableRingBuffer block;
 
+	/** How often this program's block was written in the frame in progress, for the frame census. */
+	private final FrameCensus.Block blockWrites = new FrameCensus.Block();
+
 	/** The whole block as one slice, and the buffer it was cut from. See {@link #blockSlice}. */
 	private GpuBufferSlice blockSlice;
 
@@ -815,6 +819,7 @@ final class GeometryProgram {
 		}
 
 		this.pipeline = part(builder);
+		FrameCensus.describe(this.pipeline, pass.family());
 
 		// Filed against the pipeline and not the program, because the pipeline is what the
 		// descriptor walk can see when it has to answer for a name.
@@ -1267,6 +1272,7 @@ final class GeometryProgram {
 		}
 
 		RenderPipeline built = part(builder);
+		FrameCensus.describe(built, this.pass.family());
 
 		// The comparison note is keyed on the pipeline object, not read off its states, so it is
 		// the one answer a rebuild does not carry by itself. Left unfiled, the descriptor walk
@@ -1369,6 +1375,8 @@ final class GeometryProgram {
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	void bind(RenderPass pass) {
+		FrameCensus.programBound();
+
 		// Once, and it is the one thing that tells a pass that draws from a pass that only compiled:
 		// announce() says a program was prepared, which happens whether or not the renderer goes on
 		// to record a single command against it.
@@ -1848,6 +1856,7 @@ final class GeometryProgram {
 	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
 	void rotate() {
 		if (this.block != null) {
+			FrameCensus.rotated();
 			this.block.rotate();
 		}
 	}
@@ -1978,6 +1987,8 @@ final class GeometryProgram {
 	}
 
 	private void writeBlock() {
+		FrameCensus.geometryBlockWritten(this.blockWrites);
+
 		// Before the block and never once for the run: the two conventions alternate inside one
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.

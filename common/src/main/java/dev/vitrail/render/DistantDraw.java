@@ -10,6 +10,7 @@ import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
@@ -699,7 +700,9 @@ public final class DistantDraw extends FamilyDraw {
 			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
+			FrameCensus.farPass(true);
 			for (int index = 0; index < sections.size(); index++) {
+				FrameCensus.farSection(true);
 				pass.setUniform(DistantVertex.SECTION_BLOCK,
 						SHADOW_CORNERS.slot(device, base + index));
 
@@ -879,7 +882,9 @@ public final class DistantDraw extends FamilyDraw {
 			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
+			FrameCensus.farPass(false);
 			for (int index = 0; index < sections.size(); index++) {
+				FrameCensus.farSection(false);
 				pass.setUniform(DistantVertex.SECTION_BLOCK, CORNERS.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
@@ -1502,6 +1507,7 @@ public final class DistantDraw extends FamilyDraw {
 			}
 
 			int base = this.used;
+			FrameCensus.farBlockWritten();
 			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
 				ByteBuffer data = view.data();
 				for (int index = 0; index < sections.size(); index++) {
@@ -1533,6 +1539,7 @@ public final class DistantDraw extends FamilyDraw {
 		void rotate() {
 			this.used = 0;
 			if (this.buffer != null) {
+				FrameCensus.rotated();
 				this.buffer.rotate();
 			}
 		}
@@ -1578,6 +1585,7 @@ public final class DistantDraw extends FamilyDraw {
 						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, slotBytes(device));
 			}
 
+			FrameCensus.farBlockWritten();
 			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
 				Std140Builder.intoBuffer(view.data()).putVec2(pair.x, pair.y);
 			}
@@ -1593,6 +1601,7 @@ public final class DistantDraw extends FamilyDraw {
 
 		void rotate() {
 			if (this.buffer != null) {
+				FrameCensus.rotated();
 				this.buffer.rotate();
 			}
 		}

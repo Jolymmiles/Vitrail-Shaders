@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
@@ -264,7 +265,9 @@ final class MotionVectors {
 		compose(view, world.cameraPosition(), world.previousCameraPosition(), this.fromScreen,
 				this.toPreviousClip);
 
+		FrameCensus.rotated();
 		this.block.rotate();
+		FrameCensus.chainBlockWritten();
 		try (GpuBufferSlice.MappedView mapped = this.block.currentBuffer().map(false, true)) {
 			Std140Builder.intoBuffer(mapped.data())
 					.putMat4f(this.fromScreen)
