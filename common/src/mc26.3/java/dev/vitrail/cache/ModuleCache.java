@@ -925,6 +925,12 @@ public final class ModuleCache {
 	 * back for a while, because the caller's test is that same count: a single refusal anywhere in
 	 * here, without both of those, leaves the count high and turns every later write into a full
 	 * walk of the directory under this lock, for the rest of the session and with nothing said.
+	 * <p>
+	 * It is put down by the difference the sweep found and not as the figure, because a store adds
+	 * to the count outside this lock: a unit that lands after the listing and is added before the
+	 * count is set would otherwise be wiped from it, and a count that runs short is one the ceiling
+	 * is late to catch. What the difference can do instead is count a unit the listing saw twice,
+	 * which is the direction the count already errs in, and the next sweep's rescan puts it right.
 	 */
 	private static void sweep(Path root) {
 		synchronized (LOCK) {
@@ -932,7 +938,8 @@ public final class ModuleCache {
 				return;
 			}
 
-			long total = BYTES.get();
+			long counted = BYTES.get();
+			long total = counted;
 			try {
 				List<Unit> units = scan(root, false);
 				total = total(units);
@@ -955,7 +962,7 @@ public final class ModuleCache {
 			} catch (IOException e) {
 				sayAboutWriting("the cache could not be swept", e);
 			} finally {
-				BYTES.set(total);
+				BYTES.addAndGet(total - counted);
 
 				if (total > ceilingBytes()) {
 					nextSweepNanos = System.nanoTime() + SWEEP_BACKOFF_NANOS;

@@ -774,6 +774,12 @@ public final class TranslationCache {
 	 * The count is put down in a {@code finally}, because the caller's test is that same count: a
 	 * refusal anywhere in here without it leaves the count high and turns every later write into a
 	 * full walk of the directory under this lock, for the rest of the session and with nothing said.
+	 * <p>
+	 * It is put down by the difference the sweep found and not as the figure, because a store adds
+	 * to the count outside this lock: a blob that lands after the listing and is added before the
+	 * count is set would otherwise be wiped from it, and a count that runs short is one the ceiling
+	 * is late to catch. What the difference can do instead is count a blob the listing saw twice,
+	 * which is the direction the count already errs in, and the next sweep's rescan puts it right.
 	 */
 	private static void sweep(Path root) {
 		synchronized (LOCK) {
@@ -781,7 +787,8 @@ public final class TranslationCache {
 				return;
 			}
 
-			long total = BYTES.get();
+			long counted = BYTES.get();
+			long total = counted;
 			try {
 				List<Blob> blobs = scan(root, false);
 				total = total(blobs);
@@ -801,7 +808,7 @@ public final class TranslationCache {
 				// under this lock for the rest of the session.
 				nextSweepNanos = System.nanoTime() + SWEEP_BACKOFF_NANOS;
 			} finally {
-				BYTES.set(total);
+				BYTES.addAndGet(total - counted);
 			}
 		}
 	}
