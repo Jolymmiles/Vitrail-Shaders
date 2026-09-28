@@ -30,18 +30,19 @@ import java.util.Map;
  * <p>
  * The 26.3 half. The compiler here is {@code GlslCompiler.compileToSpv}, which the pipeline builder
  * calls once per stage and which hands back a {@code SPIRVModule} reflected on demand, where 26.2's
- * {@code createIntermediary} reflected on the spot. The same three things happen at the matching
+ * {@code createIntermediary} reflected on the spot. The same four things happen at the matching
  * places:
  * <ul>
  * <li>the debug information is skipped where the options for one compile are built, since 26.3
  * builds them per compile rather than once in the constructor;</li>
  * <li>the zeroes and the stripped names are written into the copy of shaderc's output the module
  * is built around, before any reflection can read it;</li>
- * <li>the clock runs around the whole compile.</li>
+ * <li>{@link ModuleCache} is asked before the compile and handed what came out of it, so a unit it
+ * holds is never compiled at all;</li>
+ * <li>the clock runs around the whole compile, a served unit included.</li>
  * </ul>
- * What 26.2 also did here and this does not: serve a unit from {@link ModuleCache}, which keeps
- * nothing on this game yet, and ask shaderc for a geometry stage, which this game's pipeline has no
- * room for yet; both are said where they live.
+ * What 26.2 also did here and this does not: ask shaderc for a geometry stage, which this game's
+ * pipeline has no room for yet, as is said where that lives.
  */
 @Mixin(GlslCompiler.class)
 public abstract class GlslCompilerMixin {
@@ -118,7 +119,8 @@ public abstract class GlslCompilerMixin {
 	 * A served unit is made into a module here, as the compiler makes one, and handed the samplers
 	 * its reflection leaves out, as a compiled one is where it is made: the words are the same
 	 * either way, so the reach read off them is too. The debug name is not keyed, carrying the load
-	 * number the disk key must not see.
+	 * number the disk key must not see; whether it is one of ours is, since that decides the
+	 * options {@link #vitrail$legacyOptions} hands shaderc and whether the two passes run at all.
 	 */
 	@WrapMethod(method = "compileToSpv", require = 1)
 	private SpvModule vitrail$module(String name, String source, ShaderType type,
@@ -127,7 +129,8 @@ public abstract class GlslCompilerMixin {
 		RawLocals.begin();
 		try {
 			String filename = debugName(name);
-			String key = ModuleCache.keyOf(source, type.name(), vitrail$defines(defines));
+			String key = ModuleCache.keyOf(source, type.name(), vitrail$defines(defines),
+					RawLocals.ours(filename));
 			ByteBuffer served = ModuleCache.lookup(key);
 			if (served != null) {
 				SPIRVModule module = new SPIRVModule(served, type);

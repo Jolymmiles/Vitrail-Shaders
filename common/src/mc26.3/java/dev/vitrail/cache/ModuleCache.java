@@ -74,6 +74,13 @@ import java.util.stream.Stream;
  * Two texts colliding under one blob would need a SHA-256 collision of the source, which is not
  * the trap the load number exists to prevent.
  * <p>
+ * <strong>One bit of the name is keyed all the same</strong>, because it changes the bytes: whether
+ * the unit is this engine's, which is what {@code RawLocals.ours} reads off the name. Only such a
+ * unit is compiled with its locations assigned and the OpenGL names of two builtins, and only such
+ * a unit is given its zeroes and has its names stripped, so one text compiled under a name of
+ * ours and under the game's comes out as two different modules. The bit goes in and the name,
+ * load number and all, stays out.
+ * <p>
  * <strong>What is stored is the module as its maker handed it over</strong>, at the one instant at
  * which it is finished and nothing has yet read it: {@code PipelineBuilder} rewrites the bindings
  * of a module it builds a pipeline from, so a module is stored before any caller has had it, and
@@ -317,10 +324,14 @@ public final class ModuleCache {
 	 * change, so the format token stays; old blobs under the names-in-the-key hashes sit until
 	 * the sweep collects them.
 	 *
-	 * @param source the text the compiler was handed, the pipeline's defines already injected
-	 * @param stage  vertex, fragment, or the compute recipe token, which decides the whole compile
+	 * @param source  the text the compiler was handed, the pipeline's defines already injected
+	 * @param stage   vertex, fragment, or the compute recipe token, which decides the whole compile
+	 * @param defines the defines handed to shaderc beside the text, as macros
+	 * @param ours    whether {@code RawLocals.ours} claims the unit's debug name, which decides the
+	 *                options it is compiled with and the passes run over what comes out
 	 */
-	public static @Nullable String keyOf(String source, String stage, String defines) {
+	public static @Nullable String keyOf(String source, String stage, String defines,
+			boolean ours) {
 		if (directory() == null || source.contains("#include")) {
 			return null;
 		}
@@ -350,6 +361,9 @@ public final class ModuleCache {
 		feed(digest, LocalZeroes.VERSION);
 		feed(digest, ShaderDebugInfo.cacheWord());
 		feed(digest, PackNames.cacheWord());
+		// Whose unit this is: a unit of the game's that shares its text with one of ours is compiled
+		// with other options and walked by neither pass, so the same text is two modules.
+		feed(digest, ours ? "ours" : "theirs");
 		feed(digest, stage);
 		feed(digest, defines);
 		feed(digest, source);

@@ -72,6 +72,13 @@ import java.util.stream.Stream;
  * pipelines will ask for. Two texts colliding under one blob would need a SHA-256 collision of
  * the source, which is not the trap the load number exists to prevent.
  * <p>
+ * <strong>One bit of the name is keyed all the same</strong>, because it changes what is stored:
+ * whether the unit is this engine's, which is what {@code RawLocals.ours} reads off the name. Only
+ * such a unit is given its zeroes and has its names stripped, and only such a unit has the
+ * samplers its entry point never reaches dropped from its table, so one text compiled under a name
+ * of ours and under the game's comes out as two different modules. The bit goes in and the name,
+ * load number and all, stays out.
+ * <p>
  * <strong>What is stored is the module as its maker handed it over</strong>, at the one instant at
  * which it is finished and nothing has yet bent it to a pipeline: the bytes, the uniform buffers
  * and samplers the reflection found, the inputs and outputs it numbered, and the storage images and
@@ -329,8 +336,10 @@ public final class ModuleCache {
 	 *
 	 * @param source the text the compiler was handed, the pipeline's defines already injected
 	 * @param stage  vertex, fragment, or the compute recipe token, which decides the whole compile
+	 * @param ours   whether {@code RawLocals.ours} claims the unit's debug name, which decides the
+	 *               passes run over what the compiler made and so what is stored
 	 */
-	public static @Nullable String keyOf(String source, String stage) {
+	public static @Nullable String keyOf(String source, String stage, boolean ours) {
 		if (directory() == null || !ModuleShape.available()) {
 			return null;
 		}
@@ -361,10 +370,25 @@ public final class ModuleCache {
 		feed(digest, ShaderDebugInfo.cacheWord());
 		feed(digest, PackNames.cacheWord());
 		feed(digest, SamplerReach.cacheWord());
+		// Whose unit this is: a unit of the game's that shares its text with one of ours is walked
+		// by none of those passes, so the same text is two modules.
+		feed(digest, ours ? "ours" : "theirs");
 		feed(digest, stage);
 		feed(digest, source);
 
 		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	/**
+	 * The key of a unit of this engine's own compute road, which is this engine's by construction:
+	 * {@code PackCompute} labels every unit it builds {@code pack/<load>/...}, and the stage token
+	 * that road keys under is its own, so no unit of the game's can share it.
+	 *
+	 * @param source the text shaderc is to read
+	 * @param stage  the stage token the compute road keys under
+	 */
+	public static @Nullable String keyOf(String source, String stage) {
+		return keyOf(source, stage, true);
 	}
 
 	/**

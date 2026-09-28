@@ -228,7 +228,8 @@ public abstract class GlslCompilerMixin {
 	 * move them, so they say the same thing about every unit and cannot tell two of them apart.
 	 * The debug name is handed to {@link ModuleCache#lookup} so the rebuilt module carries this
 	 * chain's identifier, and it is not hashed: that name carries the load number the disk key
-	 * must not see.
+	 * must not see. Whether it is one of ours is hashed, since that decides whether the passes run
+	 * over the module at all.
 	 */
 	@WrapMethod(method = "createIntermediary", require = 1)
 	private IntermediaryShaderModule vitrail$module(String filename, String source, ShaderType type,
@@ -244,7 +245,8 @@ public abstract class GlslCompilerMixin {
 			// different bytes, and a blob stored under the wrong one would be served to the wrong
 			// stage.
 			String key = ModuleCache.keyOf(source,
-					GeometryStage.compiling() ? GEOMETRY_STAGE : type.name());
+					GeometryStage.compiling() ? GEOMETRY_STAGE : type.name(),
+					RawLocals.ours(filename));
 			IntermediaryShaderModule served = ModuleCache.lookup(key, filename);
 			if (served != null) {
 				return served;
