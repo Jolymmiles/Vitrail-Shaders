@@ -483,12 +483,14 @@ public final class GlslTranslator {
 	 * ordinary. {@link #collectComparisonSamplers} says how a name lands here rather than below.
 	 */
 	private final List<Scoped> comparisonSamplers = new ArrayList<>();
+	private final ScopeIndex comparisonScopes = new ScopeIndex();
 
 	/**
 	 * The comparison samplers that keep their spelling, so the lookup compiles to a depth-reference
 	 * sample and the binding owes each name a comparison sampler.
 	 */
 	private final List<Scoped> hardwareComparisonSamplers = new ArrayList<>();
+	private final ScopeIndex hardwareComparisonScopes = new ScopeIndex();
 
 	/**
 	 * The FILE SCOPE declarations whose type this translation really rewrote, and nothing else.
@@ -507,6 +509,7 @@ public final class GlslTranslator {
 	 * rewritten from them; they are what {@link #countDepthLookup} measures the blind spot with.
 	 */
 	private final List<Scoped> samplerParameters = new ArrayList<>();
+	private final ScopeIndex samplerParameterScopes = new ScopeIndex();
 
 	/**
 	 * Those of {@link #samplerParameters} whose type has no level to pin, a rectangle, a buffer or
@@ -1483,6 +1486,9 @@ public final class GlslTranslator {
 	 * refuses a member declared twice.
 	 */
 	private void collectDeclarations() {
+		// Every parameter of every function is a name after a type, and the walk for its statement's
+		// end has no end to find: asked of the index once, for a pass that edits nothing.
+		StatementEnds ends = new StatementEnds(this.tokens);
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.IDENTIFIER || token.directive() != null) {
@@ -1495,7 +1501,7 @@ public final class GlslTranslator {
 			}
 
 			this.declaredNames.add(token.text());
-			this.declaredNames.addAll(continuationDeclarators(index));
+			this.declaredNames.addAll(continuationDeclarators(index, ends.after(index)));
 			if (LegacyGlsl.POST_120_BUILTINS.contains(token.text()) && this.tokens.callOpener(index) >= 0) {
 				this.shadowedBuiltins.add(token.text());
 			}
@@ -1518,9 +1524,10 @@ public final class GlslTranslator {
 	 * and belongs to a batch of its own.
 	 *
 	 * @param first the first declarator of the statement, the one the type stands in front of
+	 * @param end   where that statement ends, {@link TokenStream#statementEnd} of {@code first}, or
+	 *              -1 where it does not
 	 */
-	private List<String> continuationDeclarators(int first) {
-		int end = this.tokens.statementEnd(first);
+	private List<String> continuationDeclarators(int first, int end) {
 		if (end < 0) {
 			return List.of();
 		}
@@ -3171,7 +3178,7 @@ public final class GlslTranslator {
 		String name = this.tokens.get(first).text();
 		if (SamplerPlan.classify(name) == SamplerPlan.Kind.DEPTH) {
 			this.depthLookups++;
-		} else if (scoped(this.samplerParameters, name, line)) {
+		} else if (this.samplerParameterScopes.covers(name, line)) {
 			this.parameterLookups++;
 		}
 	}
@@ -3255,7 +3262,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		Set<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
+		ScopeIndex proven = provenParameters(pinned, fullScreen && chained.isEmpty());
 		int[] lines = this.tokens.lineNumbers();
 		List<Closing> levels = new ArrayList<>();
 
@@ -3286,8 +3293,8 @@ public final class GlslTranslator {
 
 			// The parameter first, because a function may name one after a sampler of the file's
 			// and mean its own inside its body.
-			if (scoped(this.samplerParameters, name, line)) {
-				if (!scoped(proven, name, line)) {
+			if (this.samplerParameterScopes.covers(name, line)) {
+				if (!proven.covers(name, line)) {
 					this.unpinnedParameterLookups++;
 					continue;
 				}
@@ -3319,16 +3326,17 @@ public final class GlslTranslator {
 	 * @param all whether every parameter of a levelled type is proven outright, call sites unread,
 	 *            which is the case of a program drawn over the screen asking for no chain
 	 */
-	private Set<Scoped> provenParameters(Set<String> pinned, boolean all) {
+	private ScopeIndex provenParameters(Set<String> pinned, boolean all) {
 		Set<Scoped> proven = new LinkedHashSet<>();
+		ScopeIndex scopes = new ScopeIndex();
 		if (all) {
 			for (Scoped parameter : this.samplerParameters) {
 				if (!this.unlevelledParameters.contains(parameter)) {
-					proven.add(parameter);
+					scopes.add(parameter.name(), parameter.from(), parameter.to());
 				}
 			}
 
-			return proven;
+			return scopes;
 		}
 
 		// One walk that records where each of these functions is named, rather than a walk of the
@@ -3356,18 +3364,19 @@ public final class GlslTranslator {
 					continue;
 				}
 
-				if (!callsHandOver(parameter, pinned, proven, lines,
+				if (!callsHandOver(parameter, pinned, scopes, lines,
 						sites.getOrDefault(parameter.function(), List.of()))) {
 					continue;
 				}
 
 				proven.add(parameter.scope());
+				scopes.add(parameter.scope().name(), parameter.scope().from(), parameter.scope().to());
 				pending.remove();
 				grew = true;
 			}
 		}
 
-		return proven;
+		return scopes;
 	}
 
 	/** Where each of these names is written, in the order the tokens run. */
@@ -3396,7 +3405,7 @@ public final class GlslTranslator {
 	 *              this used to walk the whole list for
 	 */
 	private boolean callsHandOver(SamplerParameter parameter, Set<String> pinned,
-			Set<Scoped> proven, int[] lines, List<Integer> sites) {
+			ScopeIndex proven, int[] lines, List<Integer> sites) {
 		boolean called = false;
 		for (int index : sites) {
 			Token token = this.tokens.get(index);
@@ -3431,8 +3440,8 @@ public final class GlslTranslator {
 
 			String name = this.tokens.get(argument).text();
 			int line = lines[argument];
-			boolean handed = scoped(this.samplerParameters, name, line)
-					? scoped(proven, name, line)
+			boolean handed = this.samplerParameterScopes.covers(name, line)
+					? proven.covers(name, line)
 					: pinned.contains(name);
 			if (!handed) {
 				return false;
@@ -4565,6 +4574,10 @@ public final class GlslTranslator {
 			return;
 		}
 
+		// A storage word that qualifies a parameter is asked about as well, and the walk for the end of
+		// its statement has none to find: the index answers for the text as it stands, which nothing
+		// here edits.
+		StatementEnds ends = new StatementEnds(this.tokens);
 		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -4574,13 +4587,13 @@ public final class GlslTranslator {
 
 			String storage = storageWord(token, this.macroAliases);
 			if ("out".equals(storage)) {
-				FileScope declared = fileScopeDeclaration(index);
+				FileScope declared = fileScopeDeclaration(index, LegacyGlsl.TYPE_NAMES, ends.after(index));
 				if (declared != null) {
 					this.declaredOutputs.addAll(declared.names());
 					this.declaredOutputScopes.add(declared);
 				}
 			} else if ("in".equals(storage) && this.stage != ProgramStage.VERTEX) {
-				FileScope declared = fileScopeDeclaration(index);
+				FileScope declared = fileScopeDeclaration(index, LegacyGlsl.TYPE_NAMES, ends.after(index));
 				if (declared != null) {
 					this.declaredInputs.add(declared);
 				}
@@ -4907,7 +4920,16 @@ public final class GlslTranslator {
 	 * and nothing else asks for.
 	 */
 	private FileScope fileScopeDeclaration(int keyword, Set<String> types) {
-		int end = this.tokens.statementEnd(keyword);
+		return fileScopeDeclaration(keyword, types, this.tokens.statementEnd(keyword));
+	}
+
+	/**
+	 * The same, told where the statement ends, for a pass that has worked that out for every keyword
+	 * at once.
+	 *
+	 * @param end {@link TokenStream#statementEnd} of {@code keyword}
+	 */
+	private FileScope fileScopeDeclaration(int keyword, Set<String> types, int end) {
 		int start = end < 0 ? -1 : this.tokens.statementStart(keyword);
 		if (start < 0) {
 			return null;
@@ -5310,16 +5332,16 @@ public final class GlslTranslator {
 				parameterTypes.add(index);
 				parameterNames.addAll(introduced);
 			} else if (bindable) {
-				this.hardwareComparisonSamplers.addAll(introduced);
+				addScoped(this.hardwareComparisonSamplers, this.hardwareComparisonScopes, introduced);
 			} else {
 				this.tokens.replace(index, plain);
-				this.comparisonSamplers.addAll(introduced);
+				addScoped(this.comparisonSamplers, this.comparisonScopes, introduced);
 				this.retypedSamplers.addAll(introduced);
 			}
 		}
 
 		if (!this.hardwareComparisonSamplers.isEmpty()) {
-			this.hardwareComparisonSamplers.addAll(parameterNames);
+			addScoped(this.hardwareComparisonSamplers, this.hardwareComparisonScopes, parameterNames);
 
 			return;
 		}
@@ -5328,7 +5350,7 @@ public final class GlslTranslator {
 			this.tokens.replace(index, withoutComparison(this.tokens.get(index).text()));
 		}
 
-		this.comparisonSamplers.addAll(parameterNames);
+		addScoped(this.comparisonSamplers, this.comparisonScopes, parameterNames);
 	}
 
 	/**
@@ -5372,7 +5394,7 @@ public final class GlslTranslator {
 			if (name >= 0 && this.tokens.get(name).kind() == Kind.IDENTIFIER) {
 				Scoped parameter = new Scoped(this.tokens.get(name).text(), lines[index],
 						lines[this.tokens.functionEnd(parameters)]);
-				this.samplerParameters.add(parameter);
+				addScoped(this.samplerParameters, this.samplerParameterScopes, List.of(parameter));
 				if (!levelled(token.text())) {
 					this.unlevelledParameters.add(parameter);
 				}
@@ -5715,23 +5737,23 @@ public final class GlslTranslator {
 	 * after the other, and a rewrite of the first would not compile.
 	 */
 	private boolean comparisonAt(String name, int line) {
-		return scoped(this.comparisonSamplers, name, line);
+		return this.comparisonScopes.covers(name, line);
 	}
 
 	/** The same question for the comparison samplers that kept their spelling. */
 	private boolean hardwareComparisonAt(String name, int line) {
-		return scoped(this.hardwareComparisonSamplers, name, line);
+		return this.hardwareComparisonScopes.covers(name, line);
 	}
 
-	/** Whether one of these names means what the list says it does on this line. */
-	private static boolean scoped(Collection<Scoped> names, String name, int line) {
-		for (Scoped scoped : names) {
-			if (scoped.name().equals(name) && line >= scoped.from() && line <= scoped.to()) {
-				return true;
-			}
+	/**
+	 * Adds names to a list and to the index that answers for it, which is the only way either is
+	 * added to: a name in one and not in the other would make the question and the report disagree.
+	 */
+	private static void addScoped(List<Scoped> list, ScopeIndex index, Collection<Scoped> added) {
+		list.addAll(added);
+		for (Scoped one : added) {
+			index.add(one.name(), one.from(), one.to());
 		}
-
-		return false;
 	}
 
 	/**
