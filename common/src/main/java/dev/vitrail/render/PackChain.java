@@ -22,7 +22,6 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
-import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -1331,11 +1330,10 @@ public final class PackChain {
 			// NOT replaced on the way out, so nothing else would ever reset it, and a world joined
 			// again would be measured against where the player stood in the one they left.
 			chain.voxelAnchored = false;
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			// No release of its own, unlike every other hook: the try above holds it, and a chain it
+			// has already released is not released twice.
+			FAILURE.abandon(e, HookFailure.NOTHING);
 		}
 	}
 
@@ -1977,16 +1975,13 @@ public final class PackChain {
 
 			GameRender.redirectFeatures(layer, main.getDepthTextureView());
 			chain.redirected = true;
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
 			// The overrides are cleared on the way out rather than left half set: one standing past
 			// this point swallows every later feature draw of the frame.
-			GameRender.endFeatureRedirect();
-			chain.redirected = false;
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, () -> {
+				GameRender.endFeatureRedirect();
+				chain.redirected = false;
+			}, chain::release);
 		}
 	}
 
