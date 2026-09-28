@@ -4,9 +4,12 @@ import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetSchedule;
+import dev.vitrail.Vitrail;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Where a frame cuts the chain, and which cut a program belongs to: the order the passes are kept
@@ -135,5 +138,59 @@ final class FrameCuts {
 		boolean takes(Standalone waiting, int at) {
 			return this == PAST_END ? waiting.at() >= at : waiting.at() == at;
 		}
+	}
+
+	/**
+	 * Places each of them in the walk, at the moment the program it hangs off would have run.
+	 * <p>
+	 * Iris puts its compute-only pass at the index the missing program holds inside its own stage
+	 * ({@code CompositeRenderer.java:137-145}), so the moment is the program's place in the frame
+	 * and not the head of its stage: a pack shipping {@code composite3.csh} with no
+	 * {@code composite3.fsh} runs it after {@code composite2} and before {@code composite4}, and the
+	 * halves it reads are the ones those two left behind. Read off the names for the same reason the
+	 * plan reads its ranks off them: a position in a list moves the moment the day a pass is cut,
+	 * and it moves without a word.
+	 * <p>
+	 * Sorted in frame order, which is what settles two that land on the same index: RenderPearl
+	 * draws no full screen pass at all and ships five such computes, so all five stand on index
+	 * nought, and taken in the order their file names came out of the map its {@code deferred} ran
+	 * after its {@code composite3}.
+	 *
+	 * @param standingAlone the programs the place ships a compute for and draws no pass for
+	 * @param schedule      the plan's schedule, which says the halves each of them reads
+	 * @param built         the programs of the passes that are drawn, in frame order
+	 */
+	static List<Standalone> standaloneOf(Set<String> standingAlone, TargetSchedule schedule,
+			List<String> built) {
+		if (standingAlone.isEmpty()) {
+			return List.of();
+		}
+
+		Comparator<String> order = ProgramNames.frameOrder();
+		List<Standalone> waiting = new ArrayList<>();
+		for (String program : standingAlone) {
+			TargetSchedule.Bound step = schedule.passing(program).orElse(null);
+			// The plan named it and the schedule did not, which is the plan disagreeing with itself
+			// rather than anything a pack can cause. Left undispatched: a compute pushed with no
+			// halves would be handed no colour target at all and throw once per frame.
+			if (step == null) {
+				Vitrail.logger().warn("compute of {} is not dispatched: the schedule gives it no "
+						+ "halves to read", program);
+				continue;
+			}
+
+			// The same test the plan stops its walk of the overrides on, so that the moment this
+			// dispatch takes and the halves the plan says it reads are the one answer.
+			int at = 0;
+			while (at < built.size() && ProgramNames.before(built.get(at), program)) {
+				at++;
+			}
+
+			waiting.add(new Standalone(Cut.of(program), at, program, step));
+		}
+
+		waiting.sort(Comparator.comparing(Standalone::program, order));
+
+		return List.copyOf(waiting);
 	}
 }
