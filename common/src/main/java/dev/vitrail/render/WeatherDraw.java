@@ -24,11 +24,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The door the weather renderer comes in by, and the one place a pack's {@code gbuffers_weather} is
@@ -147,8 +145,9 @@ public final class WeatherDraw extends FamilyDraw {
 
 	/** The reasons the curtain has already been handed back to the game. One line each, not one a
 	 * frame. The entities' rule, and this family owed it as much as they did: a curtain drawn by the
-	 * game inside a pack lit world is exactly the plausible and wrong picture nothing reports. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	 * game inside a pack lit world is exactly the plausible and wrong picture nothing reports.
+	 * Nothing is composed for a reason already given: {@link Refusals} says what that saves. */
+	private final Refusals refused = new Refusals();
 
 	/** The program of the pass being recorded, between the moment it is prepared and its draws. */
 	private WeatherProgram drawing;
@@ -386,6 +385,9 @@ public final class WeatherDraw extends FamilyDraw {
 		RenderPipeline pipeline = program.prepare(device);
 		if (pipeline == null) {
 			this.drawing = null;
+			if (!this.refused.first("prepare", element)) {
+				return null;
+			}
 
 			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
 					+ "refused to prepare, which it says on its own line above. That is settled for as "

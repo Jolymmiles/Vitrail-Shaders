@@ -150,9 +150,10 @@ public final class ParticleDraw extends FamilyDraw {
 	private volatile boolean read;
 
 	/**
-	 * The reasons this engine has already handed a group back, one line each and not one a frame.
+	 * The reasons this engine has already handed a group back, one line each and not one a frame,
+	 * and nothing composed for a reason already given: {@link Refusals} says what that saves.
 	 */
-	private final Set<String> refused = new LinkedHashSet<>();
+	private final Refusals refused = new Refusals();
 
 	/** The foreign pipelines already written about, so that line comes out once per caller and
 	 * costs nothing on the draws after it. */
@@ -481,7 +482,12 @@ public final class ParticleDraw extends FamilyDraw {
 		if (pipeline == null) {
 			// Lasting, and it is GeometryProgram that makes it so: a program that would not compile
 			// latches broken and answers null for the rest of the load. Keyed by the half, the two
-			// being two files on most packs.
+			// being two files on most packs, and the half asked about before its key and its
+			// sentence are composed, which every group after the first would build again.
+			if (!this.refused.first("prepare", element)) {
+				return null;
+			}
+
 			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
 					+ "refused to prepare, which it says on its own line above. That is settled for "
 					+ "as long as this pack is loaded, so it paints steadily rather than as a "
@@ -493,6 +499,10 @@ public final class ParticleDraw extends FamilyDraw {
 		// pass it could not build, and only the first is safe to bind a pipeline of ours into.
 		RenderPassDescriptor pass = program.descriptor(colour, depth);
 		if (pass == null && !program.plain()) {
+			if (!this.refused.first("unallocated", element)) {
+				return null;
+			}
+
 			return refuse("unallocated:" + element.element(), "one of the pack's colour targets had "
 					+ "no image yet on some frame, so the pass this half wanted could not be built "
 					+ "then. That comes and goes with the frame rather than lasting");

@@ -1569,8 +1569,11 @@ public final class EntityDraw extends FamilyDraw {
 	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
 	private volatile boolean read;
 
-	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	/**
+	 * The reasons a draw has already been handed back to the game. One line each, not one a frame,
+	 * and nothing composed for a reason already given: {@link Refusals} says what that saves.
+	 */
+	private final Refusals refused = new Refusals();
 
 	/**
 	 * The pipelines whose casters have already been reported dropped, which is the same "once each"
@@ -1877,7 +1880,15 @@ public final class EntityDraw extends FamilyDraw {
 			// like six of the entity ones, so a key on the target alone would let whichever came first
 			// speak for both and the log would never say the glint went back too. Keying on the piece
 			// instead would say it once per row, which is six lines for the one thing that happened.
+			//
+			// Asked by the same two before anything is composed, the family in the word and the
+			// target as what it is about: the sentence below is six hundred characters that a frame
+			// of mobs would otherwise build for every draw it hands back.
 			String target = GameRender.drawTargetName(prepared);
+			if (!draw.refused.first(element.glint() ? "elsewhere:glint" : "elsewhere:entity",
+					target)) {
+				return false;
+			}
 
 			return draw.refuse(element, "elsewhere:" + (element.glint() ? "glint" : "entity") + ":"
 					+ target, true, "the game sends it to "
@@ -1981,6 +1992,13 @@ public final class EntityDraw extends FamilyDraw {
 			// No pack of the corpus is in that position, measured over its twenty five places. The
 			// line is written for the pack that will be, because this is the one shape of failure
 			// that looks like a decision rather than a fault.
+			//
+			// And it is every draw of that piece for as long as the pack is loaded, so the piece is
+			// asked about before its line is composed, and a draw after the first composes nothing.
+			if (!this.refused.first("missing", element)) {
+				return false;
+			}
+
 			return refuse(element, "missing:" + element.element(), true,
 					"the load left no program for the " + element.element() + " piece");
 		}
@@ -2035,6 +2053,15 @@ public final class EntityDraw extends FamilyDraw {
 			PreparedRenderType prepared) {
 		end();
 
+		// A program that did not build latches broken in GeometryProgram and never unlatches, and
+		// once its refusal below has been reached nothing after this line can end otherwise: the
+		// frame opened, the targets allocated and the program asked again, on every draw of every
+		// frame, for the same no. Asked of the program's own body, whose latch it is; the pass
+		// above is still closed first, the game drawing this one itself.
+		if (!program.body.servable() && this.refused.reached("prepare", element)) {
+			return false;
+		}
+
 		// NONE OF THESE THREE inside the light's walk, and TerrainDraw skips the same three there.
 		// The walk stands after the chain has closed the frame, so both per frame guards are down
 		// again: opening here advances the value store a SECOND time, which turns every
@@ -2077,6 +2104,10 @@ public final class EntityDraw extends FamilyDraw {
 			// The glint is the exception and takes the piece, because its four are ONE name: they are
 			// four compiled modules against four different sets of attachments, so the argument above
 			// runs the other way and one key would hide three failures behind the first.
+			if (!this.refused.first("prepare", element)) {
+				return false;
+			}
+
 			return refuse(element, "prepare:" + (element.glint() ? element.element() : element.program()),
 					true,
 					"the " + element.element() + " program refused to prepare, which it says on its "
@@ -2138,7 +2169,9 @@ public final class EntityDraw extends FamilyDraw {
 	 * anything downstream latches, and {@code GeometryProgram} latches broken.
 	 * <p>
 	 * Once per reason and keyed on the reason rather than on the sentence, because the alternative
-	 * is a line a frame at sixty frames a second and the sentences carry the piece's name.
+	 * is a line a frame at sixty frames a second and the sentences carry the piece's name. A caller
+	 * whose key or sentence is composed asks {@link Refusals#first} before it composes either, so a
+	 * reason already given costs a lookup and not two strings.
 	 *
 	 * @param reason  what this is, for the dedup and for nothing else
 	 * @param lasting whether it holds for the whole load rather than for this frame

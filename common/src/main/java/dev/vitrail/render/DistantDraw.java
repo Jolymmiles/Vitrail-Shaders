@@ -50,12 +50,10 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.Set;
 
 /**
  * Draws Distant Horizons' far terrain with the pack's own programs, where DH would have drawn it
@@ -297,8 +295,11 @@ public final class DistantDraw extends FamilyDraw {
 	/** Whether the pack has been read for its far terrain. A reading that served nothing is still one. */
 	private volatile boolean read;
 
-	/** The reasons this engine has already said something about, one line each and not one a frame. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	/**
+	 * The reasons this engine has already said something about, one line each and not one a frame,
+	 * and nothing composed for a reason already given: {@link Refusals} says what that saves.
+	 */
+	private final Refusals refused = new Refusals();
 
 	/** Where the far terrain leaves its depth, in DH's own volume and reversed like the game's. */
 	private GpuTexture depth;
@@ -728,9 +729,14 @@ public final class DistantDraw extends FamilyDraw {
 	 * The half is part of the key and not only of the sentence: the two are refused independently,
 	 * and one line naming the opaque half would otherwise stand for a water half nobody was told
 	 * about.
+	 * <p>
+	 * The half is asked about under the reason's own word before the key is composed, which a map
+	 * refused for good would otherwise build every frame. The picture's refusals ask under some of
+	 * the same words, and the two never meet: the light's halves are rows of their own.
 	 */
 	private void refuseShadow(Element element, String reason, String why) {
-		if (this.refused.add("shadow:" + reason + ":" + element.element())) {
+		if (this.refused.first(reason, element)
+				&& this.refused.add("shadow:" + reason + ":" + element.element())) {
 			Vitrail.logger().warn("The {} half of the far terrain is not drawn into the shadow map "
 					+ "because {}", element.half(), why);
 		}
@@ -776,6 +782,10 @@ public final class DistantDraw extends FamilyDraw {
 
 		RenderPipeline pipeline = program.prepare(device, this.values.world().drawnDistantProjection());
 		if (pipeline == null) {
+			if (!unsaid(element, "prepare", "dropped:prepare")) {
+				return drops(element);
+			}
+
 			return refuse(element, "prepare:" + element.element(), "the " + element.element()
 					+ " program refused to prepare, which it says on its own line above. That is "
 					+ "settled for as long as this pack is loaded, so the far terrain keeps Distant "
@@ -802,6 +812,10 @@ public final class DistantDraw extends FamilyDraw {
 
 		RenderPassDescriptor descriptor = program.descriptor(main.getColorTextureView(), into);
 		if (descriptor == null && !program.plain()) {
+			if (!unsaid(element, "unallocated", "dropped:unallocated")) {
+				return drops(element);
+			}
+
 			return refuse(element, "unallocated:" + element.element(), "one of the pack's colour "
 					+ "targets had no image yet on some frame, so the pass this half wanted could not "
 					+ "be built then. That comes and goes with the frame rather than lasting");
@@ -851,6 +865,10 @@ public final class DistantDraw extends FamilyDraw {
 		// terrain it meets.
 		int base = CORNERS.write(device, sections, minecraft.gameRenderer.mainCamera().position());
 		if (base < 0) {
+			if (!unsaid(element, "sections", "dropped:sections")) {
+				return drops(element);
+			}
+
 			return refuse(element, "sections", "the far terrain grew wider than the block holding its "
 					+ "section corners between the two halves of one frame, and the wider block cannot "
 					+ "replace the one the half already recorded is drawn from. The next frame has it");
@@ -875,7 +893,8 @@ public final class DistantDraw extends FamilyDraw {
 					// Which of the two it names is the whole of what this is here to learn.
 					if (piece.vertices().isClosed() || piece.indices().isClosed()) {
 						String closed = piece.vertices().isClosed() ? "vertex" : "index";
-						if (this.refused.add("closed:" + closed + ":" + element.element())) {
+						if (this.refused.first(closed, element)
+								&& this.refused.add("closed:" + closed + ":" + element.element())) {
 							Vitrail.logger().warn("A piece of the {} half of the far terrain reached "
 									+ "this frame's draw with its {} buffer closed, and is dropped. "
 									+ "Distant Horizons closed it between its own pass and this one",
@@ -1255,7 +1274,7 @@ public final class DistantDraw extends FamilyDraw {
 	 *         it back to DH
 	 */
 	private boolean refuse(Element element, String reason, String why) {
-		boolean drop = element.afterDeferred() && this.drew;
+		boolean drop = drops(element);
 		if (this.refused.add((drop ? "dropped:" : "") + reason)) {
 			Vitrail.logger().warn("The {} half of the far terrain {} because {}", element.half(),
 					drop ? "is dropped on such frames, the opaque half being this engine's already"
@@ -1264,6 +1283,21 @@ public final class DistantDraw extends FamilyDraw {
 		}
 
 		return drop;
+	}
+
+	/** Whether {@link #refuse} would drop this half for the frame rather than hand it back. */
+	private boolean drops(Element element) {
+		return element.afterDeferred() && this.drew;
+	}
+
+	/**
+	 * Whether a refusal of this half is still to be composed, asked before it is: a half handed
+	 * back for a lasting reason comes back through here every frame, and composed each time its key
+	 * and its sentence are two strings for a line already said. Under one word for the half handed
+	 * back and another for the half dropped, the drop being part of the key.
+	 */
+	private boolean unsaid(Element element, String kept, String dropped) {
+		return this.refused.first(drops(element) ? dropped : kept, element);
 	}
 
 	@Override
