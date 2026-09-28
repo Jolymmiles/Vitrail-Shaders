@@ -338,11 +338,11 @@ class TranslationCacheTest {
 	}
 
 	/**
-	 * A fix is coming elsewhere: a blob whose digest is right but that does not decode will be
-	 * reported instead of passing silently. Pinned as it is until then.
+	 * The digest answers for the bytes, so a blob that still does not decode is the writer and the
+	 * reader of this build disagreeing, and not a damaged file: it is a miss, and it is said.
 	 */
 	@Test
-	void characterizes_aBlobWithARightDigestThatDoesNotDecodeIsAMissAndSaysNothing() throws Exception {
+	void aBlobWithARightDigestThatDoesNotDecodeIsAMissAndIsReportedOnce() throws Exception {
 		install();
 		String key = baseKey();
 		byte[] packed = deflate("not a translated program".getBytes(StandardCharsets.UTF_8));
@@ -351,6 +351,8 @@ class TranslationCacheTest {
 		Files.write(store().resolve(key + ".tr"), file);
 
 		assertNull(TranslationCache.lookup(key, VertexInputs.TERRAIN));
+		String refusal = TranslationCache.takeRefusal();
+		assertTrue(refusal.contains("could not be read back"), refusal);
 		assertEquals("", TranslationCache.takeRefusal());
 	}
 

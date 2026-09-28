@@ -64,6 +64,8 @@ import java.util.zip.InflaterOutputStream;
  * <p>
  * Absent, unreadable, corrupt, larger than any translation is, or of a shape this build cannot
  * read: every one of them is a MISS, and a miss is the translation that would have happened anyway.
+ * The last of those is also said, once a run, since a blob its digest answers for and this build
+ * cannot read is a writer and a reader that disagree rather than a file that was damaged.
  * <p>
  * The store is bounded at a quarter of a gigabyte, and bounded per edition rather than in total: a
  * development install that keeps a neighbour holds two editions and half a gigabyte. It is off
@@ -308,6 +310,16 @@ public final class TranslationCache {
 			byte[] blob = inflate(raw, length);
 			program = TranslatedProgramCodec.read(blob, blob.length, inputs);
 		} catch (IOException | RuntimeException e) {
+			// Said, where a damaged file above is not. The digest has answered for these bytes, so
+			// they are the ones the writer put down, and a blob that still does not read back is
+			// this build's writer and reader disagreeing: a miss every load and nothing else to see.
+			// A blob made for another vertex format lands here too and is said for the same
+			// reason. The format is in the key, and the program stored under a key was translated
+			// for the format that key was made of, so no ordinary road reaches another one: only a
+			// key that has come apart from its blob does.
+			refuse("a stored translation answered for its own bytes and still could not be read "
+					+ "back (" + e + ")");
+
 			return null;
 		} catch (OutOfMemoryError e) {
 			// Not the damaged file: the digest above answers for the bytes on disk, so damage is
