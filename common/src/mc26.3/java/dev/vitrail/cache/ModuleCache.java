@@ -18,21 +18,14 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
@@ -136,9 +129,6 @@ public final class ModuleCache {
 
 	/** Five words is the header alone, so nothing shorter can be a module. */
 	private static final int SHORTEST = 20;
-
-	/** SHA-256, sitting behind the module in every file and answering for it. */
-	private static final int DIGEST_BYTES = 32;
 
 
 	/**
@@ -330,10 +320,10 @@ public final class ModuleCache {
 			return null;
 		}
 
-		MessageDigest digest = sha256();
+		MessageDigest digest = ModuleStore.sha256();
 
-		feed(digest, FORMAT);
-		feed(digest, Vitrail.cacheVersion());
+		ModuleStore.feed(digest, FORMAT);
+		ModuleStore.feed(digest, Vitrail.cacheVersion());
 
 		// The commit, on a development build and only there. The folder already keeps two such
 		// builds apart, and this is the same claim made where the class makes every other one: the
@@ -342,25 +332,25 @@ public final class ModuleCache {
 		// every key a player already holds exactly where it was.
 		String build = Vitrail.buildIdentity();
 		if (!build.isEmpty()) {
-			feed(digest, build);
+			ModuleStore.feed(digest, build);
 		}
 
-		feed(digest, Vitrail.platform().minecraftVersion());
-		feed(digest, Vitrail.platform().loaderName());
-		feed(digest, Vitrail.platform().loaderVersion());
-		feed(digest, Version.getVersion());
+		ModuleStore.feed(digest, Vitrail.platform().minecraftVersion());
+		ModuleStore.feed(digest, Vitrail.platform().loaderName());
+		ModuleStore.feed(digest, Vitrail.platform().loaderVersion());
+		ModuleStore.feed(digest, Version.getVersion());
 		// The two switches that change the bytes a compile produces without changing its text: each
 		// state keeps its own set of blobs, and a reading taken under one never draws another's.
-		feed(digest, RawLocals.cacheWord());
-		feed(digest, LocalZeroes.VERSION);
-		feed(digest, ShaderDebugInfo.cacheWord());
-		feed(digest, PackNames.cacheWord());
+		ModuleStore.feed(digest, RawLocals.cacheWord());
+		ModuleStore.feed(digest, LocalZeroes.VERSION);
+		ModuleStore.feed(digest, ShaderDebugInfo.cacheWord());
+		ModuleStore.feed(digest, PackNames.cacheWord());
 		// Whose unit this is: a unit of the game's that shares its text with one of ours is compiled
 		// with other options and walked by neither pass, so the same text is two modules.
-		feed(digest, ours ? "ours" : "theirs");
-		feed(digest, stage);
-		feed(digest, defines);
-		feed(digest, source);
+		ModuleStore.feed(digest, ours ? "ours" : "theirs");
+		ModuleStore.feed(digest, stage);
+		ModuleStore.feed(digest, defines);
+		ModuleStore.feed(digest, source);
 
 		return HexFormat.of().formatHex(digest.digest());
 	}
@@ -400,8 +390,8 @@ public final class ModuleCache {
 			return null;
 		}
 
-		int length = raw.length - DIGEST_BYTES;
-		if (length <= 0 || !answersForItself(raw, length)) {
+		int length = raw.length - ModuleStore.DIGEST_BYTES;
+		if (length <= 0 || !ModuleStore.answersForItself(raw, length)) {
 			sayAboutReading("a stored module did not answer for its own bytes");
 
 			return null;
@@ -412,26 +402,12 @@ public final class ModuleCache {
 			return null;
 		}
 
-		touch(file);
+		ModuleStore.touch(file);
 		SERVED.incrementAndGet();
 		SERVED_SINCE_LAUNCH.incrementAndGet();
 		lastUnitNanos = System.nanoTime();
 
 		return spirv;
-	}
-
-	/**
-	 * Whether the digest a file carries answers for the module in front of it.
-	 * <p>
-	 * The magic word and the length are cheap and they are not enough: a file cut on a four byte
-	 * boundary keeps both, and what a cut module reaches next is a native parser with nothing
-	 * between it and the process. This is the check that makes the class's promise true.
-	 */
-	private static boolean answersForItself(byte[] raw, int length) {
-		MessageDigest digest = sha256();
-		digest.update(raw, 0, length);
-
-		return Arrays.equals(digest.digest(), 0, DIGEST_BYTES, raw, length, raw.length);
 	}
 
 	/**
@@ -525,9 +501,9 @@ public final class ModuleCache {
 			// The module, then the digest that answers for it. Behind rather than in front, so
 			// nothing inside has to move to make room for it.
 			Files.write(part, raw);
-			Files.write(part, sha256(raw), StandardOpenOption.APPEND);
-			move(part, file);
-			BYTES.addAndGet(raw.length + (long) DIGEST_BYTES);
+			Files.write(part, ModuleStore.sha256(raw), StandardOpenOption.APPEND);
+			ModuleStore.move(part, file);
+			BYTES.addAndGet(raw.length + (long) ModuleStore.DIGEST_BYTES);
 		} catch (IOException e) {
 			sayAboutWriting("a module could not be stored", e);
 
@@ -601,7 +577,7 @@ public final class ModuleCache {
 		Vitrail.logger().info("Module cache: {} units served, {} built by the compiler, {} and {} "
 						+ "since this launch, {} MB in {}",
 				hits, misses, SERVED_SINCE_LAUNCH.get(), COMPILED_SINCE_LAUNCH.get(),
-				megabytes(BYTES.get()), root == null ? "nowhere" : root);
+				ModuleStore.megabytes(BYTES.get()), root == null ? "nowhere" : root);
 		// Said only where a load rebuilt something a store already held units of: a cold first
 		// load builds everything for a reason nobody needs told, a warm one rebuilding a handful
 		// has a reason worth finding, and the names are where the search starts.
@@ -657,7 +633,7 @@ public final class ModuleCache {
 			Path root = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID).resolve(FOLDER);
 			Path mine = root.resolve(Vitrail.cacheEdition());
 			Files.createDirectories(mine);
-			touch(mine);
+			ModuleStore.touch(mine);
 			String left = dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
 			if (!left.isEmpty()) {
 				Vitrail.logger().warn("The module cache could not take away all that another build "
@@ -680,65 +656,6 @@ public final class ModuleCache {
 	 */
 	static String dropOtherEditions(Path root, Path mine, String family) {
 		return ModuleStore.dropOtherEditions(root, mine, family);
-	}
-
-	private static byte[] sha256(byte[] raw) {
-		return sha256().digest(raw);
-	}
-
-	private static MessageDigest sha256() {
-		try {
-			return MessageDigest.getInstance("SHA-256");
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-256 is required of every Java runtime", e);
-		}
-	}
-
-	/**
-	 * One piece of the key, behind its own length so that two different splits of the same
-	 * characters cannot hash alike.
-	 * <p>
-	 * <strong>The versions are the half that is easy to leave out and expensive to leave
-	 * out</strong>: the text alone names none of them, and a translator that emits differently, a
-	 * game that compiles differently, a loader that patches the compiler, or an LWJGL bump that
-	 * brings a new shaderc and a new SPIRV-Cross with it are each a different answer to a question
-	 * whose text has not moved. Serving the old blob for one of those is exactly the failure this
-	 * class has to be unable to have, and not one of them announces itself any other way.
-	 */
-	private static void feed(MessageDigest digest, String text) {
-		byte[] raw = text.getBytes(StandardCharsets.UTF_8);
-		digest.update(new byte[] {
-				(byte) (raw.length >>> 24), (byte) (raw.length >>> 16),
-				(byte) (raw.length >>> 8), (byte) raw.length,
-		});
-		digest.update(raw);
-	}
-
-	/** The neighbour and then the move, which is what makes a half written file impossible. */
-	private static void move(Path part, Path file) throws IOException {
-		try {
-			Files.move(part, file, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException e) {
-			Files.move(part, file, StandardCopyOption.REPLACE_EXISTING);
-		}
-	}
-
-	/**
-	 * Marks a unit as asked for, so that the sweep drops what nothing loads rather than what was
-	 * written longest ago. A stamp that cannot be set costs a worse choice later and nothing now.
-	 * <p>
-	 * The edition's own directory is stamped the same way at {@link #open}, and that is the half
-	 * that has to be written down: a file system already moves a directory's stamp when a unit is
-	 * created inside it, so a run that WROTE is stamped whether this line exists or not, while a run
-	 * that hit on everything wrote nothing and would read as abandoned by the very next build.
-	 * Between the two, the stamp is the last time the edition was used at all.
-	 */
-	private static void touch(Path file) {
-		try {
-			Files.setLastModifiedTime(file, FileTime.from(Instant.now()));
-		} catch (IOException ignored) {
-			// Deliberately silent, and deliberately not a miss: the blob itself is fine either way.
-		}
 	}
 
 	/**
@@ -838,7 +755,7 @@ public final class ModuleCache {
 				if (total < before) {
 					Vitrail.logger().info("The module cache went over its ceiling, so the units "
 							+ "nothing has asked for lately were dropped, {} MB left",
-							megabytes(total));
+							ModuleStore.megabytes(total));
 				}
 			} catch (IOException e) {
 				sayAboutWriting("the cache could not be swept", e);
@@ -879,10 +796,6 @@ public final class ModuleCache {
 			Vitrail.logger().warn("In the module cache, {}: {}. Said once a run: the next load pays "
 					+ "for the compile again and nothing else changes", what, cause.toString());
 		}
-	}
-
-	private static String megabytes(long amount) {
-		return String.format(Locale.ROOT, "%.1f", amount / 1048576.0D);
 	}
 
 	/** One file of the cache, with what the sweep needs to order it and to subtract it. */

@@ -5,11 +5,20 @@ import dev.vitrail.Vitrail;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
@@ -29,7 +38,87 @@ final class ModuleStore {
 	 */
 	private static final String EDITION_SEPARATOR = "+";
 
+	/** SHA-256, sitting behind the module in every file and answering for it. */
+	static final int DIGEST_BYTES = 32;
+
 	private ModuleStore() {
+	}
+
+	static byte[] sha256(byte[] raw) {
+		return sha256().digest(raw);
+	}
+
+	static MessageDigest sha256() {
+		try {
+			return MessageDigest.getInstance("SHA-256");
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-256 is required of every Java runtime", e);
+		}
+	}
+
+	/**
+	 * One piece of the key, behind its own length so that two different splits of the same
+	 * characters cannot hash alike.
+	 * <p>
+	 * <strong>The versions are the half that is easy to leave out and expensive to leave
+	 * out</strong>: the text alone names none of them, and a translator that emits differently, a
+	 * game that compiles differently, a loader that patches the compiler, or an LWJGL bump that
+	 * brings a new shaderc and a new SPIRV-Cross with it are each a different answer to a question
+	 * whose text has not moved. Serving the old blob for one of those is exactly the failure this
+	 * class has to be unable to have, and not one of them announces itself any other way.
+	 */
+	static void feed(MessageDigest digest, String text) {
+		byte[] raw = text.getBytes(StandardCharsets.UTF_8);
+		digest.update(new byte[] {
+				(byte) (raw.length >>> 24), (byte) (raw.length >>> 16),
+				(byte) (raw.length >>> 8), (byte) raw.length,
+		});
+		digest.update(raw);
+	}
+
+	/** The neighbour and then the move, which is what makes a half written file impossible. */
+	static void move(Path part, Path file) throws IOException {
+		try {
+			Files.move(part, file, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(part, file, StandardCopyOption.REPLACE_EXISTING);
+		}
+	}
+
+	/**
+	 * Marks a unit as asked for, so that the sweep drops what nothing loads rather than what was
+	 * written longest ago. A stamp that cannot be set costs a worse choice later and nothing now.
+	 * <p>
+	 * The edition's own directory is stamped the same way at {@link ModuleCache#open}, and that is the half
+	 * that has to be written down: a file system already moves a directory's stamp when a unit is
+	 * created inside it, so a run that WROTE is stamped whether this line exists or not, while a run
+	 * that hit on everything wrote nothing and would read as abandoned by the very next build.
+	 * Between the two, the stamp is the last time the edition was used at all.
+	 */
+	static void touch(Path file) {
+		try {
+			Files.setLastModifiedTime(file, FileTime.from(Instant.now()));
+		} catch (IOException ignored) {
+			// Deliberately silent, and deliberately not a miss: the blob itself is fine either way.
+		}
+	}
+
+	static String megabytes(long amount) {
+		return String.format(Locale.ROOT, "%.1f", amount / 1048576.0D);
+	}
+
+	/**
+	 * Whether the digest a file carries answers for the module in front of it.
+	 * <p>
+	 * The magic word and the length are cheap and they are not enough: a file cut on a four byte
+	 * boundary keeps both, and what a cut module reaches next is a native parser with nothing
+	 * between it and the process. This is the check that makes the class's promise true.
+	 */
+	static boolean answersForItself(byte[] raw, int length) {
+		MessageDigest digest = sha256();
+		digest.update(raw, 0, length);
+
+		return Arrays.equals(digest.digest(), 0, DIGEST_BYTES, raw, length, raw.length);
 	}
 
 	/**
