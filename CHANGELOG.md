@@ -99,6 +99,9 @@ what the next one holds.
   in a properties file could grow one line to gigabytes. A condition that takes more than a
   thousand names to work out is now treated as true, as any condition Vitrail cannot work out
   already is, and a line stops growing before it passes 256 KB. No real pack comes near either.
+- **A pack's settings that could not be saved leave nothing behind.** The settings file is written
+  beside itself first, as a `.part`, and moved into place, and a save that failed left that `.part`
+  in the shaderpacks folder for good. It is now removed, as Vitrail already did for `pack.txt`.
 
 ## 0.12.0-beta
 
