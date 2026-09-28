@@ -44,7 +44,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.pattern.BlockInWorld;
 import net.minecraft.world.level.dimension.DimensionType;
-import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -77,12 +76,6 @@ import org.joml.Vector4fc;
  * image diverge from the one the pack was tuned on.
  */
 public final class FrameState implements WorldState {
-
-	/** OptiFine's counter wraps at an hour, which keeps a float's precision usable for noise. */
-	private static final float COUNTER_WRAP = 3600.0F;
-
-	/** And the frame counter wraps here. Both numbers are observable by a pack. */
-	private static final int FRAME_WRAP = 720720;
 
 	/** What {@code currentSelectedBlockPos} says when the player is not looking at a block. */
 	private static final Vector3f NOTHING_SELECTED = new Vector3f(-256.0F);
@@ -429,20 +422,15 @@ public final class FrameState implements WorldState {
 	 * reading a wall clock, so it stops while the game is paused, which is what a pack driving
 	 * noise with it expects.
 	 */
-	@SuppressWarnings("NarrowCalculation")
 	private void advanceClock() {
 		long now = System.nanoTime();
 		long elapsed = this.timed ? now - this.lastFrameNanos : 0L;
 		this.lastFrameNanos = now;
 		this.timed = true;
 
-		this.frameTime = (elapsed / 1000L) / 1000L / 1000.0F;
-		this.frameTimeCounter += this.frameTime;
-		if (this.frameTimeCounter >= COUNTER_WRAP) {
-			this.frameTimeCounter = 0.0F;
-		}
-
-		this.frameCounter = (this.frameCounter + 1) % FRAME_WRAP;
+		this.frameTime = FrameMath.frameTime(elapsed);
+		this.frameTimeCounter = FrameMath.counterAfter(this.frameTimeCounter, this.frameTime);
+		this.frameCounter = FrameMath.nextFrame(this.frameCounter);
 	}
 
 	private void advanceView(Minecraft minecraft, CameraRenderState cameraState) {
@@ -535,20 +523,8 @@ public final class FrameState implements WorldState {
 				this.endFlashYAngle, drewLastFrame);
 	}
 
-	/**
-	 * One step of wrapping and not a modulus, exactly as Iris
-	 * {@code uniforms/CelestialUniforms.java:30-42} does it. A shader that reads the value either
-	 * side of the wrap has to see the discontinuity in the same place.
-	 */
 	private float sunAngle(boolean sun) {
-		float angle = (sun ? this.sunAngleDegrees : this.moonAngleDegrees) + 90.0F;
-		if (angle < 0.0F) {
-			angle += 360.0F;
-		} else if (angle > 360.0F) {
-			angle -= 360.0F;
-		}
-
-		return angle;
+		return FrameMath.sunAngle(sun ? this.sunAngleDegrees : this.moonAngleDegrees);
 	}
 
 	private boolean isDay() {
@@ -642,7 +618,7 @@ public final class FrameState implements WorldState {
 		LocalPlayer player = minecraft.player;
 		Entity cameraEntity = minecraft.getCameraEntity();
 
-		this.isEyeInWater = eyeInWater(camera.getFluidInCamera(),
+		this.isEyeInWater = FrameMath.eyeInWater(camera.getFluidInCamera(),
 				player != null && player.isSpectator());
 		this.heavyFog = minecraft.gui.hud.getBossOverlay().shouldCreateWorldFog();
 		this.hideGui = minecraft.gui.hud.isHidden();
@@ -686,27 +662,6 @@ public final class FrameState implements WorldState {
 		readSelection(minecraft, level, camera);
 		readLightning(level, pt);
 		readHeld(player);
-	}
-
-	/**
-	 * Iris's table, which is not the ordinals of {@link FogType}: that enum reads
-	 * {@code LAVA, WATER, POWDER_SNOW, ATMOSPHERIC, NONE} and a pack wants
-	 * {@code 0 nothing, 1 water, 2 lava, 3 powder snow}, so the mapping is written out.
-	 * <p>
-	 * Lava not counting in spectator is a rule Iris lays over the game rather than a property of
-	 * it, {@code Camera.getFluidInCamera} never looks at the game mode. It is here because packs
-	 * are written against Iris.
-	 */
-	private static int eyeInWater(FogType submersion, boolean spectator) {
-		if (submersion == FogType.WATER) {
-			return 1;
-		} else if (!spectator && submersion == FogType.LAVA) {
-			return 2;
-		} else if (submersion == FogType.POWDER_SNOW) {
-			return 3;
-		}
-
-		return 0;
 	}
 
 	/**
@@ -761,11 +716,9 @@ public final class FrameState implements WorldState {
 		}
 
 		float scale = minecraft.options.darknessEffectScale().get().floatValue();
-		float gamma = player.getEffectBlendFactor(MobEffects.DARKNESS, pt) * scale;
-		float darkness = Math.max(0.0F,
-				Mth.cos((player.tickCount - pt) * (float) Math.PI * 0.025F) * 0.45F * gamma);
 
-		return darkness * scale;
+		return FrameMath.darknessLight(player.tickCount, pt,
+				player.getEffectBlendFactor(MobEffects.DARKNESS, pt), scale);
 	}
 
 	private void readFlags(LocalPlayer player) {
