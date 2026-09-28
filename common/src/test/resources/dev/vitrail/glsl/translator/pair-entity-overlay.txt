@@ -11,12 +11,7 @@ layout(std140) uniform OfGlobals {
 	mat4 of_CameraBob;
 	vec4 of_DepthConv;
 };
-layout(std140) uniform DynamicTransforms {
-	mat4 of_GameModelView;
-	vec4 of_GameColorModulator;
-	vec3 of_GameModelOffset;
-	mat4 of_GameTextureMatrix;
-};
+<game transforms block>
 uniform sampler2D ofOverlay;
 uniform sampler2D ofTexture;
 in vec3 Position;

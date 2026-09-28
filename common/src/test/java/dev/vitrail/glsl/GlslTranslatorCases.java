@@ -229,9 +229,17 @@ final class GlslTranslatorCases {
 	private static final String ENGINE_DEFINES = "#define <engine defines>\n";
 
 	/**
+	 * The game's own block of per draw transforms, which the header declares where a rewrite read it.
+	 * Its members and their order are the game's and differ between the two games this tree builds
+	 * for, and {@link GameTransformsTest} holds the declaration to the game it is built against, so
+	 * what a golden says of it is that it is there.
+	 */
+	private static final String GAME_BLOCK = "<game transforms block>\n";
+
+	/**
 	 * The text of one translated stage as the golden holds it: the engine's symbol block, the same
-	 * seventy lines in every file, is folded to a marker, and whatever the translation counted is
-	 * printed after it.
+	 * seventy lines in every file, and the game's transform block are each folded to a marker, and
+	 * whatever the translation counted is printed after the text.
 	 */
 	private static String snapshot(ExpandedUnit unit, TranslatedUnit translated) {
 		StringBuilder block = new StringBuilder();
@@ -246,7 +254,9 @@ final class GlslTranslatorCases {
 
 		StringBuilder out = new StringBuilder();
 		out.append("--- ").append(translated.entry()).append(" (").append(translated.stage()).append(") ---\n");
-		out.append(text, 0, at).append(ENGINE_DEFINES).append(text.substring(at + block.length()));
+		out.append(text, 0, at).append(ENGINE_DEFINES)
+				.append(text.substring(at + block.length())
+						.replace(String.join("\n", GameTransforms.BLOCK) + "\n", GAME_BLOCK));
 		if (!text.endsWith("\n")) {
 			out.append('\n');
 		}

@@ -6,12 +6,7 @@ layout(std140) uniform OfGlobals {
 	mat4 of_CameraBob;
 	vec4 of_DepthConv;
 };
-layout(std140) uniform DynamicTransforms {
-	mat4 of_GameModelView;
-	vec4 of_GameColorModulator;
-	vec3 of_GameModelOffset;
-	mat4 of_GameTextureMatrix;
-};
+<game transforms block>
 in vec3 Position;
 in vec4 Color;
 in vec2 UV0;

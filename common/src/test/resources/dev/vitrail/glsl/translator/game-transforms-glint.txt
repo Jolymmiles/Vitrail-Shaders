@@ -10,12 +10,7 @@ layout(std140) uniform OfGlobals {
 	mat4 projectionMatrix;
 	vec4 of_DepthConv;
 };
-layout(std140) uniform DynamicTransforms {
-	mat4 of_GameModelView;
-	vec4 of_GameColorModulator;
-	vec3 of_GameModelOffset;
-	mat4 of_GameTextureMatrix;
-};
+<game transforms block>
 in vec3 Position;
 in vec2 UV0;
 #define of_Vertex vec4(Position, 1.0)
