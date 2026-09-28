@@ -102,6 +102,12 @@ what the next one holds.
 - **A pack's settings that could not be saved leave nothing behind.** The settings file is written
   beside itself first, as a `.part`, and moved into place, and a save that failed left that `.part`
   in the shaderpacks folder for good. It is now removed, as Vitrail already did for `pack.txt`.
+- **A pack folder dropped onto the pack list arrives whole or not at all.** It was copied file by
+  file straight into the shaderpacks folder, so a copy that failed part way left a pack with files
+  missing in the list, and every later drop of the same folder was refused as already there. The
+  folder is now copied aside and put in place once all of it is there, and a copy that fails
+  leaves nothing, so the drop can simply be tried again. A link inside the folder is copied as a
+  link, so one that leads out of the pack stays refused rather than becoming a file of it.
 
 ## 0.12.0-beta
 

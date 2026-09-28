@@ -141,6 +141,16 @@ pack. Emptying is what lets somebody watching the file see it go blank.
 
 Either way the line under the title says what happened, for five seconds.
 
+**A folder arrives whole or not at all.** It is copied under a hidden name beside where it goes,
+`.<name>.part`, and renamed into place once every file is there; a copy that fails is removed, and
+one a crash cut short is cleared by the next drop of the same folder. Copied straight into place, a
+failure half way left a pack with files missing in the list and every later drop was told the pack
+already existed. The list leaves that one shape out and not every name that opens on a dot, which
+would take away a pack somebody simply named that way. **A link inside the folder is copied as a
+link**, not as what it points at: followed, a link out of the folder would become a plain file of
+the pack, and the loader's refusal to read through a link that leaves a folder pack would have
+nothing left to refuse.
+
 ## The folder is watched, the pack is not
 
 The pack folder is watched, so a pack dropped into it from outside the game appears in the list on its
