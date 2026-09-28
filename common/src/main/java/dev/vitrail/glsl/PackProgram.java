@@ -287,8 +287,8 @@ public final class PackProgram {
 	 * @param mentions which of the few names the engine has to settle before the first frame appear
 	 *                 anywhere in this pack's text. Read here because the pack is open here and
 	 *                 every source is walked here anyway; asked because six of the seven geometry
-	 *                 families are read at the first draw of their own kind, so nothing else can
-	 *                 answer for the pack as a whole this early
+	 *                 families are read by the warm-up worker after the chain is compiled, so nothing
+	 *                 else can answer for the pack as a whole this early
 	 * @param removed  the full screen programs no pipeline can be built for, by bare name, each with
 	 *                 what did it. They are gone from {@link #programs} and the plan was rebuilt
 	 *                 without them, unless the {@code final} is one of them: nothing is then removed
