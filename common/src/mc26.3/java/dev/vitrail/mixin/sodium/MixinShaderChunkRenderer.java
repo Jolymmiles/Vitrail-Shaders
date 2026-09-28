@@ -16,10 +16,12 @@ import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.minecraft.client.renderer.oit.OitStage;
+import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -54,7 +56,7 @@ import java.util.Map;
  * {@code compileProgram} take an order independent stage beside the pass, null on the classic road,
  * and {@code compileProgram} keeps a second memo, of order independent sets, read on the other
  * branch. So the handlers take the stage, the pack's program is handed back on the classic road
- * alone, and the memo check reads the first lookup of the method, which is the classic one. The
+ * alone, and the memo check reads the lookup made on the classic memo's own field. The
  * order independent road runs only while no pack draws, and it keeps Sodium's own sets and its own
  * memo exactly as they come. Sodium is handed a pass already open on this game rather than opening
  * one after this, so what cannot happen inside a pass goes through the encoder, which steps the
@@ -157,10 +159,23 @@ public abstract class MixinShaderChunkRenderer {
 	 * shader loader beside this one above all, chains with this rather than stopping the game at
 	 * startup. The lookup is still made once, through whatever else wraps it, and what comes back is
 	 * judged as before.
+	 * <p>
+	 * <strong>The lookup is found from the field it is made on, and not from its place in the
+	 * method.</strong> The method makes two, this memo's and the order independent one's, and which
+	 * of them comes first is only the order Sodium wrote its branches in. Counted from the head of
+	 * the method, a Sodium that put the other branch first would hand this the memo of sets, which
+	 * are no pipeline and pass untouched, and the lookup this is about would go unguarded without a
+	 * word. The slice opens at the first read of {@code programs}, the receiver of the classic
+	 * lookup, so the first lookup inside it is that one whichever branch stands first. A Sodium
+	 * without that field leaves the slice open from the head of the method, which is where the count
+	 * started before.
 	 */
 	@WrapOperation(method = "compileProgram",
 			at = @At(value = "INVOKE", target = "Ljava/util/Map;get(Ljava/lang/Object;)Ljava/lang/Object;",
 					ordinal = 0),
+			slice = @Slice(from = @At(value = "FIELD", opcode = Opcodes.GETSTATIC,
+					target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/ShaderChunkRenderer;"
+							+ "programs:Ljava/util/Map;")),
 			require = 1)
 	private Object vitrail$ofThisFormat(Map<?, ?> memo, Object pass, Operation<Object> original) {
 		Object found = original.call(memo, pass);
