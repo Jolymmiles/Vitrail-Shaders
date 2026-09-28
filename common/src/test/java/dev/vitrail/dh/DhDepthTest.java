@@ -8,7 +8,6 @@ import static dev.vitrail.dh.DhLodsResolveTest.assertLine;
 import static dev.vitrail.dh.DhLodsResolveTest.assertOneLine;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitrail.dh.DhWorld.Edit;
@@ -23,12 +22,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Holds the half of {@code DhDepth} that does not depend on how its lookup treats a
- * {@code LinkageError}: the arithmetic of the planes, the answers of a Distant Horizons that is
- * absent, misshapen or healthy, and the latches that turn a failed read into a permanent fallback.
- * <p>
- * What the lookup does with a {@code LinkageError} is pinned in the one test named
- * {@code knownBug_...}: it describes what the class does today and is to change with the lookup.
+ * Holds {@code DhDepth}: the arithmetic of the planes, the answers of a Distant Horizons that is
+ * absent, misshapen, unlinkable or healthy, and the latches that turn a failed read into a
+ * permanent fallback.
  */
 class DhDepthTest {
 
@@ -158,19 +154,37 @@ class DhDepthTest {
 	}
 
 	/**
-	 * A lookup that fails with a LinkageError (here the type of the parameter field cannot be
-	 * loaded) is not caught by resolve, so the first frame that asks gets the error, and every later
-	 * one an answer of nothing without a line.
+	 * A lookup that fails with a LinkageError is given up the way a DH of the wrong shape is: the
+	 * first frame that asks gets an answer of nothing and one line naming the error, and every later
+	 * one the same answer and no line. What asks first is a frame publishing its values or a pack
+	 * being read, so an error let through there would reach the game loop.
 	 */
-	@Test
-	void knownBug_aLinkageErrorInResolveEscapesTheFirstCall() {
-		DhWorld world = DhWorld.missing(CLIENT_API + "$Params");
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("unlinkableDh")
+	void aLinkageErrorInResolveIsGivenUpOnceWithOneLineAndNothingIsServed(String error, DhWorld world) {
+		Vector2f dest = sentinel();
 
-		assertThrows(NoClassDefFoundError.class, () -> present(world));
+		for (int frame = 0; frame < 10; frame++) {
+			assertFalse(present(world));
+			assertFalse(zRow(world, dest));
+			assertEquals(-1, distance(world));
+		}
 
-		assertFalse(present(world));
+		assertUntouched(dest);
 		assertFalse(usable(world));
-		assertEquals(List.of(), world.log());
+		assertOneLine(world, "INFO", "installed but not in a shape a projection can be read out of");
+		assertLine(world, 0, "INFO", error);
+	}
+
+	static Stream<Arguments> unlinkableDh() {
+		return Stream.of(
+				// The type of the parameter field cannot be loaded, which the field lookup answers.
+				Arguments.of("NoClassDefFoundError", DhWorld.missing(CLIENT_API + "$Params")),
+				// The holder the first lookup names throws as it initialises, which forName answers.
+				Arguments.of("ExceptionInInitializerError", DhWorld.edited(new Edit(DH_API,
+						"public static IDhApiConfig configs;",
+						"public static IDhApiConfig configs = refuse(); private static IDhApiConfig refuse() "
+								+ "{ throw new IllegalStateException(\"fake DH failed at Delayed.init\"); }"))));
 	}
 
 	// A healthy one.

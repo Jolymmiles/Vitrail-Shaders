@@ -132,6 +132,11 @@ what the next one holds.
   next size the pack was drawn with those alone: the rest were bound as a small stand-in of the
   wrong kind, which a graphics driver may answer with a wrong picture, a hang or a crash. A failure
   now gives every buffer back, so the next size asks for the whole set again.
+- **A version of Distant Horizons that Vitrail cannot read no longer stops the game.** Vitrail reads
+  a few of that mod's own classes by name to place the far terrain for a pack. Every read already
+  answered a version it could not make sense of by leaving the far terrain flat, except the very
+  first, which let the error through when those classes failed as they loaded. It now leaves the
+  far terrain flat as well, and says so once in the log.
 
 ## 0.12.0-beta
 
