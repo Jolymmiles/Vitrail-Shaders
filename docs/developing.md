@@ -67,8 +67,39 @@ By family, so you can tell whether a change is in scope:
 
 Two of those need no corpus: the uniform block invariants and path confinement. Everything else
 wants one. None of them run on a bare clone even so, since the harness that drives them is the one
-absent above, and what `check` adds to a compile is the text rule and the unit tests that need no
-pack, one of which holds the game's transforms block to the include the game ships.
+absent above.
+
+What a bare clone does run is `check`: the text rule and the unit tests. Those build every input
+themselves, small and synthetic, so they need no pack and no game process. The few that read the
+game's own includes or build its own types only need its jar on the classpath, which the build
+already has, and none of them starts a device. They are a smaller net than the corpus and not a
+substitute for it, and they follow the same families wherever a synthetic input can stand in for a
+pack:
+
+- **Pack reading.** `shaders.properties`, include expansion and path confinement over directory and
+  zip packs built in a temporary folder; the option scan and its rewriting; the settings menu; the
+  name grammars of the model; the raw texture layouts; the settings files a player's game directory
+  holds.
+- **Translation.** A golden corpus of stages compared byte for byte, with the game's own transform
+  block recorded once per game so that one set serves both; the lexer, the token list, the
+  translated-program codec and the translation cache on disk.
+- **Colour targets and the frame chain.** The plan held to the parity rule above, pass by pass,
+  against a second reading written from that sentence and not from the classes, over seeded random
+  chains as well as hand-worked packs.
+- **Uniforms.** The block against a textbook std140 layout, the coercions, the clip-space
+  conversion against an independent projection, the values a pack reads against double precision
+  arithmetic, and the expression language.
+- **What in `render/` and `sodium/` is arithmetic or a decision and needs no device.** The view and
+  shadow matrices, the camera shift, the frame clock, motion vectors, the render scale, the shadow
+  distance arbitration, the swept shadow volume and the tangent frame of a chunk mesh, the cuts a
+  frame is divided into, and the catch every frame hook ends in.
+- **The Distant Horizons bridge**, against a fake of the mod that the test compiles itself, so it
+  needs a JDK and not only a JRE.
+
+Two habits carry over from the section below. A test that pins a defect is named for it
+(`knownBug_...`) and is kept apart from the ordinary ones, so the fix flips one method rather than
+a file. And a check that has never failed proves nothing: the assertions that matter here were
+broken once on purpose, in the code they guard, and seen to fire before they were kept.
 
 ## What makes a measurement trustworthy
 
