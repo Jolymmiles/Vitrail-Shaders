@@ -40,6 +40,45 @@ import java.util.stream.Stream;
  * Without this there are two copies of the disk layout, the key, the sweep and the folder handling
  * that a fix has to reach one by one, and the day one is missed a player's cache behaves differently
  * on one game for no reason anyone chose.
+ * <p>
+ * A wrong blob is worse than a slow load: it is a picture that is wrong, or a lost device, with
+ * nothing on screen pointing back here. A length and the SPIR-V magic word are not enough on their
+ * own: a truncation on a four byte boundary keeps the magic word and a length both checks accept,
+ * and what it then reaches is a native parser that no Java catch stands in front of. So every file
+ * carries a digest of its own bytes behind them, and a blob its digest does not answer for is never
+ * handed on. Absent, truncated, corrupt, unreadable, or of a shape this build cannot rebuild a
+ * module from: every one of them is a MISS rather than an error, and ends in the compiler running
+ * exactly as it did before the cache existed.
+ * <p>
+ * A write lands through a neighbouring file and a move, so a process killed halfway through
+ * leaves a neighbour rather than a half module under a whole name. The move is atomic where the
+ * file system offers it and a plain replace where it does not, and nothing here is forced to the
+ * platter, so what answers for a file after a power cut is the digest behind it and not the move.
+ * <p>
+ * <strong>The disk is bounded</strong>, at half a gigabyte by default, and bounded per edition:
+ * the files sit under a directory named for the mod and game versions, and for a development
+ * build the commit as well, and a directory named for another edition is deleted when this one
+ * opens. Without that an update would fill a fresh set of keys on top of the set it had just made
+ * unreachable, and two packs plus one update would go over the ceiling with nothing in the way. A
+ * build carrying a commit keeps one neighbour and so holds two of those ceilings rather than one,
+ * and {@link #dropOtherEditions} says which neighbour and why. The Sodium slider writes the number,
+ * and a store already over it is swept at once. Past the ceiling the units nothing has asked for
+ * lately go first, down to three quarters of it so that the sweep is not paid again at the very
+ * next write.
+ * <p>
+ * <strong>The folder's name is narrower than the key</strong>, and deliberately: the key also
+ * carries the loader, its version and the LWJGL build, so a NeoForge or an LWJGL bump makes every
+ * blob unreachable without moving the folder, and what those blobs then cost is space until a
+ * sweep collects them. Naming the folder after all five would sweep the whole store on a loader
+ * bump, which is the same space spent on the same day for no reading. What the folder does carry
+ * beyond the two versions is the commit, and only on a development build: without it, two builds
+ * declaring one version would share the folder AND the keys, which is every build made between
+ * two releases, and a translator changed since yesterday would be served yesterday's modules with
+ * nothing saying so. A release build carries no commit, because a player's store is worth keeping
+ * across every jar of one version and nothing but a release changes what those jars compile.
+ * <p>
+ * {@code -Dvitrail.moduleCache=false} turns the whole thing off, and the line is still printed, so
+ * one jar answers the question in both directions.
  */
 final class ModuleStore {
 
