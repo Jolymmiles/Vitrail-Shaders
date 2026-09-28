@@ -5,7 +5,6 @@ import dev.vitrail.glsl.LinesVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.model.RenderStage;
@@ -1589,9 +1588,9 @@ public final class EntityDraw extends FamilyDraw {
 	private EntityProgram drawing;
 	private RenderPipeline bound;
 
-	EntityDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, boolean seeded, ColorTargets targets) {
+	EntityDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, boolean seeded,
+			ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;

@@ -1,7 +1,6 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
@@ -204,9 +203,8 @@ public final class SkyDraw extends FamilyDraw {
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private SkyProgram drawing;
 
-	SkyDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	SkyDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;

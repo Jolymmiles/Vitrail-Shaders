@@ -17,8 +17,8 @@ import java.util.Collection;
  * <p>
  * <strong>The worker is the only reader.</strong> Nothing reads a family at its first draw, so one
  * the worker does not reach stays unread for the load and the game's own shaders draw it. It is
- * also why no family keeps the chosen values and the profile its constructor is still handed: the
- * worker opens the pack with them once, for all six.
+ * also why no family is handed the chosen values or the profile: the worker opens the pack with
+ * them once, for all six.
  */
 abstract class FamilyDraw {
 

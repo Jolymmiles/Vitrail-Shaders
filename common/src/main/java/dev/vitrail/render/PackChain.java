@@ -448,40 +448,40 @@ public final class PackChain {
 		// would leave the screen and reach nothing.
 		this.terrain = new TerrainDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// The same plan and the same schedule again, and for the same reason. The sky is read on
-		// demand too, since the game builds its meshes once at startup and a place that never draws
-		// a sky should not pay for one.
-		this.sky = new SkyDraw(this, packPath, chain.place(), chosen, profile, values, this.load,
+		// The same plan and the same schedule again, and for the same reason. Nothing from here to
+		// the distant terrain is read by this constructor: the pack-load worker reads each family
+		// once the chain's composites are compiled, unless its engine option is off, and one it does
+		// not reach stays unread for the load, the game's own shaders drawing it. That is why none
+		// of them is handed the chosen values or the profile: the worker opens the pack with them.
+		this.sky = new SkyDraw(this, packPath, chain.place(), values, this.load,
 				chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And again, for the same reason, and read on demand for a third one: a place the player
-		// crosses without an entity in it should not pay for ten programs it never draws.
+		// And again, for the same reason.
 		// Handed the seed's own switch as well, which neither of the other two needs: it is the one
 		// family whose first output has no road of its own into the pack's picture.
-		this.entities = new EntityDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.entities = new EntityDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted,
 				seedEnabled && this.seed != null, this.targets);
-		// And a fourth time, read on demand like the last two: a place with the clouds switched off,
-		// which is every Nether and every player who turned them off, should not pay for a program
-		// nothing draws.
-		this.clouds = new CloudDraw(this, packPath, chain.place(), chosen, profile, values,
+		// And a fourth time. With the clouds switched off in the engine's options nothing is read
+		// for them at all.
+		this.clouds = new CloudDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And once more, read on demand for a fifth reason: a pack may be loaded for an hour before
-		// it rains. It needs no switch of the seed's, being the one family here drawn WHOLLY after
+		// And once more. A pack may be loaded for an hour before it rains, so it is read ahead and
+		// not at the first drop, in the middle of a storm.
+		// It needs no switch of the seed's, being the one family here drawn WHOLLY after
 		// the deferred stage: it blends onto what the chain has already put in the pack's target,
 		// which is the position the world's own translucents are in. The particles below straddle
 		// that stage instead, and that is why they need the switch and this does not.
-		this.weather = new WeatherDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.weather = new WeatherDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And the sixth, which straddles the deferred stage: its opaque half is drawn among the
 		// game's solid features and writes the coverage mask as the entities do, its translucent
 		// half after the world's water. Neither half asks whether the seed is painted, both owning
 		// the draw buffers the pack asked for.
-		this.particles = new ParticleDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.particles = new ParticleDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And the seventh, read on demand like the five before it and for the sharpest reason of
-		// them: most sessions have no Distant Horizons at all, and the ones that do only reach this
-		// on the frames DH really draws a far terrain.
-		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
+		// And the seventh. The worker reads it whether or not Distant Horizons is there; only its
+		// draw waits for the frames DH really draws a far terrain.
+		this.distant = new DistantDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		this.families = List.of(this.sky, this.entities, this.clouds, this.weather,
 				this.particles, this.distant);
@@ -497,7 +497,7 @@ public final class PackChain {
 		// Before the first frame allocates a target: the storage usage is baked into the image at
 		// creation, and nothing can add it afterwards. Whatever stores into a target asks for it: a
 		// compute, a full screen program, read off their translated text, and a world program,
-		// which is only translated when first drawn and so is read off the pack's text instead.
+		// which is translated after this constructor and so is read off the pack's text instead.
 		Set<Integer> stored = new LinkedHashSet<>(this.compute.storageTargets());
 		stored.addAll(chain.targets().stored());
 		for (ChainPlan.Pass pass : FrameCuts.ordered(chain.chain())) {

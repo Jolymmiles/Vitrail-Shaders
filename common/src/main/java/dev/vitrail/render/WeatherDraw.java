@@ -2,7 +2,6 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
@@ -155,9 +154,8 @@ public final class WeatherDraw extends FamilyDraw {
 	/** The pass that program wants opened, worked out beside it. Null means the renderer's own. */
 	private RenderPassDescriptor descriptor;
 
-	WeatherDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	WeatherDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;

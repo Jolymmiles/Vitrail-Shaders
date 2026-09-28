@@ -4,7 +4,6 @@ import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.DistantVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
@@ -406,9 +405,8 @@ public final class DistantDraw extends FamilyDraw {
 	 */
 	private boolean shadowBroken;
 
-	DistantDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	DistantDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
