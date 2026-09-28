@@ -40,6 +40,18 @@ And the same ceiling applies to raw bytes, an image included: an image is not ex
 hostile. Where a directive claims a length, the length on disk is asked for separately, so a blob
 that does not match its claim is refused without being read whole first.
 
+**A ceiling on the file does not bound the pack**, so two more sit on the whole of one opening. The
+text it reads is totalled, and past a total the pack is refused: what a reading decodes is kept for
+as long as the opening is, which a session keeps, so a small archive of many files that each unpack
+to the ceiling came to gigabytes of strings, an out-of-memory error rather than a refusal. A file is
+counted once, whichever reader reads it and however often, so the total is a property of the pack
+and not of how many loads a kept opening has served; the name search that reads the files outside
+the source list counts too, its inflating being done on the thread that draws, and images are not
+text and are not counted. And a walk of the pack refuses one holding more files and folders than a
+pack may, since a cap on each file bounds nothing while their number is free. Both stand far above
+the widest pack of the corpus, and both refuse through the load's own error, naming the pack,
+rather than cut a list short into a pack with files missing.
+
 Decoding never throws. Malformed input is replaced, a leading byte-order mark is dropped, and lines
 are split on all three endings including a lone carriage return: a file with classic Mac endings
 read as one long line loses every directive in it. A pack that ships one file in the wrong encoding

@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,6 +53,30 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	/** Fifty times the largest source file in the corpus, and a bound on a hostile archive. */
 	private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
+
+	/**
+	 * A ceiling on the file does not bound the pack. What one opening reads as text is kept for as
+	 * long as the opening is, and a session keeps one, so a zip of a thousand eight megabyte sources
+	 * that each compress to almost nothing passed every per-file check on its way to eight gigabytes
+	 * of strings, which is an {@code OutOfMemoryError} rather than a refusal. The widest pack of the
+	 * corpus ships a megabyte and a half of source, so this is forty times that, and leaves room for
+	 * the text a pack carries beside its sources: Eclipse's is another megabyte and a half.
+	 * <p>
+	 * Counted once per file, whichever of {@link #readLines} and {@link #searchableText} reads it and
+	 * however often: the total is then a property of the pack rather than of how many loads an
+	 * opening has served, and a kept opening cannot creep up on it one portal at a time. A pack's
+	 * images are not text and are not counted; what they cost is bounded where they are laid out.
+	 */
+	private static final long MAX_TEXT_BYTES = 64L * 1024 * 1024;
+
+	/**
+	 * How many files and folders a walk of the pack may meet before it refuses the pack, for the
+	 * same reason as the total above: the walk itself is cheap, but everything it lists is then
+	 * read, and with a cap on each file and none on how many there are, the cap on each file bounds
+	 * nothing. Photon, Complementary Reimagined and Eclipse hold under eight hundred each, and this
+	 * is the number {@link KeptPack} already stops fingerprinting at.
+	 */
+	private static final int MAX_ENTRIES = 20_000;
 
 	/** How much of a file is read before it is allowed to be called binary. */
 	private static final int BINARY_PROBE = 4096;
@@ -104,10 +129,15 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * once per compute program. Reading, decoding and splitting a header again for each of those was
 	 * the largest single cost of a warm load.
 	 * <p>
-	 * It is bounded by the pack: the widest of the corpus ships a megabyte and a half of source
-	 * across five hundred files, and everything in here dies with {@link #close()}.
+	 * It is bounded by the pack, and by {@link #MAX_TEXT_BYTES} where the pack is hostile: the widest
+	 * of the corpus ships a megabyte and a half of source across five hundred files, and everything
+	 * in here dies with {@link #close()}.
 	 */
 	private final Map<String, List<String>> linesByFile = new HashMap<>();
+
+	/** Every file counted against {@link #MAX_TEXT_BYTES} so far, and what they came to. */
+	private final Set<String> countedText = new HashSet<>();
+	private long textBytes;
 
 	/**
 	 * Units this opening has already flattened, by the entry file and the settings it was read
@@ -210,8 +240,9 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	public static ShaderPackSource open(Path packPath) throws IOException {
 		OPENINGS.incrementAndGet();
+		String name = nameOf(packPath);
 		if (Files.isDirectory(packPath)) {
-			return new ShaderPackSource(nameOf(packPath), findShadersRoot(packPath), null,
+			return new ShaderPackSource(name, findShadersRoot(packPath, name), null,
 					packPath.toRealPath());
 		}
 
@@ -222,8 +253,7 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		FileSystem zip = FileSystems.newFileSystem(packPath);
 		try {
-			return new ShaderPackSource(nameOf(packPath), findShadersRoot(zip.getPath("/")), zip,
-					null);
+			return new ShaderPackSource(name, findShadersRoot(zip.getPath("/"), name), zip, null);
 		} catch (IOException | RuntimeException e) {
 			zip.close();
 			throw e;
@@ -235,19 +265,43 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * a pack re-zipped by hand ends up one level down, and packs do ship other things beside
 	 * it: licences, readmes, and files meant for other mods entirely.
 	 */
-	private static Path findShadersRoot(Path root) throws IOException {
+	private static Path findShadersRoot(Path root, String packName) throws IOException {
 		Path direct = root.resolve(SHADERS_DIRECTORY);
 		if (Files.isDirectory(direct)) {
 			return direct;
 		}
 
-		try (Stream<Path> tree = Files.walk(root, SHADERS_SEARCH_DEPTH)) {
-			return tree.filter(Files::isDirectory)
-					.filter(path -> path.getFileName() != null
-							&& path.getFileName().toString().equals(SHADERS_DIRECTORY))
-					.min(Comparator.comparing(Path::toString))
-					.orElseThrow(() -> new IOException("No shaders directory in this pack"));
+		return walk(root, SHADERS_SEARCH_DEPTH, packName).stream()
+				.filter(Files::isDirectory)
+				.filter(path -> path.getFileName() != null
+						&& path.getFileName().toString().equals(SHADERS_DIRECTORY))
+				.min(Comparator.comparing(Path::toString))
+				.orElseThrow(() -> new IOException("No shaders directory in this pack"));
+	}
+
+	/**
+	 * Every entry of a tree down to {@code depth}, in the walk's own order, or a refusal once it
+	 * has met more than a pack may hold. Refused rather than cut short: a list that stopped
+	 * part way would be a pack with files missing, and nothing downstream could tell.
+	 */
+	private static List<Path> walk(Path root, int depth, String packName) throws IOException {
+		List<Path> entries = new ArrayList<>();
+		try (Stream<Path> tree = Files.walk(root, depth)) {
+			for (Path entry : (Iterable<Path>) tree::iterator) {
+				if (entries.size() >= MAX_ENTRIES) {
+					throw new IOException(packName + " holds more than " + MAX_ENTRIES
+							+ " files and folders, which is past what a pack is allowed");
+				}
+
+				entries.add(entry);
+			}
 		}
+
+		return entries;
+	}
+
+	private List<Path> walk(Path root) throws IOException {
+		return walk(root, Integer.MAX_VALUE, this.packName);
 	}
 
 	public String packName() {
@@ -279,15 +333,14 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * declare the same setting twice.
 	 */
 	public List<Path> sourceFiles() throws IOException {
-		try (Stream<Path> tree = Files.walk(this.shadersRoot)) {
-			List<Path> files = new ArrayList<>(tree.filter(Files::isRegularFile)
-					.filter(path -> SOURCE_EXTENSIONS.contains(extensionOf(path)))
-					.filter(this::landsInside)
-					.toList());
-			files.sort(Comparator.comparing(this::rel));
+		List<Path> files = new ArrayList<>(walk(this.shadersRoot).stream()
+				.filter(Files::isRegularFile)
+				.filter(path -> SOURCE_EXTENSIONS.contains(extensionOf(path)))
+				.filter(this::landsInside)
+				.toList());
+		files.sort(Comparator.comparing(this::rel));
 
-			return List.copyOf(files);
-		}
+		return List.copyOf(files);
 	}
 
 	/**
@@ -307,16 +360,15 @@ public final class ShaderPackSource implements AutoCloseable {
 	public List<Path> otherFiles() throws IOException {
 		Set<Path> sources = Set.copyOf(sourceFiles());
 
-		try (Stream<Path> tree = Files.walk(this.shadersRoot)) {
-			List<Path> files = new ArrayList<>(tree.filter(Files::isRegularFile)
-					.filter(path -> !sources.contains(path))
-					.filter(this::withinCeiling)
-					.filter(this::landsInside)
-					.toList());
-			files.sort(Comparator.comparing(this::rel));
+		List<Path> files = new ArrayList<>(walk(this.shadersRoot).stream()
+				.filter(Files::isRegularFile)
+				.filter(path -> !sources.contains(path))
+				.filter(this::withinCeiling)
+				.filter(this::landsInside)
+				.toList());
+		files.sort(Comparator.comparing(this::rel));
 
-			return List.copyOf(files);
-		}
+		return List.copyOf(files);
 	}
 
 	/**
@@ -331,6 +383,10 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * Decoded as Latin-1 where {@link #readLines} decodes UTF-8, which is exact for this and would
 	 * be wrong there: what is searched are ASCII names, and no byte of a multi-byte UTF-8 sequence
 	 * is ever an ASCII letter, so a name is found in the same files either way.
+	 * <p>
+	 * Nothing of it is kept, and it counts against {@link #MAX_TEXT_BYTES} all the same: what is
+	 * inflated to be searched is inflated on the thread that draws, and an archive of compressed
+	 * filler would hold it there for minutes.
 	 */
 	public String searchableText(Path file) throws IOException {
 		try (InputStream in = Files.newInputStream(file)) {
@@ -341,6 +397,7 @@ public final class ShaderPackSource implements AutoCloseable {
 				}
 			}
 
+			countText(rel(file), Files.size(file));
 			byte[] rest = in.readAllBytes();
 			StringBuilder text = new StringBuilder(head.length + rest.length);
 			text.append(new String(head, StandardCharsets.ISO_8859_1));
@@ -396,6 +453,8 @@ public final class ShaderPackSource implements AutoCloseable {
 					+ " a shader source is allowed");
 		}
 
+		countText(relative, size);
+
 		CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
 				.onMalformedInput(CodingErrorAction.REPLACE)
 				.onUnmappableCharacter(CodingErrorAction.REPLACE);
@@ -412,6 +471,26 @@ public final class ShaderPackSource implements AutoCloseable {
 		this.linesByFile.put(relative, lines);
 
 		return lines;
+	}
+
+	/**
+	 * Counts a file against {@link #MAX_TEXT_BYTES} the first time it is read as text, before it
+	 * is read, and refuses the pack once the whole would come past it. The refusal names the pack,
+	 * which is what the player can act on, and the file, which is what the author can.
+	 */
+	private void countText(String relative, long size) throws IOException {
+		if (this.countedText.contains(relative)) {
+			return;
+		}
+
+		if (size > MAX_TEXT_BYTES - this.textBytes) {
+			throw new IOException(this.packName + " holds more than " + MAX_TEXT_BYTES
+					+ " bytes of text, which is past what a pack is allowed, and " + relative
+					+ " is where it went past");
+		}
+
+		this.countedText.add(relative);
+		this.textBytes += size;
 	}
 
 	/** A unit this opening has already flattened under those settings, or nothing. */

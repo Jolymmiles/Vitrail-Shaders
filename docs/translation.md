@@ -56,6 +56,10 @@ files expanded and lines written.
 **A budget tested only when a file is opened does not bound a single oversized file.** It has to be
 tested on every emitted line.
 
+**A ceiling on each file does not bound a pack.** A small archive of many files, each just under the
+ceiling and each compressing to almost nothing, inflates to gigabytes. The text one opening reads
+and the entries one walk of the pack meets are bounded as totals too.
+
 **Recursion budgets must travel through the expression evaluator.** Macro resolution and expression
 evaluation are mutually recursive; resetting the budget on each hop lets two defines that reference
 each other overflow the stack.

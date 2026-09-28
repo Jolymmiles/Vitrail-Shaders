@@ -87,6 +87,12 @@ what the next one holds.
   climbs out of the pack with `..` is: the include is not found and the texture reads black. A
   link from one folder of a pack to another of the same pack still works, and a pack in a .zip was
   never affected.
+- **A pack made to fill the memory is refused instead of crashing the game.** Each file of a pack
+  was held to eight megabytes, but nothing held the pack as a whole, so a small zip of many files
+  that each unpack to eight megabytes could make Vitrail read gigabytes of text and run the game
+  out of memory. A pack is now refused with a message saying so once it holds more than 64 MB of
+  text or more than 20,000 files and folders. Real packs are far below both: the largest ones hold
+  a few megabytes of text in under a thousand files.
 
 ## 0.12.0-beta
 
