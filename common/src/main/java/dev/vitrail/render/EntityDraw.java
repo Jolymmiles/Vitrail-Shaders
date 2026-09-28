@@ -2473,12 +2473,12 @@ public final class EntityDraw extends FamilyDraw {
 	 * and the hand's two passes are two groups for exactly that reason, since they really can
 	 * resolve to the same file, {@code gbuffers_hand_water} falling back on {@code gbuffers_hand}.
 	 * <p>
-	 * All of them or none of them, which is what the return in the middle is, and it holds across
-	 * the names of ONE group rather than per name or across groups. These programs write into one
-	 * picture, so a piece whose answer could not be settled would be drawn by the game into it, and
-	 * a chest and the mob beside it would disagree about what lights them. Across groups it does NOT
-	 * hold, for the reason the particles give: they share no target and no pass, so taking one down
-	 * with another would be a choice nothing forced.
+	 * All of them or none of them, which is what the two returns are, and it holds across the names
+	 * of ONE group rather than per name or across groups. These programs write into one picture, so
+	 * a piece whose answer could not be settled would be drawn by the game into it, and a chest and
+	 * the mob beside it would disagree about what lights them. Across groups it does NOT hold, for
+	 * the reason the particles give: they share no target and no pass, so taking one down with
+	 * another would be a choice nothing forced.
 	 */
 	private void keep(List<Element> group, Map<String, PackProgram.Loaded> loaded) {
 		// The side is the pipeline's answer for the entity rows and the row's own flag for the
@@ -2505,13 +2505,35 @@ public final class EntityDraw extends FamilyDraw {
 			byFile.put(half, writes);
 		}
 
-		group.stream()
-				.filter(element -> loaded.containsKey(element.element()))
-				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
-						loaded.get(element.element()), element, this.values, this.load,
-						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.afterStage(), element.shadow())),
-						this.chainTargets, this.targets, this.chainRuns)));
+		// Built aside and handed over whole, which is the same rule carried through the build. A
+		// program can still throw on its way into being, over a uniform whose size nothing here
+		// knows or a pipeline with no colour target to read a blend off, and it used to throw out of
+		// the middle of this group into the reading's own catch: the pieces built before it stayed
+		// served beside the rest drawn by the game, and every group still to come, the hand, the
+		// glint and the shadow table among them, was never built at all. Caught here, it costs this
+		// group and no other, which is where the rule draws the line.
+		Map<String, EntityProgram> built = new LinkedHashMap<>();
+		try {
+			for (Element element : group) {
+				PackProgram.Loaded one = loaded.get(element.element());
+				if (one != null) {
+					built.put(element.element(), EntityProgram.of(one, element, this.values,
+							this.load, byFile.get(new Half(servedBy(one), element.afterStage(),
+									element.shadow())),
+							this.chainTargets, this.targets, this.chainRuns));
+				}
+			}
+		} catch (RuntimeException e) {
+			built.values().forEach(EntityProgram::release);
+			Vitrail.logger().error("Could not build the {} programs of {}, so the game keeps its own "
+					+ "shader for those pieces and the other groups are served as they stand",
+					String.join(", ", group.stream().map(Element::element).toList()),
+					this.packPath.getFileName(), e);
+
+			return;
+		}
+
+		this.programs.putAll(built);
 	}
 
 	/**

@@ -505,12 +505,27 @@ public final class SkyDraw extends FamilyDraw {
 					byProgram.clear();
 				}
 
-				ELEMENTS.values().stream()
-						.filter(element -> loaded.containsKey(element.element()))
-						.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
-								loaded.get(element.element()), element, this.values, this.load,
-								byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
-								this.targets, this.chainRuns)));
+				// Built aside and handed over whole, for the rule the class comment gives. A program
+				// can still throw on its way into being, over a uniform whose size nothing here knows,
+				// and it used to throw out of the middle of this walk: the pieces built before it
+				// stayed served and the rest went to the game, which is the half of a sky that rule
+				// exists to refuse. Thrown on from here, it takes the whole sky back to the game on
+				// the catch below.
+				Map<String, SkyProgram> built = new LinkedHashMap<>();
+				try {
+					ELEMENTS.values().stream()
+							.filter(element -> loaded.containsKey(element.element()))
+							.forEach(element -> built.put(element.label(), SkyProgram.of(
+									loaded.get(element.element()), element, this.values, this.load,
+									byProgram.getOrDefault(element.program(), List.of()),
+									this.chainTargets, this.targets, this.chainRuns)));
+				} catch (RuntimeException e) {
+					built.values().forEach(SkyProgram::release);
+
+					throw e;
+				}
+
+				this.programs.putAll(built);
 
 				// Both branches again, and worded for it: a place takes only the half of this list its
 				// own branch reaches, so in the End the four pieces of gbuffers_skybasic can be named

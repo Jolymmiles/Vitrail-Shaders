@@ -568,9 +568,22 @@ public final class ParticleDraw extends FamilyDraw {
 				}
 
 				List<ChainPlan.Attachment> writes = writes(element, one);
-				if (writes != null) {
+				if (writes == null) {
+					continue;
+				}
+
+				// Built under a catch of its own, which is the same one at a time carried through
+				// the build. A program can still throw on its way into being, over a uniform whose
+				// size nothing here knows or a pipeline with no colour target to read a blend off,
+				// and out of this loop that took the translucent half down with a failed opaque one.
+				try {
 					this.programs.put(element.element(), ParticleProgram.of(one, element, this.values,
 							this.load, writes, this.chainTargets, this.targets, this.chainRuns));
+				} catch (RuntimeException e) {
+					Vitrail.logger().error("Could not build the {} particle program of {}, so the game "
+							+ "keeps its own shader for that half",
+							element.afterDeferred() ? "translucent" : "opaque",
+							this.packPath.getFileName(), e);
 				}
 			}
 		} catch (IOException | RuntimeException e) {

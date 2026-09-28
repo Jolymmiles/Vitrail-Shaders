@@ -147,6 +147,15 @@ what the next one holds.
   back. A pack turned off before any far terrain had been drawn, or one that could not take the far
   terrain over, left it held back, and with no pack there is nothing to draw it: the far water
   was gone for the rest of the session. It is handed back whenever a pack is turned off now.
+- **One pack program that cannot be set up no longer takes others down with it.** When one of a
+  pack's entity programs could not be set up, over a uniform whose size Vitrail does not know for
+  instance, every entity program after it was lost too: the hand, the enchantment glint and the
+  shadows mobs cast went back to the game's own shaders, and the mobs were left lit partly by the
+  pack and partly by the game. Now only the group that program belongs to goes back to the game,
+  whole, with an error in the log naming it, and the rest is drawn by the pack. The sky goes back
+  whole rather than piece by piece, the opaque and the translucent particles are set up apart, and
+  a half of Distant Horizons' far terrain that cannot be set up sends the whole far terrain back to
+  Distant Horizons instead of leaving one half to each.
 
 ## 0.12.0-beta
 

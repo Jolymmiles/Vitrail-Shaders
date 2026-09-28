@@ -1081,6 +1081,8 @@ public final class DistantDraw extends FamilyDraw {
 			}
 
 			this.carried = distant.carried();
+			boolean pictureUnbuilt = false;
+			boolean shadowUnbuilt = false;
 			for (Element element : asked) {
 				PackProgram.Loaded one = distant.programs().get(element.element());
 				if (one == null) {
@@ -1098,10 +1100,27 @@ public final class DistantDraw extends FamilyDraw {
 				}
 
 				List<ChainPlan.Attachment> writes = writes(element, one);
-				if (writes != null) {
+				if (writes == null) {
+					continue;
+				}
+
+				// Built under a catch of its own, so that a program throwing on its way into being,
+				// over a uniform whose size nothing here knows, is a half missing rather than a loop
+				// left in the middle. Out of the loop it skipped the rule below, and the half built
+				// before it stayed this engine's while the other went back to Distant Horizons,
+				// which is the landscape of two engines that rule exists to refuse. Missing, it is
+				// settled by that rule like a half the pack does not serve.
+				try {
 					this.programs.put(element.element(), DistantProgram.of(one, element, this.carried,
 							this.values, this.load, writes, this.chainTargets, this.targets,
 							this.chainRuns));
+				} catch (RuntimeException e) {
+					shadowUnbuilt |= element.shadow();
+					pictureUnbuilt |= !element.shadow();
+					Vitrail.logger().error("Could not build the {} half of the far terrain of {}, so {}",
+							element.half(), this.packPath.getFileName(), element.shadow()
+									? "it is left out of the shadow map"
+									: "Distant Horizons keeps its own shader for it", e);
 				}
 			}
 
@@ -1114,12 +1133,18 @@ public final class DistantDraw extends FamilyDraw {
 			// And the light's halves go back with them, which is Iris's own shape: every road its
 			// events take is behind shouldOverride, so a far terrain handed back whole is handed back
 			// from the map as well (compat/dh/LodRendererEvents.java:216-227 and :251-259).
+			//
+			// A half that would not build is settled here like one the pack does not serve, and only
+			// the words differ: the catch has already named it, and a dh_shadow that is there and
+			// would not build is not reported as one the pack does not ship.
 			if (served(false) == 1) {
 				Vitrail.logger().info("The far terrain goes back to Distant Horizons whole: the pack "
-						+ "serves one half of it and the two only compose together");
+						+ "{} and the two only compose together", pictureUnbuilt
+								? "could not build one half of it"
+								: "serves one half of it");
 				this.programs.values().forEach(DistantProgram::release);
 				this.programs.clear();
-			} else if (served(true) == 0) {
+			} else if (served(true) == 0 && !shadowUnbuilt) {
 				sayNothingCastsIntoTheMap();
 			}
 		} catch (IOException | RuntimeException e) {
