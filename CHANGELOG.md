@@ -41,6 +41,13 @@ what the next one holds.
   While a pack draws, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
   The pack lights the piece and draws the glint with its own glint program. Without a pack the game
   draws them as before.
+- **The sky no longer turns one flat pink when far terrain is loaded and none of it is in view.**
+  With Distant Horizons, or a mod standing in for it, a pack is told there is far terrain and reads
+  its depth. On a frame where none of it is on screen, such as looking at the sky from above the
+  world's build height, Vitrail handed that depth over as a single texel. Photon reads it pixel by
+  pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
+  one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
+  image is under Iris.
 
 ## 0.12.0-beta
 
