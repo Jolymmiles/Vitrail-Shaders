@@ -4,6 +4,7 @@ import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.source.OpenedPack;
+import dev.vitrail.render.timing.ModuleCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
@@ -261,6 +262,12 @@ final class FamilyWarmup {
 						LoadClock.translationMillis(), LoadClock.translated(),
 						TranslationCache.served(), TranslationCache.translated(),
 						LoadClock.moduleMillis(), LoadClock.modules());
+			}
+
+			// Outside the branch above: the programs were built whether or not the workers could
+			// compile them ahead. A chain released meanwhile is not the load the tally now holds.
+			if (!this.released) {
+				ModuleCensus.report();
 			}
 
 			return (Void) null;

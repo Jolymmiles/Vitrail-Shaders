@@ -387,6 +387,7 @@ public final class PassTimings {
 		censusFramesMissingMap = 0;
 		censusFramesDecidingMap = 0;
 		FrameCensus.reset();
+		ModuleCensus.reset();
 		// Read again, so an arming file written or changed while the game runs is picked up by the
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
@@ -908,6 +909,7 @@ public final class PassTimings {
 		// Outside the branch above, because the census counts calls and needs no answer from the card,
 		// and how evenly the frames arrived is a reading of the wall clock and needs none either.
 		FrameCensus.report(seconds);
+		ModuleCensus.report();
 		printSpread();
 		printMissedMaps();
 

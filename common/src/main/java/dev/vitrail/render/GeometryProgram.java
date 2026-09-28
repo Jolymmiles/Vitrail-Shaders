@@ -19,6 +19,7 @@ import dev.vitrail.render.pbr.PbrTextures;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.render.timing.FrameCensus;
+import dev.vitrail.render.timing.ModuleCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -834,6 +835,10 @@ final class GeometryProgram {
 		if (fragment == null) {
 			this.broken = true;
 		}
+
+		// The two texts the source below answers with, and the mesh layout the pipeline reads: what
+		// decides whether a program is a compile another program already made.
+		ModuleCensus.built(pass.family(), vertex, fragment, format);
 
 		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {

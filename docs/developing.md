@@ -363,6 +363,18 @@ run of draws it serves. Every ring turned by this engine is a fence created and 
 census costs one read of a static final per hook while the switch is off, and allocates nothing
 while it is on. It says how often, not how dear: read it beside the frame rate.
 
+**How much of a load's module work is one text compiled twice is said once a family.** Under the
+same switch, the log carries a `Module census, <family>:` line per family when the background
+warm-up closes: how many programs the family built, how many of those are distinct by the text of
+their vertex stage, the text of their fragment stage and their mesh layout, and how many modules that
+makes against how many distinct texts. A program's modules are named after its table row, so two
+rows that translate to one text still compile it twice, and the gap between the two numbers is the
+most a memo keyed on the text could take off, before the pipeline's own build, which it would not
+touch. The terrain builds its programs when the renderer first asks for its shader, which can be
+after the warm-up has closed, so its line, and any other family's that grew since, comes with the next
+pass table instead. The texts are hashed where the programs are built and never kept: a fraction of
+a second of the workers' time at load, and nothing at all with the switch off.
+
 **The Khronos validation layer reads the whole frame on request.** The game's own
 `--vulkanValidation` argument turns it on wherever the layer is installed, and `glDebugVerbosity:2`
 in `options.txt` adds its warnings to its errors in the log. On a Mac, where the game loads the
