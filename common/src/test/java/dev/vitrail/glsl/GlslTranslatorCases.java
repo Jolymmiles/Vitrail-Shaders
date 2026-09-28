@@ -296,6 +296,11 @@ final class GlslTranslatorCases {
 	 * run and the process is put back on its defaults afterwards, whatever happens in between.
 	 */
 	static String run(Single one) {
+		return snapshot(unit(one.name() + "." + one.stage().extension(), one.source()), translate(one));
+	}
+
+	/** What the translator makes of one stage under the setup of its case, before it is written down. */
+	static TranslatedUnit translate(Single one) {
 		ExpandedUnit unit = unit(one.name() + "." + one.stage().extension(), one.source());
 		Setup setup = one.setup();
 		try {
@@ -303,7 +308,7 @@ final class GlslTranslatorCases {
 			Stage stage = GlslTranslator.prepare(unit, one.stage(), setup.inputs(), setup.inputs().elements(),
 					setup.alphaTest(), setup.coverage(), setup.program(), setup.volumes());
 
-			return snapshot(unit, stage.render(stage.uniforms(), stage.samplers(), stage.varyings()));
+			return stage.render(stage.uniforms(), stage.samplers(), stage.varyings());
 		} finally {
 			Setup.restore();
 		}

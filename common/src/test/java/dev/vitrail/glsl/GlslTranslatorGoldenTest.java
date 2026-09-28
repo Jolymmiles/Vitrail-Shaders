@@ -100,7 +100,7 @@ class GlslTranslatorGoldenTest {
 
 		Set<String> files = new TreeSet<>();
 		try (Stream<Path> listed = Files.list(Path.of(directory.toURI()))) {
-			listed.forEach(file -> files.add(file.getFileName().toString()));
+			listed.filter(Files::isRegularFile).forEach(file -> files.add(file.getFileName().toString()));
 		}
 
 		assertEquals(cases, files, "the cases the corpus builds against the files kept for them");
