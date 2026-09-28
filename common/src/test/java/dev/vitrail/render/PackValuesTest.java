@@ -2,12 +2,15 @@ package dev.vitrail.render;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.vitrail.pack.source.ExpansionStats;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.uniform.UniformGaps;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
 
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -33,6 +37,11 @@ import org.junit.jupiter.api.Test;
 class PackValuesTest {
 
 	private static final float NO_BOUND = -1.0F;
+
+	/** A name Iris does not answer either, and two names answered by a stand-in for two different reasons. */
+	private static final String UNANSWERABLE = "farPlane";
+	private static final String FIRST_STAND_IN = "currentColorSpace";
+	private static final String SECOND_STAND_IN = "constantMood";
 
 	private static PackDirectives directives(String... declarations) {
 		BitSet live = new BitSet();
@@ -302,5 +311,58 @@ class PackValuesTest {
 		assertEquals(2048, values("const int shadowMapResolution = 2048;").shadowResolution());
 		assertEquals(256, values().noiseResolution());
 		assertEquals(512, values("const int noiseTextureResolution = 512;").noiseResolution());
+	}
+
+	// ---- what a block could not be given ----
+
+	@SuppressWarnings("unchecked")
+	private static PackValues declaring(String... names) {
+		PackValues values = values();
+		try {
+			Field declared = PackValues.class.getDeclaredField("declared");
+			declared.setAccessible(true);
+			((Set<String>) declared.get(values)).addAll(List.of(names));
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("the declared names could not be set for the test", e);
+		}
+
+		return values;
+	}
+
+	@Test
+	void anUnansweredNameIsThePacksOwnIfItDeclaredItThenNobodysThenTheEngines() {
+		assumeTrue(UniformGaps.unanswerable(UNANSWERABLE) != null, UNANSWERABLE + " is no longer a name nobody answers");
+		PackValues values = declaring("own");
+
+		PackValues.Gaps gaps = values.classify(List.of("zeta", UNANSWERABLE, "own", "alpha"));
+
+		assertEquals(List.of("own"), gaps.pack());
+		assertEquals(List.of(UNANSWERABLE), gaps.nobody());
+		assertEquals(List.of("zeta", "alpha"), gaps.engine(), "the engine's own debt keeps the order it was asked in");
+	}
+
+	@Test
+	void aNameThePackDeclaresItselfIsThePacksEvenWhereNoEngineAnswersItEither() {
+		assumeTrue(UniformGaps.unanswerable(UNANSWERABLE) != null, UNANSWERABLE + " is no longer a name nobody answers");
+		PackValues.Gaps gaps = declaring(UNANSWERABLE).classify(List.of(UNANSWERABLE));
+
+		assertEquals(List.of(UNANSWERABLE), gaps.pack(), "the declaration is checked first");
+		assertEquals(List.of(), gaps.nobody());
+	}
+
+	@Test
+	void theStandInGroupsAreNamedInTheOrderTheMembersCameInAndAreNotModifiable() {
+		assumeTrue(UniformGaps.standIn(FIRST_STAND_IN) != null && UniformGaps.standIn(SECOND_STAND_IN) != null
+				&& !UniformGaps.standIn(FIRST_STAND_IN).equals(UniformGaps.standIn(SECOND_STAND_IN)),
+				"the two stand-ins this test names are no longer two different reasons");
+
+		List<String> forward = List.copyOf(PackValues.standIns(List.of("other", FIRST_STAND_IN, SECOND_STAND_IN)).keySet());
+		List<String> backward = List.copyOf(PackValues.standIns(List.of(SECOND_STAND_IN, "other", FIRST_STAND_IN)).keySet());
+
+		assertEquals(List.of(UniformGaps.standIn(FIRST_STAND_IN), UniformGaps.standIn(SECOND_STAND_IN)), forward);
+		assertEquals(List.of(UniformGaps.standIn(SECOND_STAND_IN), UniformGaps.standIn(FIRST_STAND_IN)), backward);
+		assertEquals(Map.of(), PackValues.standIns(List.of("other")), "a name answered properly is not listed");
+		assertThrows(UnsupportedOperationException.class,
+				() -> PackValues.standIns(List.of(FIRST_STAND_IN)).put("x", List.of()));
 	}
 }
