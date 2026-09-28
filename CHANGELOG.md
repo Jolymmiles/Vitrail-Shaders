@@ -108,6 +108,11 @@ what the next one holds.
   folder is now copied aside and put in place once all of it is there, and a copy that fails
   leaves nothing, so the drop can simply be tried again. A link inside the folder is copied as a
   link, so one that leads out of the pack stays refused rather than becoming a file of it.
+- **A macro written below an `in` or `out` block no longer costs its program.** A pack that
+  declares such a block and, further down, a macro taking a parameter called `texture`, `sampler`
+  or `image` had the parameter renamed while its use inside the macro kept the old name, so the
+  shader named something it never declared and the program was refused. The macro is now kept as
+  the pack wrote it.
 
 ## 0.12.0-beta
 

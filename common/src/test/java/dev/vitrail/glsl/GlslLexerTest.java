@@ -348,12 +348,16 @@ class GlslLexerTest {
 	void asKeepsEverythingButTheTextAndNamingKeepsEverythingButTheFlag() {
 		Token name = new Token(Kind.IDENTIFIER, "A", "define");
 		Token renamed = name.as("B");
-		assertEquals(new Token(Kind.IDENTIFIER, "B", "define", false), renamed);
+		assertEquals(new Token(Kind.IDENTIFIER, "B", "define", false, false), renamed);
 		Token naming = name.naming();
 		assertTrue(naming.macroName());
 		assertEquals("A", naming.text());
 		assertEquals("define", naming.directive());
 		assertTrue(naming.as("C").macroName());
+		Token parameter = name.parameter();
+		assertTrue(parameter.macroParameter());
+		assertTrue(parameter.as("C").macroParameter());
+		assertTrue(parameter.naming().macroParameter());
 		assertEquals("", Token.BLANK.text());
 		assertSame(Kind.SPACE, Token.BLANK.kind());
 	}

@@ -425,12 +425,6 @@ public final class GlslTranslator {
 	private final Set<String> packMacros = new HashSet<>();
 
 	/**
-	 * Tokens of a {@code #define} that name a parameter of it, by index. See
-	 * {@link #markMacroParameters} for what renaming one would cost.
-	 */
-	private final Set<Integer> macroParameterTokens = new HashSet<>();
-
-	/**
 	 * What the replacement text of each macro names, its own parameters left out. Read where a
 	 * name has to be judged as the compiler will see it, once the macro is gone.
 	 */
@@ -1295,11 +1289,14 @@ public final class GlslTranslator {
 	 * preprocessor needs it.
 	 * <p>
 	 * The mark goes on the token and not into a set of positions, and that is the whole point of
-	 * {@link Token#macroName()}. This runs first, before anything inserts, and two passes do insert:
-	 * {@link #rewriteIdentifiers} closes the legacy shadow lookups it wrapped and {@link #convertDepth}
-	 * closes the depth writes it wrapped. Each insertion moves every index after it, so a position
-	 * taken here would name a different token by the time {@link #body(Set)} reads it, and rename a
-	 * macro name or leave a shadowed read on the block value with nothing logged either way.
+	 * {@link Token#macroName()}. This runs first, before anything inserts, and four passes do
+	 * insert: {@link #flattenInterfaceBlocks} puts a storage word in front of every member it
+	 * unwraps, {@link #rewriteIdentifiers} closes the legacy shadow lookups it wrapped,
+	 * {@link #convertDepth} closes the depth writes it wrapped and {@link #pinLookupLevels} closes
+	 * the lookups it pinned. Each insertion moves every index after it, so a position taken here
+	 * would name a different token by the time {@link #body(Set)} reads it, and rename a macro name
+	 * or leave a shadowed read on the block value with nothing logged either way. The parameters
+	 * of a macro are marked on their tokens for the same reason.
 	 */
 	private void collectMacroNames() {
 		int[] lines = this.tokens.lineNumbers();
@@ -1450,6 +1447,12 @@ public final class GlslTranslator {
 	 * that spares a call and renames everything else takes the declaration and leaves the use. The
 	 * preprocessor then binds nothing at that use, and what comes out is the very undeclared name
 	 * the rewrite exists to prevent.
+	 * <p>
+	 * The mark is {@link Token#macroParameter()}, on the token, and not a position kept aside: the
+	 * interface blocks are flattened between here and the rename, and each member they unwrap puts
+	 * tokens in ahead of every macro below it. A position taken here would name another token by
+	 * then, and a macro written under an {@code out} block would have its parameter renamed and
+	 * its use left.
 	 */
 	private void markMacroParameters(int name) {
 		Set<String> parameters = new HashSet<>();
@@ -1459,7 +1462,7 @@ public final class GlslTranslator {
 		}
 
 		for (int index = name + 1; index < scan; index++) {
-			this.macroParameterTokens.add(index);
+			this.tokens.parameter(index);
 		}
 
 		for (; scan < this.tokens.size(); scan++) {
@@ -1469,7 +1472,7 @@ public final class GlslTranslator {
 			}
 
 			if (token.kind() == Kind.IDENTIFIER && parameters.contains(token.text())) {
-				this.macroParameterTokens.add(scan);
+				this.tokens.parameter(scan);
 			}
 		}
 	}
@@ -2560,7 +2563,7 @@ public final class GlslTranslator {
 			// naming directive's first identifier.
 			String named = LegacyGlsl.RESERVED_NAMES.get(name);
 			if (named != null && "define".equals(directive)
-					&& !this.macroParameterTokens.contains(index)
+					&& !token.macroParameter()
 					&& this.tokens.callOpener(index) < 0) {
 				this.tokens.replace(index, named);
 				continue;
@@ -2591,10 +2594,10 @@ public final class GlslTranslator {
 		}
 
 		// Inserting shifts every index after it, so the last insertion is made first. It also ends
-		// every position taken before it, insertClosings being the one place that moves a token, so
+		// every position taken before it, as the flattening of interface blocks already did once, so
 		// anything a later pass still has to know about a token is carried on the token, as
-		// Token#macroName is. A position kept across here would be read against somebody else's
-		// token, and the reading pass has no way to notice.
+		// Token#macroName and Token#macroParameter are. A position kept across here would be read
+		// against somebody else's token, and the reading pass has no way to notice.
 		this.tokens.insertClosings(closings);
 	}
 

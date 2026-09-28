@@ -13,8 +13,8 @@ void ofOrderOutputs() { fragColor; }
 
 
 
-#define CALL(ofTexture, uv) texture(uv)
-#define LOOK(ofSampler) texture(ofSampler, of_Data_uv)
+#define CALL(texture, uv) texture(uv)
+#define LOOK(sampler) texture(sampler, of_Data_uv)
 
 
 

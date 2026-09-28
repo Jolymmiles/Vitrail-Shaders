@@ -282,10 +282,10 @@ class TokenStreamTest {
 		TokenStream stream = stream("#define A B\nC");
 		int b = at(stream, "B");
 		stream.replace(b, "Z");
-		assertEquals(new Token(Kind.IDENTIFIER, "Z", "define", false), stream.get(b));
+		assertEquals(new Token(Kind.IDENTIFIER, "Z", "define", false, false), stream.get(b));
 
 		stream.inject(b, "raw(");
-		assertEquals(new Token(Kind.RAW, "raw(", "define", false), stream.get(b));
+		assertEquals(new Token(Kind.RAW, "raw(", "define", false, false), stream.get(b));
 		assertFalse(stream.get(b).identifier("raw("));
 	}
 
