@@ -17,17 +17,11 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
 
 /**
  * Keeps what the game's compiler makes of each shader unit, on disk, so a second load of the same
@@ -120,10 +114,6 @@ import java.util.stream.Stream;
  */
 public final class ModuleCache {
 
-	/** Off by property rather than by rebuild, so a before and an after come out of one jar. */
-	private static final boolean ENABLED = Boolean.parseBoolean(
-			System.getProperty("vitrail.moduleCache", "true"));
-
 	/** First word of any SPIR-V module, and the cheapest proof that a blob is one. */
 	private static final int MAGIC = 0x07230203;
 
@@ -143,18 +133,10 @@ public final class ModuleCache {
 	 * How large the store may grow, in mebibytes, offered on the Sodium page. Half a gigabyte is
 	 * what this class shipped as a constant; the slider keeps that as its untouched value.
 	 */
-	public static final int MIN_CEILING_MIB = 128;
-	public static final int MAX_CEILING_MIB = 2048;
-	public static final int DEFAULT_CEILING_MIB = 512;
-	public static final int CEILING_STEP_MIB = 128;
-
-	private static final String CEILING_FILE = "module-cache-ceiling.txt";
-
-	private static volatile int ceilingMib = DEFAULT_CEILING_MIB;
-	private static volatile boolean ceilingLoaded;
-
-	/** How long a sweep that could not finish stays out of the way of the next write. */
-	private static final long SWEEP_BACKOFF_NANOS = 60_000_000_000L;
+	public static final int MIN_CEILING_MIB = ModuleStore.MIN_CEILING_MIB;
+	public static final int MAX_CEILING_MIB = ModuleStore.MAX_CEILING_MIB;
+	public static final int DEFAULT_CEILING_MIB = ModuleStore.DEFAULT_CEILING_MIB;
+	public static final int CEILING_STEP_MIB = ModuleStore.CEILING_STEP_MIB;
 
 	/**
 	 * Bumped by hand when the layout of a file changes rather than its content. This is the 26.3
@@ -166,36 +148,6 @@ public final class ModuleCache {
 	 */
 	private static final String FORMAT = "vitrail-module-26.3-1";
 
-	private static final String FOLDER = "modules";
-
-	/** How many of a load's rebuilt units are named on the line that counts them. */
-	private static final int NAMED_MISSES = 12;
-
-	/** The debug names of the units this load built, the first {@link #NAMED_MISSES} of them. */
-	private static final List<String> BUILT_NAMES = new ArrayList<>();
-	private static final String SUFFIX = ".mod";
-	private static final String PART_SUFFIX = ".part";
-
-	/** How long the compiler has to stay quiet before a load is taken to be over. */
-	private static final long QUIET_NANOS = 2_000_000_000L;
-
-	private static final AtomicLong SERVED = new AtomicLong();
-	private static final AtomicLong COMPILED = new AtomicLong();
-	private static final AtomicLong SERVED_SINCE_LAUNCH = new AtomicLong();
-	private static final AtomicLong COMPILED_SINCE_LAUNCH = new AtomicLong();
-	private static final AtomicLong BYTES = new AtomicLong();
-
-	/** Held for the first look at the directory and for every sweep, which are the two scans. */
-	private static final Object LOCK = new Object();
-
-	private static volatile @Nullable Path directory;
-	private static volatile boolean unavailable;
-	private static volatile long lastUnitNanos;
-	private static volatile long nextSweepNanos;
-	private static volatile boolean saidAboutReading;
-	private static volatile boolean saidAboutStoring;
-	private static volatile boolean saidAboutWriting;
-
 	private ModuleCache() {
 	}
 
@@ -204,11 +156,7 @@ public final class ModuleCache {
 	 * absent or unreadable file is {@link #DEFAULT_CEILING_MIB}.
 	 */
 	public static int ceilingMib() {
-		if (!ceilingLoaded) {
-			loadCeiling();
-		}
-
-		return ceilingMib;
+		return ModuleStore.ceilingMib();
 	}
 
 	/**
@@ -216,84 +164,7 @@ public final class ModuleCache {
 	 * over the new number is swept at once: no pack reload and no restart.
 	 */
 	public static void setCeilingMib(int mib) {
-		int asked = snapCeiling(mib);
-		writeCeiling(asked);
-		ceilingMib = asked;
-		ceilingLoaded = true;
-		nextSweepNanos = 0L;
-		Path root = directory;
-		if (root != null && BYTES.get() > bytesOf(asked)) {
-			sweep(root);
-		}
-	}
-
-	private static void loadCeiling() {
-		synchronized (LOCK) {
-			if (ceilingLoaded) {
-				return;
-			}
-
-			ceilingMib = readCeilingFile();
-			ceilingLoaded = true;
-		}
-	}
-
-	private static int readCeilingFile() {
-		Path file;
-		try {
-			file = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID).resolve(CEILING_FILE);
-		} catch (RuntimeException e) {
-			return DEFAULT_CEILING_MIB;
-		}
-
-		try {
-			if (!Files.isRegularFile(file)) {
-				return DEFAULT_CEILING_MIB;
-			}
-
-			String text = Files.readString(file, StandardCharsets.UTF_8).trim();
-
-			return snapCeiling(Integer.parseInt(text));
-		} catch (NumberFormatException e) {
-			Vitrail.logger().warn("vitrail/{} is not a size in mebibytes, so the default {} is used",
-					CEILING_FILE, DEFAULT_CEILING_MIB);
-
-			return DEFAULT_CEILING_MIB;
-		} catch (IOException | RuntimeException e) {
-			return DEFAULT_CEILING_MIB;
-		}
-	}
-
-	private static void writeCeiling(int mib) {
-		try {
-			Path file = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID)
-					.resolve(CEILING_FILE);
-			Files.createDirectories(file.getParent());
-			Files.writeString(file, mib + "\n", StandardCharsets.UTF_8);
-		} catch (IOException | RuntimeException e) {
-			Vitrail.logger().error("Vitrail could not write the module cache ceiling to vitrail/{}",
-					CEILING_FILE, e);
-		}
-	}
-
-	private static int snapCeiling(int asked) {
-		int clamped = Math.clamp(asked, MIN_CEILING_MIB, MAX_CEILING_MIB);
-		int steps = (clamped - MIN_CEILING_MIB + CEILING_STEP_MIB / 2) / CEILING_STEP_MIB;
-
-		return Math.clamp(MIN_CEILING_MIB + steps * CEILING_STEP_MIB, MIN_CEILING_MIB,
-				MAX_CEILING_MIB);
-	}
-
-	private static long bytesOf(int mib) {
-		return (long) mib * 1024L * 1024L;
-	}
-
-	private static long ceilingBytes() {
-		return bytesOf(ceilingMib());
-	}
-
-	private static long sweepTarget() {
-		return ceilingBytes() / 4L * 3L;
+		ModuleStore.setCeilingMib(mib);
 	}
 
 	/**
@@ -316,7 +187,7 @@ public final class ModuleCache {
 	 */
 	public static @Nullable String keyOf(String source, String stage, String defines,
 			boolean ours) {
-		if (directory() == null || source.contains("#include")) {
+		if (ModuleStore.directory() == null || source.contains("#include")) {
 			return null;
 		}
 
@@ -363,16 +234,16 @@ public final class ModuleCache {
 	 * own so that the binding rewrite a pipeline builder makes to its module rewrites nobody else's.
 	 */
 	public static @Nullable ByteBuffer lookup(@Nullable String key) {
-		Path root = directory();
+		Path root = ModuleStore.directory();
 		if (key == null || root == null) {
 			return null;
 		}
 
-		Path file = root.resolve(key + SUFFIX);
+		Path file = root.resolve(key + ModuleStore.SUFFIX);
 		byte[] raw;
 		try {
 			if (Files.size(file) > MOST_BYTES) {
-				sayAboutReading("a stored module is larger than any module is");
+				ModuleStore.sayAboutReading("a stored module is larger than any module is");
 
 				return null;
 			}
@@ -385,14 +256,14 @@ public final class ModuleCache {
 		} catch (OutOfMemoryError e) {
 			// The size was asked for above, so this is a heap that was already at its edge rather
 			// than a file that lied about itself. It is still a miss and never a dead load.
-			sayAboutReading("there was no room to read a stored module");
+			ModuleStore.sayAboutReading("there was no room to read a stored module");
 
 			return null;
 		}
 
 		int length = raw.length - ModuleStore.DIGEST_BYTES;
 		if (length <= 0 || !ModuleStore.answersForItself(raw, length)) {
-			sayAboutReading("a stored module did not answer for its own bytes");
+			ModuleStore.sayAboutReading("a stored module did not answer for its own bytes");
 
 			return null;
 		}
@@ -403,9 +274,9 @@ public final class ModuleCache {
 		}
 
 		ModuleStore.touch(file);
-		SERVED.incrementAndGet();
-		SERVED_SINCE_LAUNCH.incrementAndGet();
-		lastUnitNanos = System.nanoTime();
+		ModuleStore.SERVED.incrementAndGet();
+		ModuleStore.SERVED_SINCE_LAUNCH.incrementAndGet();
+		ModuleStore.lastUnitNanos = System.nanoTime();
 
 		return spirv;
 	}
@@ -444,32 +315,20 @@ public final class ModuleCache {
 				MemoryUtil.memFree(spirv);
 			}
 
-			sayAboutReading("a stored module could not be read back (" + e + ")");
+			ModuleStore.sayAboutReading("a stored module could not be read back (" + e + ")");
 
 			return null;
 		}
 	}
 
 	/**
-	 * Counts a unit the compiler is about to build, said BEFORE it builds it, and keeps its name
-	 * while there is room for one more: the line at the end of the load names the first few, so
-	 * that a warm load rebuilding sixty modules says which sixty rather than how many.
-	 * <p>
-	 * Before and not after, because a unit a pack broke throws out of the compile and would
-	 * otherwise be counted by neither side, which is exactly the silence the line at the end of a
-	 * load exists to remove.
+	 * Counts a unit the compiler is about to build, said BEFORE it builds it, and names it for the
+	 * line at the end of the load.
 	 *
 	 * @param filename the debug name the compile was given, which says whose unit it is
 	 */
 	public static void building(String filename) {
-		COMPILED.incrementAndGet();
-		COMPILED_SINCE_LAUNCH.incrementAndGet();
-		lastUnitNanos = System.nanoTime();
-		synchronized (BUILT_NAMES) {
-			if (BUILT_NAMES.size() < NAMED_MISSES) {
-				BUILT_NAMES.add(filename);
-			}
-		}
+		ModuleStore.building(filename);
 	}
 
 	/**
@@ -479,7 +338,7 @@ public final class ModuleCache {
 	 * reflected it, which is the one instant at which it is both finished and untouched.
 	 */
 	public static void store(@Nullable String key, ByteBuffer spirv) {
-		Path root = directory();
+		Path root = ModuleStore.directory();
 		if (key == null || root == null) {
 			return;
 		}
@@ -488,14 +347,14 @@ public final class ModuleCache {
 		try {
 			raw = describe(spirv);
 		} catch (IOException | RuntimeException e) {
-			sayAboutStoring("a module could not be written down (" + e + ")");
+			ModuleStore.sayAboutStoring("a module could not be written down (" + e + ")");
 
 			return;
 		}
 
-		Path file = root.resolve(key + SUFFIX);
+		Path file = root.resolve(key + ModuleStore.SUFFIX);
 		Path part = root.resolve(key + "-"
-				+ Long.toHexString(Thread.currentThread().threadId()) + PART_SUFFIX);
+				+ Long.toHexString(Thread.currentThread().threadId()) + ModuleStore.PART_SUFFIX);
 
 		try {
 			// The module, then the digest that answers for it. Behind rather than in front, so
@@ -503,9 +362,9 @@ public final class ModuleCache {
 			Files.write(part, raw);
 			Files.write(part, ModuleStore.sha256(raw), StandardOpenOption.APPEND);
 			ModuleStore.move(part, file);
-			BYTES.addAndGet(raw.length + (long) ModuleStore.DIGEST_BYTES);
+			ModuleStore.BYTES.addAndGet(raw.length + (long) ModuleStore.DIGEST_BYTES);
 		} catch (IOException e) {
-			sayAboutWriting("a module could not be stored", e);
+			ModuleStore.sayAboutWriting("a module could not be stored", e);
 
 			try {
 				Files.deleteIfExists(part);
@@ -516,8 +375,8 @@ public final class ModuleCache {
 			return;
 		}
 
-		if (BYTES.get() > ceilingBytes()) {
-			sweep(root);
+		if (ModuleStore.BYTES.get() > ModuleStore.ceilingBytes()) {
+			ModuleStore.sweep(root);
 		}
 	}
 
@@ -534,120 +393,12 @@ public final class ModuleCache {
 	}
 
 	/**
-	 * One line for the load that has just finished, in both directions and whatever happened.
-	 * <p>
-	 * Called at every client tick and silent at almost all of them: it speaks once the compiler has
-	 * been quiet long enough for a load to be over, which is what makes the line a load's total
-	 * rather than a running commentary. A load whose leftovers straggle in after a longer pause than
-	 * that comes out as two lines, and the totals since launch are on the line so that the two can
-	 * still be added up without ambiguity.
-	 * <p>
-	 * <strong>It says the misses as loudly as the hits.</strong> A cache that only speaks when it
-	 * helps makes every later reading of a log ambiguous, and a silence that could mean either
-	 * nothing happened or everything did is worse than no line at all.
+	 * One line for the load that has just finished, in both directions and whatever happened; called
+	 * at every client tick and silent until the compiler has been quiet long enough for a load to be
+	 * over. {@link ModuleStore#say} says what it prints.
 	 */
 	public static void say() {
-		if (SERVED.get() == 0L && COMPILED.get() == 0L) {
-			return;
-		}
-
-		if (System.nanoTime() - lastUnitNanos < QUIET_NANOS) {
-			return;
-		}
-
-		long hits = SERVED.getAndSet(0L);
-		long misses = COMPILED.getAndSet(0L);
-		List<String> named;
-		synchronized (BUILT_NAMES) {
-			named = List.copyOf(BUILT_NAMES);
-			BUILT_NAMES.clear();
-		}
-
-		if (!ENABLED) {
-			Vitrail.logger().info("Module cache off, so all {} units of this load were compiled ({} "
-					+ "since this launch)", misses, COMPILED_SINCE_LAUNCH.get());
-			RawLocals.say(misses);
-			PackNames.say(misses);
-			SamplerReach.say(misses);
-
-			return;
-		}
-
-		Path root = directory;
-		Vitrail.logger().info("Module cache: {} units served, {} built by the compiler, {} and {} "
-						+ "since this launch, {} MB in {}",
-				hits, misses, SERVED_SINCE_LAUNCH.get(), COMPILED_SINCE_LAUNCH.get(),
-				ModuleStore.megabytes(BYTES.get()), root == null ? "nowhere" : root);
-		// Said only where a load rebuilt something a store already held units of: a cold first
-		// load builds everything for a reason nobody needs told, a warm one rebuilding a handful
-		// has a reason worth finding, and the names are where the search starts.
-		if (misses > 0L && hits > 0L) {
-			Vitrail.logger().info("The {} built this load {}: {}", misses,
-					misses > named.size() ? "begin with" : "are", String.join(", ", named));
-		}
-
-		// At the same quiet moment and about the same compiles: what the passes did to the modules
-		// this line counts as built.
-		RawLocals.say(misses);
-		PackNames.say(misses);
-		SamplerReach.say(misses);
-	}
-
-	/** The directory, made and measured at the first unit of the run, or null when there is none. */
-	private static @Nullable Path directory() {
-		if (!ENABLED || unavailable) {
-			return null;
-		}
-
-		Path known = directory;
-		if (known != null) {
-			return known;
-		}
-
-		synchronized (LOCK) {
-			if (directory == null && !unavailable) {
-				open();
-			}
-
-			return directory;
-		}
-	}
-
-	/**
-	 * Makes the edition's directory, clears out what other editions left but for the one neighbour
-	 * {@link #dropOtherEditions} spares, and measures what is left.
-	 * <p>
-	 * The only moment at which a leftover neighbour can be swept up: nothing else has been handed
-	 * the directory yet, because {@link #directory} is set on the last line, so a {@code .part} seen
-	 * here is a dead one from a run that was killed and never a live write of a worker's.
-	 * <p>
-	 * <strong>Only this edition's own directory decides whether there is a cache this run.</strong>
-	 * What another build left is cleared on the way in and is nothing this build reads, so a file in
-	 * it that will not go, held by a scanner or an indexer or made read-only by hand, costs the disk
-	 * it sits on and is said once. It used to throw out of here, and one stale file in a folder no
-	 * build would ever read again then turned the store off at every launch for as long as the file
-	 * stayed.
-	 */
-	private static void open() {
-		try {
-			Path root = Vitrail.platform().gameDirectory().resolve(Vitrail.MOD_ID).resolve(FOLDER);
-			Path mine = root.resolve(Vitrail.cacheEdition());
-			Files.createDirectories(mine);
-			ModuleStore.touch(mine);
-			String left = dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
-			if (!left.isEmpty()) {
-				Vitrail.logger().warn("The module cache could not take away all that another build "
-						+ "left in {}: {}. This build keeps its own store all the same, and the next "
-						+ "launch tries again", root, left);
-			}
-
-			BYTES.set(total(scan(mine, true)));
-			directory = mine;
-		} catch (IOException | RuntimeException e) {
-			unavailable = true;
-			Vitrail.logger().warn("No module cache this run, so every shader is compiled: {}",
-					e.toString());
-		}
+		ModuleStore.say("compiled");
 	}
 
 	/**
@@ -658,147 +409,4 @@ public final class ModuleCache {
 		return ModuleStore.dropOtherEditions(root, mine, family);
 	}
 
-	/**
-	 * Every unit on disk, oldest stamp first.
-	 * <p>
-	 * <strong>A neighbour is only ever deleted when {@code prunePartials} says so, which is at
-	 * {@link #open} and nowhere else.</strong> A sweep runs while other workers are in the middle of
-	 * their own writes, and deleting what they are holding open takes their unit down on one system
-	 * and aborts the whole sweep with a refusal on the other. What a sweep does with a neighbour is
-	 * ignore it: it is not reachable, it is about to become a unit, and it is nobody's to count.
-	 * <p>
-	 * A file that goes missing between the listing and the question is skipped rather than fatal,
-	 * for the same reason: the listing is a snapshot and the directory is not frozen behind it.
-	 */
-	private static List<Unit> scan(Path root, boolean prunePartials) throws IOException {
-		List<Unit> units = new ArrayList<>();
-
-		try (Stream<Path> entries = Files.list(root)) {
-			for (Path entry : entries.toList()) {
-				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
-					if (prunePartials) {
-						try {
-							Files.deleteIfExists(entry);
-						} catch (IOException ignored) {
-							// Dead, and held by something outside this process. It is not reachable
-							// and not counted, and the next open tries again: refused out of here it
-							// would have turned the whole store off over one file nothing reads.
-						}
-					}
-				} else {
-					try {
-						units.add(new Unit(entry, Files.getLastModifiedTime(entry).toMillis(),
-								Files.size(entry)));
-					} catch (IOException ignored) {
-						// Gone, or momentarily unreadable. One unit uncounted, and the next sweep
-						// counts it.
-					}
-				}
-			}
-		}
-
-		units.sort(Comparator.comparingLong(Unit::stamp));
-
-		return units;
-	}
-
-	private static long total(List<Unit> units) {
-		long sum = 0L;
-		for (Unit unit : units) {
-			sum += unit.size();
-		}
-
-		return sum;
-	}
-
-	/**
-	 * Brings the directory back under the ceiling, oldest stamp first.
-	 * <p>
-	 * It rescans rather than trusting the running count, which is also what puts that count right
-	 * again: a unit written twice under one key is added twice and subtracted once, so the two only
-	 * come back together on the other side of a sweep.
-	 * <p>
-	 * <strong>What it leaves behind on the way out matters more than what it frees.</strong> The
-	 * count is put down in a {@code finally} and a sweep that ends still over the ceiling stands
-	 * back for a while, because the caller's test is that same count: a single refusal anywhere in
-	 * here, without both of those, leaves the count high and turns every later write into a full
-	 * walk of the directory under this lock, for the rest of the session and with nothing said.
-	 * <p>
-	 * It is put down by the difference the sweep found and not as the figure, because a store adds
-	 * to the count outside this lock: a unit that lands after the listing and is added before the
-	 * count is set would otherwise be wiped from it, and a count that runs short is one the ceiling
-	 * is late to catch. What the difference can do instead is count a unit the listing saw twice,
-	 * which is the direction the count already errs in, and the next sweep's rescan puts it right.
-	 */
-	private static void sweep(Path root) {
-		synchronized (LOCK) {
-			if (System.nanoTime() < nextSweepNanos) {
-				return;
-			}
-
-			long counted = BYTES.get();
-			long total = counted;
-			try {
-				List<Unit> units = scan(root, false);
-				total = total(units);
-				long before = total;
-
-				for (Unit unit : units) {
-					if (total <= sweepTarget()) {
-						break;
-					}
-
-					Files.deleteIfExists(unit.path());
-					total -= unit.size();
-				}
-
-				if (total < before) {
-					Vitrail.logger().info("The module cache went over its ceiling, so the units "
-							+ "nothing has asked for lately were dropped, {} MB left",
-							ModuleStore.megabytes(total));
-				}
-			} catch (IOException e) {
-				sayAboutWriting("the cache could not be swept", e);
-			} finally {
-				BYTES.addAndGet(total - counted);
-
-				if (total > ceilingBytes()) {
-					nextSweepNanos = System.nanoTime() + SWEEP_BACKOFF_NANOS;
-				}
-			}
-		}
-	}
-
-	private static void sayAboutReading(String what) {
-		if (!saidAboutReading) {
-			saidAboutReading = true;
-			Vitrail.logger().warn("In the module cache, {}, so it was compiled instead. Said once a "
-					+ "run: nothing about it stops a pack loading", what);
-		}
-	}
-
-	/**
-	 * Said when a module was built and could not be kept, which is not the same failure as a stored
-	 * one that could not be read: the load it happened in paid nothing extra and the picture is the
-	 * picture a compile makes. Only the load after it pays, by compiling again.
-	 */
-	private static void sayAboutStoring(String what) {
-		if (!saidAboutStoring) {
-			saidAboutStoring = true;
-			Vitrail.logger().warn("In the module cache, {}, so it was used and not kept. Said once "
-					+ "a run: the next load compiles it again and nothing else changes", what);
-		}
-	}
-
-	private static void sayAboutWriting(String what, IOException cause) {
-		if (!saidAboutWriting) {
-			saidAboutWriting = true;
-			Vitrail.logger().warn("In the module cache, {}: {}. Said once a run: the next load pays "
-					+ "for the compile again and nothing else changes", what, cause.toString());
-		}
-	}
-
-	/** One file of the cache, with what the sweep needs to order it and to subtract it. */
-	private record Unit(Path path, long stamp, long size) {
-	}
 }
