@@ -393,8 +393,8 @@ that shadows a builtin name is refused rather than resolved by precedence, and o
 the reason given under [a pack is downloaded content](#a-pack-is-downloaded-content): resolving and
 evaluating a declaration both recurse, and a stack overflow is an error no catch around pack
 reading sees. The functions those expressions call follow OptiFine's list where the reference
-misreads it, which is a divergence and is argued as one in
-[uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
+misreads it, and `&&` binds tighter than `||` as it does in OptiFine, which is a divergence and is
+argued as one in [uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
 
 ## What resists, and whose fault it is
 

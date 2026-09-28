@@ -76,6 +76,10 @@ what the next one holds.
   loads.** Working one out used up the stack, an error nothing on that road recovered from. A
   uniform nested more than 128 levels deep, far past anything a pack is known to write, is now
   dropped and named in the log, and the pack loads without it.
+- **`&&` binds tighter than `||` in a pack's own uniforms, as in OptiFine.** A custom uniform
+  written as `a || b && c` was read left to right, as `(a || b) && c`, where OptiFine, and the
+  GLSL the same pack is written in, read it as `a || (b && c)`. It is now read as they read it.
+  None of the packs Vitrail is usually tried with writes the two together without brackets.
 
 ## 0.12.0-beta
 

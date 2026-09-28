@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
  * <p>
  * Every expected value here is worked out by hand, with the arithmetic written out beside it where
  * the answer is not obvious; none was copied from a run. The cases that pin a rule the reader would
- * not guess (division is always floating, {@code &&} and {@code ||} share one level, {@code 08} is
- * a float) say so in their names, because a change to one of them changes a pack's picture.
+ * not guess (division is always floating, {@code 08} is a float) say so in their names, because a
+ * change to one of them changes a pack's picture.
  */
 class ExprOperatorsTest {
 
@@ -132,13 +132,14 @@ class ExprOperatorsTest {
 	}
 
 	@Test
-	void andAndOrShareOneLevelAndGroupFromTheLeft() {
-		// Documented in ExprGrammar: "&& ||" are one level. In C, GLSL and Java && is tighter, and
-		// these two would be true and true. Here they are (T || F) && F and (F && T) || T.
-		assertFalse(this.rig.boolOf("1 < 2 || 1 > 2 && 1 > 2"), "(T || F) && F");
+	void andBindsTighterThanOr() {
+		// Documented in ExprGrammar: && is one level tighter than ||, as in OptiFine, C, GLSL and
+		// Java. The two used to share one level and group from the left, as they still do in Iris,
+		// and the first of these was (T || F) && F, false.
+		assertTrue(this.rig.boolOf("1 < 2 || 1 > 2 && 1 > 2"), "T || (F && F)");
 		assertTrue(this.rig.boolOf("1 > 2 && 1 < 2 || 1 < 2"), "(F && T) || T");
 		// Where the two readings agree nothing distinguishes them.
-		assertFalse(this.rig.boolOf("1 > 2 || 2 > 1 && 1 > 2"), "(F || T) && F");
+		assertFalse(this.rig.boolOf("1 > 2 || 2 > 1 && 1 > 2"), "F || (T && F)");
 	}
 
 	@Test
