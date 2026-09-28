@@ -925,11 +925,25 @@ public final class ExprFunctions {
 		functions = builder.build();
 	}
 
+	/**
+	 * A function applied component by component, one per size of vector.
+	 * <p>
+	 * Registered as a supplier for the same reason as {@link #addUnaryOpJOML}, though what one of
+	 * these keeps is its operands rather than its answer: it parks each evaluated argument in a
+	 * field before it walks the components. Shared between call sites, as Iris shares it
+	 * ({@code parsing/IrisFunctions.java:1049}, and {@code :1066} for the boolean fold below), the
+	 * inner sum of {@code a + (b + c)} parks {@code b} where the outer one had parked {@code a},
+	 * and the outer one then adds {@code b}. What that costs the image: an integer vector reaches a
+	 * declaration only through a comparison or an {@code if}, and none of BSL, Bliss, Photon or
+	 * either Complementary builds one.
+	 */
 	static <T extends TypedFunction> void addVectorized(String name, T function) {
 		if (function.getReturnType() instanceof Type.Primitive) {
-			add(name, new VectorizedFunction(function, 2));
-			add(name, new VectorizedFunction(function, 3));
-			add(name, new VectorizedFunction(function, 4));
+			for (int size = 2; size <= 4; size++) {
+				int length = size;
+				builder.addDynamicFunction(name, new VectorType.ArrayVector(function.getReturnType(), length),
+					() -> new VectorizedFunction(function, length));
+			}
 		} else {
 			throw new IllegalArgumentException(name + " is not vectorizable");
 		}
@@ -940,20 +954,43 @@ public final class ExprFunctions {
 		addVectorized(name, function);
 	}
 
+	/** The same, folding the components into one boolean. It parks its operands as well. */
 	static <T extends TypedFunction> void addBooleanVectorizable(String name, T function) {
 		assert function.getReturnType().equals(Type.Boolean);
 		add(name, function);
 		if (function.getReturnType() instanceof Type.Primitive) {
-			add(name, new BooleanVectorizedFunction(function, 2));
-			add(name, new BooleanVectorizedFunction(function, 3));
-			add(name, new BooleanVectorizedFunction(function, 4));
+			for (int size = 2; size <= 4; size++) {
+				int length = size;
+				builder.addDynamicFunction(name, Type.Boolean,
+					() -> new BooleanVectorizedFunction(function, length));
+			}
 		} else {
 			throw new IllegalArgumentException(name + " is not vectorizable");
 		}
 	}
 
+	/**
+	 * A function of one float vector, answering one.
+	 * <p>
+	 * The answer is written into a vector the function keeps, and that is why this registers a
+	 * supplier rather than an instance: the resolver asks it once per place an expression calls
+	 * the function, so each call site gets a vector of its own, as each {@code smooth()} gets an
+	 * accumulator of its own. One instance shared by every call site, which is what Iris registers
+	 * ({@code parsing/IrisFunctions.java:1074}, and {@code :1093} and {@code :1115} for the two
+	 * below), hands every call the same vector, and in {@code abs(a) + abs(b)} the second call
+	 * overwrites the first answer before the sum reads it: the sum is twice {@code abs(b)}.
+	 * <p>
+	 * That is a divergence, and not from anything a pack can have been tuned against: the vector
+	 * functions are the reference's own addition to OptiFine's list, and what it answers for two
+	 * calls in one expression is not what the pack wrote. What it costs the image is nothing among
+	 * the packs read here, no declaration of BSL, Bliss, Photon or either Complementary calling one
+	 * of these twice.
+	 * <p>
+	 * An answer still lives only until its own call site runs again, which is why a declaration
+	 * copies its value out ({@code CustomUniforms.Node}).
+	 */
 	static <T> void addUnaryOpJOML(String name, VectorType.JOMLVector<T> type, BiConsumer<T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type}
 		) {
@@ -971,8 +1008,9 @@ public final class ExprFunctions {
 		});
 	}
 
+	/** A function of two float vectors, one answer vector per call site as {@link #addUnaryOpJOML}. */
 	static <T> void addBinaryOpJOML(String name, VectorType.JOMLVector<T> type, TriConsumer<T, T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type, type}
 		) {
@@ -993,8 +1031,9 @@ public final class ExprFunctions {
 		});
 	}
 
+	/** A function of three float vectors, one answer vector per call site as {@link #addUnaryOpJOML}. */
 	static <T> void addTernaryOpJOML(String name, VectorType.JOMLVector<T> type, QuadConsumer<T, T, T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type, type, type}
 		) {

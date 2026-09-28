@@ -214,6 +214,15 @@ a smoothing function written there advanced several times a frame and faded that
 than the pack asked. It is evaluated once now, after the last condition has failed, which is how
 OptiFine reads it.
 
+**Each place an expression calls a function has that function to itself.** A smoothing function
+keeps an accumulator, and two of them in one pack must not fade as one. A vector function keeps the
+vector it writes its answer into, and the reference hands one such function to every call site, so
+in `abs(a) + abs(b)` the second call overwrites the first answer before the sum reads it, and the
+sum is twice `abs(b)`. The functions an integer vector goes through keep their operands the same
+way. Each call site is resolved to a function of its own instead. An answer still lasts only until
+its own call runs again, which is why a declaration copies its value out rather than keeping the
+vector it was handed.
+
 **Where the reference misreads OptiFine's list of functions, the list is read as OptiFine reads
 it.** That goes against reproducing the reference's defects, so it is argued rather than slipped
 in: none of these is a behaviour a pack can have been tuned against, since each either answers
@@ -222,7 +231,9 @@ which runs the same packs, answers what was written. What it costs the image was
 nothing: no declaration of BSL, Bliss, Photon or either Complementary does any of what follows,
 Photon's phase of the moon being the one long `if` among them, with a constant for its fallback. A
 `min` or a `max` of three values or more compares only its first two there, and the fallback of a
-long `if` is evaluated as above.
+long `if` is evaluated as above. Two calls of one vector function in one expression share one answer
+there, as above; that defect is no misreading of OptiFine, vectors being the reference's own
+addition to the list, but it answers something the pack did not write all the same.
 
 Three rules decide what happens when a pack gets it wrong, and all three exist so that a mistake
 stays **named** instead of turning into a permanently wrong image:

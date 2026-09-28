@@ -59,6 +59,11 @@ what the next one holds.
   value of an `if(cond, value, cond2, value2, fallback)` was worked out once for every condition
   that failed, so a `smooth()` written there faded several times faster than the pack asked. Both
   now work as in OptiFine.
+- **Two calls of one function in a pack's own vector uniform keep their own answers.** In a custom
+  uniform such as `abs(a) + abs(b)` over vectors, the second `abs` wrote its answer over the first
+  before the two were added, so the sum came out as twice the second one. The same went for `+`,
+  `-`, `*`, `/`, `floor`, `ceil`, `min`, `max` and `clamp` on vectors, and for sums of integer
+  vectors. Each call now keeps its answer apart.
 
 ## 0.12.0-beta
 

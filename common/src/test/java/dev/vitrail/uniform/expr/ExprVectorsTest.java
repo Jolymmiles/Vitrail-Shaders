@@ -290,40 +290,39 @@ class ExprVectorsTest {
 	// the shared buffers
 
 	@Test
-	void knownBug_twoCallsOfOneVectorOperationInOneExpressionShareTheirResult() {
-		// Known defect, being fixed on another branch: this pins today's wrong values.
-		// Each of the vector functions above is ONE object shared by every use of its name, and it
-		// writes into one buffer it owns. Nested twice in one expression, the second call overwrites
-		// the first one's result before the outer call has read it. The asserted values are what the
-		// engine gives today; the "should be" is the value by hand.
+	void twoCallsOfOneVectorOperationInOneExpressionKeepTheirOwnResults() {
+		// Each call of a vector function has an object and a buffer of its own. They used to be ONE
+		// object per name, as they still are in Iris, and nested twice in one expression the second
+		// call overwrote the first one's result before the outer call had read it.
 		//
 		// va + va = (2, 4, 6) and va + va + va = (3, 6, 9).
-		assertVec(new float[] {6, 12, 18}, this.rig.vecOf(3, "(va + va) + (va + va + va)"),
-				"should be 5, 10, 15: both sides read the buffer the right hand add left behind");
-		assertVec(new float[] {9, 36, 81}, this.rig.vecOf(3, "(va + va) * (va + va + va)"),
-				"should be 6, 24, 54: (2,4,6)*(3,6,9)");
+		assertVec(new float[] {5, 10, 15}, this.rig.vecOf(3, "(va + va) + (va + va + va)"),
+				"was 6, 12, 18: both sides read the buffer the right hand add left behind");
+		assertVec(new float[] {6, 24, 54}, this.rig.vecOf(3, "(va + va) * (va + va + va)"),
+				"(2,4,6)*(3,6,9)");
 		// va * va = (1, 4, 9); va * (2,2,2) = (2, 4, 6): sum (3, 8, 15).
-		assertVec(new float[] {4, 8, 12}, this.rig.vecOf(3, "(va * va) + (va * vec3(2, 2, 2))"),
-				"should be 3, 8, 15");
+		assertVec(new float[] {3, 8, 15}, this.rig.vecOf(3, "(va * va) + (va * vec3(2, 2, 2))"),
+				"(1,4,9) + (2,4,6)");
 		// min(va, 2) = (1, 2, 2), min(va, 1) = (1, 1, 1): the max of the two is (1, 2, 2).
-		assertVec(new float[] {1, 1, 1},
-				this.rig.vecOf(3, "max(min(va, vec3(2, 2, 2)), min(va, vec3(1, 1, 1)))"), "should be 1, 2, 2");
+		assertVec(new float[] {1, 2, 2},
+				this.rig.vecOf(3, "max(min(va, vec3(2, 2, 2)), min(va, vec3(1, 1, 1)))"), "max of two mins");
 		// abs(-va) = (1,2,3); va - 2 = (-1,0,1), abs = (1,0,1); difference (0,2,2), abs (0,2,2).
-		assertVec(new float[] {0, 0, 0}, this.rig.vecOf(3, "abs(abs(-va) - abs(va - vec3(2, 2, 2)))"),
-				"should be 0, 2, 2");
+		assertVec(new float[] {0, 2, 2}, this.rig.vecOf(3, "abs(abs(-va) - abs(va - vec3(2, 2, 2)))"),
+				"abs of a difference of two abs");
 	}
 
 	@Test
 	void twoDifferentVectorOperationsInOneExpressionDoNotShare() {
-		// The same nesting with two different operations is right, which is why the bug above goes
-		// unseen in most packs: add, subtract and multiply own separate buffers.
+		// The same nesting with two different operations was right with one object per name too,
+		// which is why the sharing went unseen in most packs: add, subtract and multiply each had a
+		// buffer of their own.
 		assertVec(new float[] {2, 8, 18}, this.rig.vecOf(3, "(va + va) * va - vec3(0, 0, 0)"),
 				"(2,4,6) * (1,2,3)");
 		// va * 2 = (2,4,6) and 3 - va = (2,1,0): a multiply and a subtract feeding one add.
 		assertVec(new float[] {4, 5, 6}, this.rig.vecOf(3, "(va * vec3(2, 2, 2)) + (vec3(3, 3, 3) - va)"),
 				"(2,4,6) + (2,1,0)");
-		// A chain that leans left is right too: each inner result is the FIRST operand, which the
-		// outer call writes over in place.
+		// A chain that leans left was right too: each inner result was the FIRST operand, which the
+		// outer call wrote over in place.
 		assertVec(new float[] {4, 8, 12}, this.rig.vecOf(3, "va + va + va + va"), "((a + a) + a) + a");
 	}
 }
