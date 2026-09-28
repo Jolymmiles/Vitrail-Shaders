@@ -100,6 +100,23 @@ class BlockCommentsTest {
 	}
 
 	@Test
+	void aBackslashAtTheEndOfALineChangesNothingBecauseNoCommentPairHasOne() {
+		java.util.Random random = new java.util.Random(0x5EEDL);
+		String alphabet = "//**  a";
+		for (int i = 0; i < 20_000; i++) {
+			StringBuilder text = new StringBuilder();
+			int length = random.nextInt(30);
+			for (int at = 0; at < length; at++) {
+				text.append(alphabet.charAt(random.nextInt(alphabet.length())));
+			}
+
+			String line = text.toString();
+			assertEquals(BlockComments.openAfter(line, false), BlockComments.openAfter(line + "\\", false), line);
+			assertEquals(BlockComments.openAfter(line, true), BlockComments.openAfter(line + "\\", true), line);
+		}
+	}
+
+	@Test
 	void slashStarSlashOpensAndDoesNotCloseItself() {
 		assertTrue(BlockComments.openAfter("/*/", false));
 		assertFalse(BlockComments.openAfter("/**/", false));
