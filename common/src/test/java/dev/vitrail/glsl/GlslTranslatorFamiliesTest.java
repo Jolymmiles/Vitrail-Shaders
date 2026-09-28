@@ -158,11 +158,11 @@ class GlslTranslatorFamiliesTest {
 	void everyCounterOfTheNotesMovesInSomeCase() throws IOException {
 		Set<String> moved = new HashSet<>();
 		List<String> names = new ArrayList<>();
-		for (Single one : GlslTranslatorCases.singles()) {
+		for (Single one : GlslTranslatorCases.everySingle()) {
 			names.add(one.name());
 		}
 
-		for (Pair pair : GlslTranslatorCases.pairs()) {
+		for (Pair pair : GlslTranslatorCases.everyPair()) {
 			names.add(pair.name());
 		}
 

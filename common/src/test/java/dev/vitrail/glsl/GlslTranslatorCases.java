@@ -29,6 +29,8 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * The inputs {@link GlslTranslator} is held to, and the one way they are run and written down.
@@ -166,6 +168,10 @@ final class GlslTranslatorCases {
 
 		Single named(String other) {
 			return new Single(other, this.stage, this.source, this.setup);
+		}
+
+		Single withSource(String text) {
+			return new Single(this.name, this.stage, text, this.setup);
 		}
 
 		Single on(VertexInputs mesh) {
@@ -377,8 +383,30 @@ final class GlslTranslatorCases {
 				List.of());
 	}
 
-	/** Every stage on its own, in the order the goldens are listed. */
+	/**
+	 * The cases whose output depends on how a {@code #version} line is read, or on how the parameters of
+	 * a function-like macro are told from their uses: their goldens are kept apart from the rest, in a
+	 * test of their own, because those two are the readings a change to the translator is expected to
+	 * move. Regenerating what is listed here must not have to touch any other golden.
+	 */
+	private static final Set<String> FENCED = Set.of(
+			"core-profile-fullscreen", "synthesized-attributes", "pair-modern-interface",
+			"version-compatibility", "version-150-bare", "version-absent", "version-two-lines",
+			"version-dead-last-line", "pack-macros-shim", "macro-continuation", "macro-parameters-reserved",
+			"macro-parameters-after-block");
+
+	/** Every stage on its own, except the fenced ones, in the order the goldens are listed. */
 	static List<Single> singles() {
+		return everySingle().stream().filter(one -> !FENCED.contains(one.name())).toList();
+	}
+
+	/** The stages on their own that depend on the reading of a version line or of a macro parameter. */
+	static List<Single> fenced() {
+		return everySingle().stream().filter(one -> FENCED.contains(one.name())).toList();
+	}
+
+	/** Every stage on its own, fenced or not. */
+	static List<Single> everySingle() {
 		List<Single> all = new ArrayList<>();
 
 		// --- The fixed function names and the storage words ----------------------------------------
@@ -656,6 +684,28 @@ final class GlslTranslatorCases {
 					fragColor = vec4(n + view, DataIn.colour.a) + vec4(DataIn.uv, 0.0, 0.0);
 				}
 				"""));
+
+		// --- How the version line is read: only a fullscreen vertex stage shows it, through the names of
+		// the core profile the quad answers for. What the last of several version lines, or a dead one,
+		// says is pinned as it stands: it is the reading a change of the translator is expected to move.
+
+		String quad = """
+				in vec3 vaPosition;
+				in vec2 vaUV0;
+				out vec2 texcoord;
+
+				void main() {
+					texcoord = vaUV0;
+					gl_Position = vec4(vaPosition.xy * 2.0 - 1.0, 0.0, 1.0);
+				}
+				""";
+		Single screen = vertex("version", quad).on(VertexInputs.FULLSCREEN).program("composite");
+		all.add(screen.named("version-compatibility").withSource("#version 330 compatibility\n\n" + quad));
+		all.add(screen.named("version-150-bare").withSource("#version 150\n\n" + quad));
+		all.add(screen.named("version-absent").withSource(quad));
+		all.add(screen.named("version-two-lines").withSource("#version 330 core\n\n#version 120\n\n" + quad));
+		all.add(screen.named("version-dead-last-line").withSource(
+				"#version 120\n\n#version 330 core // @dead\n\n" + quad));
 
 		// --- Trigonometry, the goldberg hash, the packing builtins -----------------------------------
 
@@ -1459,6 +1509,46 @@ final class GlslTranslatorCases {
 				}
 				""").program("composite"));
 
+		// The parameters of a function-like macro are told from the names they shadow, and the macro's
+		// whole body is read with them: a parameter spelled like a reserved word must not be renamed.
+		all.add(fragment("macro-parameters-reserved", """
+				#version 120
+
+				uniform sampler2D texture;
+				varying vec2 uv;
+
+				#define CALL(texture, uv) texture(uv)
+				#define MIX(sampler, image) mix(sampler, image, 0.5)
+				#define LOOK(tex) texture2D(tex, uv)
+
+				void main() {
+					vec4 a = LOOK(texture);
+					vec4 b = MIX(a, vec4(1.0));
+					gl_FragColor = b + CALL(sin, uv.x);
+				}
+				"""));
+
+		// The same macro after an interface block, which puts tokens in ahead of it.
+		all.add(fragment("macro-parameters-after-block", """
+				#version 330 core
+
+				in Data {
+					vec3 normal;
+					vec2 uv;
+				} DataIn;
+
+				uniform sampler2D texture;
+
+				#define CALL(texture, uv) texture(uv)
+				#define LOOK(sampler) texture2D(sampler, DataIn.uv)
+
+				layout(location = 0) out vec4 fragColor;
+
+				void main() {
+					fragColor = LOOK(texture) + CALL(cos, DataIn.normal.x);
+				}
+				"""));
+
 		// A custom image the pack shipped as floats and this program reads as unsigned integers: the
 		// declaration is renamed to the typed view of it, and so is every mention.
 		all.add(compute("custom-image-view", """
@@ -1637,18 +1727,38 @@ final class GlslTranslatorCases {
 	 */
 	private static Map<ProgramStage, List<String>> chunks() {
 		Map<ProgramStage, List<String>> found = new LinkedHashMap<>();
-		for (Single one : singles()) {
-			found.computeIfAbsent(one.stage(), stage -> new ArrayList<>())
-					.addAll(List.of(one.source().split("\n\n", -1)));
+		for (Single one : everySingle()) {
+			found.computeIfAbsent(one.stage(), stage -> new ArrayList<>()).addAll(pieces(one.source()));
 		}
 
-		for (Pair pair : pairs()) {
-			found.get(ProgramStage.VERTEX).addAll(List.of(pair.vertex().split("\n\n", -1)));
-			found.get(ProgramStage.FRAGMENT).addAll(List.of(pair.fragment().split("\n\n", -1)));
+		for (Pair pair : everyPair()) {
+			found.get(ProgramStage.VERTEX).addAll(pieces(pair.vertex()));
+			found.get(ProgramStage.FRAGMENT).addAll(pieces(pair.fragment()));
 		}
 
 		return found;
 	}
+
+	/**
+	 * The pieces of one source that a recombination may draw. Never one with a function-like macro in
+	 * it, and never a {@code #version} line: how the parameters of a macro and how a version line are
+	 * read are what the fenced goldens are about, and a text that carried them at random would put a
+	 * change to either into the digest of a recombination instead of into the golden that names it.
+	 */
+	private static List<String> pieces(String source) {
+		List<String> kept = new ArrayList<>();
+		for (String piece : source.split("\n\n", -1)) {
+			String bare = piece.lines().filter(line -> !line.startsWith("#version")).collect(Collectors.joining("\n"));
+			if (!FUNCTION_LIKE_MACRO.matcher(bare).find() && !bare.isBlank()) {
+				kept.add(bare);
+			}
+		}
+
+		return kept;
+	}
+
+	/** A {@code #define} whose name is followed at once by an opening parenthesis. */
+	private static final Pattern FUNCTION_LIKE_MACRO = Pattern.compile("(?m)^\\s*#\\s*define\\s+\\w+\\(");
 
 	/**
 	 * The {@code index}th text of a fixed pseudo-random series, each built out of three to eight
@@ -1666,7 +1776,7 @@ final class GlslTranslatorCases {
 			source.append(pieces.get(random.nextInt(pieces.size())).stripTrailing()).append("\n\n");
 		}
 
-		List<Single> donors = singles().stream().filter(one -> one.stage() == stage).toList();
+		List<Single> donors = everySingle().stream().filter(one -> one.stage() == stage).toList();
 		Setup donor = donors.get(random.nextInt(donors.size())).setup();
 		Setup setup = Setup.DEFAULT.inputs(donor.inputs()).program(donor.program())
 				.alphaTest(donor.alphaTest()).volumes(donor.volumes());
@@ -1702,8 +1812,18 @@ final class GlslTranslatorCases {
 		}
 	}
 
-	/** Programs of two stages, whose halves only mean something together. */
+	/** The programs of two stages, except the fenced ones. */
 	static List<Pair> pairs() {
+		return everyPair().stream().filter(pair -> !FENCED.contains(pair.name())).toList();
+	}
+
+	/** The programs of two stages that depend on the reading of a version line. */
+	static List<Pair> fencedPairs() {
+		return everyPair().stream().filter(pair -> FENCED.contains(pair.name())).toList();
+	}
+
+	/** Programs of two stages, whose halves only mean something together, fenced or not. */
+	static List<Pair> everyPair() {
 		List<Pair> all = new ArrayList<>();
 
 		all.add(new Pair("pair-varyings", """

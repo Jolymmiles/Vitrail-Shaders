@@ -79,7 +79,7 @@ class GlslTranslatorGoldenTest {
 
 	@Test
 	void translatingTwiceInOneProcessGivesOneText() {
-		for (Single one : GlslTranslatorCases.singles()) {
+		for (Single one : GlslTranslatorCases.everySingle()) {
 			assertEquals(GlslTranslatorCases.run(one), GlslTranslatorCases.run(one), one.name());
 		}
 	}
@@ -87,8 +87,8 @@ class GlslTranslatorGoldenTest {
 	@Test
 	void everyGoldenHasACaseAndEveryCaseHasAGolden() throws IOException, URISyntaxException {
 		Set<String> cases = new TreeSet<>();
-		GlslTranslatorCases.singles().forEach(one -> cases.add(one.name() + ".txt"));
-		GlslTranslatorCases.pairs().forEach(pair -> cases.add(pair.name() + ".txt"));
+		GlslTranslatorCases.everySingle().forEach(one -> cases.add(one.name() + ".txt"));
+		GlslTranslatorCases.everyPair().forEach(pair -> cases.add(pair.name() + ".txt"));
 		cases.addAll(List.of("mesh-sweep.txt", "alpha-sweep.txt", GlslTranslatorRecombinationTest.GOLDEN));
 
 		URL directory = GlslTranslatorGoldenTest.class.getResource(DIRECTORY);

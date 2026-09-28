@@ -1,12 +1,14 @@
 package dev.vitrail.glsl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +30,8 @@ class GlslTranslatorRecombinationTest {
 	/** The file holding one recorded line per recombination. */
 	static final String GOLDEN = "recombinations.txt";
 
+	private static final Pattern FUNCTION_LIKE_MACRO = Pattern.compile("(?m)^\\s*#\\s*define\\s+\\w+\\(");
+
 	@Test
 	void everyRecombinationTranslatesToWhatWasRecorded() throws IOException {
 		List<String> recorded = GlslTranslatorGoldenTest.golden(GOLDEN).lines().toList();
@@ -36,6 +40,16 @@ class GlslTranslatorRecombinationTest {
 		for (int index = 0; index < recorded.size(); index++) {
 			assertEquals(recorded.get(index), GlslTranslatorCases.recombinationLine(index),
 					"recombination " + index);
+		}
+	}
+
+	@Test
+	void noRecombinationCarriesWhatTheFencedGoldensAreAbout() {
+		for (int index = 0; index < GlslTranslatorCases.RECOMBINATIONS; index++) {
+			String source = GlslTranslatorCases.recombination(index).source();
+
+			assertFalse(source.contains("#version"), "a version line in recombination " + index);
+			assertFalse(FUNCTION_LIKE_MACRO.matcher(source).find(), "a function-like macro in recombination " + index);
 		}
 	}
 

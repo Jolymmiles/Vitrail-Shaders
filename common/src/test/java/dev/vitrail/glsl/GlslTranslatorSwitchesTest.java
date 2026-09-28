@@ -71,7 +71,7 @@ class GlslTranslatorSwitchesTest {
 
 	@Test
 	void aRunOfTheCorpusPutsEverySwitchBack() {
-		for (GlslTranslatorCases.Single one : GlslTranslatorCases.singles()) {
+		for (GlslTranslatorCases.Single one : GlslTranslatorCases.everySingle()) {
 			GlslTranslatorCases.run(one);
 			assertEquals(DEFAULT, GlslTranslator.emissionSwitches(), "after " + one.name());
 		}
