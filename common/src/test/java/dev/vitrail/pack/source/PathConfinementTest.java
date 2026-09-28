@@ -2,6 +2,7 @@ package dev.vitrail.pack.source;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitrail.pack.option.SettingSet;
@@ -295,6 +296,22 @@ class PathConfinementTest {
 			}
 
 			assertEquals(Optional.empty(), source.resolveRelativeTo(from, "../SECRET.PNG"));
+		}
+	}
+
+	@Test
+	void anArchiveWithAnEntryNamedToWalkOutIsRefusedWhenItIsOpened() throws IOException {
+		Files.createDirectories(this.temp.resolve("packs"));
+		for (String name : List.of("../evil.glsl", "shaders/../evil2.glsl", "shaders/lib/../../evil3.glsl",
+				"shaders/./here.glsl")) {
+			Path packPath = SyntheticPacks.zip(this.temp.resolve("packs"), "traversal" + Math.abs(name.hashCode()),
+					Map.of("shaders/composite.fsh", "#version 330\n", name, "an entry named to leave shaders"));
+
+			// The filesystem the JDK mounts an archive as will not hold an entry with a dot element, so the
+			// pack never opens and no name of it is ever a path here; the refusal is an IOException the
+			// callers already treat as a pack that cannot be read.
+			IOException refused = assertThrows(IOException.class, () -> ShaderPackSource.open(packPath), name);
+			assertTrue(refused.getMessage().contains("'.' or '..' element"), refused.getMessage());
 		}
 	}
 

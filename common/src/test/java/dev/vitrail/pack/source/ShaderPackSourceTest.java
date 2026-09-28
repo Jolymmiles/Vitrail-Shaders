@@ -91,6 +91,16 @@ class ShaderPackSourceTest {
 	}
 
 	@Test
+	void aZipWhoseEntriesAreSeparatedByBackslashesHasNoShadersDirectory() throws IOException {
+		// What a tool that writes Windows separators into entry names makes: one flat name per file, so
+		// there is no directory to be found and the pack is refused rather than read as empty.
+		Path zip = pack(Shape.ZIP, "windows", Map.of("shaders\\composite.fsh", "x", "shaders\\lib\\a.glsl", "x"));
+
+		assertEquals("No shaders directory in this pack",
+				assertThrows(IOException.class, () -> ShaderPackSource.open(zip)).getMessage());
+	}
+
+	@Test
 	void countsEveryOpeningIncludingOnesThatFail() throws IOException {
 		Path good = pack(Shape.DIRECTORY, "good", Map.of("shaders/a.fsh", "x"));
 		int before = ShaderPackSource.openings();
