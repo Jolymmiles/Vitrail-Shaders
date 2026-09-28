@@ -173,6 +173,13 @@ public final class TranslationCache {
 
 	/**
 	 * Makes the directory, measures what is in it, and takes it into service.
+	 * <p>
+	 * <strong>Only this edition's own directory decides whether it is taken into service.</strong>
+	 * What another edition left is nothing this build reads, so a file in it that will not go, held
+	 * by a scanner or an indexer or made read-only by hand, costs the disk it sits on and is kept in
+	 * {@link #problem} for whoever has a logger. It used to throw out of here, and one stale file in
+	 * a folder no build would ever read again then left the cache off at every launch for as long
+	 * as the file stayed.
 	 *
 	 * @param family the sanitized family of this edition, or empty to leave every neighbour alone.
 	 *               Empty for the road the property opens, which runs in a static initialiser and
@@ -183,14 +190,16 @@ public final class TranslationCache {
 		synchronized (LOCK) {
 			try {
 				Files.createDirectories(mine);
+				String left = "";
 				if (!family.isEmpty()) {
 					touch(mine);
-					dropOtherEditions(mine.getParent(), mine, family);
+					left = dropOtherEditions(mine.getParent(), mine, family);
 				}
 
 				BYTES.set(total(scan(mine, true)));
 				directory = mine;
-				problem = "";
+				problem = left.isEmpty() ? "" : "what another build left in " + mine.getParent()
+						+ " could not all be taken away, and the next launch tries again: " + left;
 			} catch (IOException | RuntimeException e) {
 				directory = null;
 				problem = e.toString();
@@ -198,7 +207,11 @@ public final class TranslationCache {
 		}
 	}
 
-	/** What went wrong at install, for whoever has a logger, or empty when nothing did. */
+	/**
+	 * What went wrong at install, for whoever has a logger, or empty when nothing did. A cache that
+	 * {@link #installed} can have one too: another edition's folder it could not wholly empty, which
+	 * costs disk and leaves every translation of this build where it was.
+	 */
 	public static String problem() {
 		return problem;
 	}
@@ -584,30 +597,43 @@ public final class TranslationCache {
 	 * translated from cold at every swap. One is what a swap needs, and it is what bounds the disk
 	 * at two editions rather than at one per build ever made. A build whose edition IS the family
 	 * spares none, which is every release and also a development build no commit could be read for.
+	 * <p>
+	 * It never throws, and goes on past whatever refuses it: every folder is attempted, and within
+	 * one every file that will go does.
+	 *
+	 * @return each folder left behind with the first refusal it gave, or empty when all of it went
 	 */
-	private static void dropOtherEditions(Path root, Path mine, String family) throws IOException {
+	private static String dropOtherEditions(Path root, Path mine, String family) {
 		List<Path> entries;
 		try (Stream<Path> found = Files.list(root)) {
 			entries = found.toList();
+		} catch (IOException | RuntimeException e) {
+			return "the folder could not be listed (" + e + ")";
 		}
 
 		String kept = mine.getFileName().toString().equals(family)
 				? "" : newestSibling(entries, mine, family);
+		List<String> left = new ArrayList<>();
 
 		for (Path entry : entries) {
 			if (!entry.equals(mine) && !entry.getFileName().toString().equals(kept)) {
-				dropTree(entry);
+				Exception refusal = dropTree(entry);
+				if (refusal != null) {
+					left.add(entry.getFileName() + " (" + refusal + ")");
+				}
 			}
 		}
+
+		return String.join(", ", left);
 	}
 
 	/**
 	 * The name of the edition of this family used most recently, or empty when this build is the
 	 * only one of its family to have run here. A directory has a name, so an empty answer matches
-	 * nothing.
+	 * nothing. A folder whose stamp cannot be read is not a candidate, which costs a swap one
+	 * store at worst.
 	 */
-	private static String newestSibling(List<Path> entries, Path mine, String family)
-			throws IOException {
+	private static String newestSibling(List<Path> entries, Path mine, String family) {
 		String newest = "";
 		long stamp = Long.MIN_VALUE;
 
@@ -617,7 +643,13 @@ public final class TranslationCache {
 				continue;
 			}
 
-			long when = Files.getLastModifiedTime(entry).toMillis();
+			long when;
+			try {
+				when = Files.getLastModifiedTime(entry).toMillis();
+			} catch (IOException e) {
+				continue;
+			}
+
 			if (when > stamp) {
 				stamp = when;
 				newest = name;
@@ -645,12 +677,34 @@ public final class TranslationCache {
 		return text.replaceAll("[^A-Za-z0-9._-]", "_");
 	}
 
-	private static void dropTree(Path entry) throws IOException {
-		try (Stream<Path> tree = Files.walk(entry)) {
-			for (Path found : tree.sorted(Comparator.reverseOrder()).toList()) {
+	/**
+	 * Deletes what it can of one folder, deepest first, and goes on past a file that refuses: the
+	 * files beside it are space as well. The folders above a refusal then refuse in their turn, not
+	 * being empty, so the FIRST refusal is the one that says why.
+	 *
+	 * @return that first refusal, or null when the whole folder went
+	 */
+	private static Exception dropTree(Path entry) {
+		List<Path> tree;
+		try (Stream<Path> walk = Files.walk(entry)) {
+			tree = walk.sorted(Comparator.reverseOrder()).toList();
+		} catch (IOException | RuntimeException e) {
+			// A folder inside it that cannot be read, which the walk throws unchecked.
+			return e;
+		}
+
+		Exception first = null;
+		for (Path found : tree) {
+			try {
 				Files.deleteIfExists(found);
+			} catch (IOException e) {
+				if (first == null) {
+					first = e;
+				}
 			}
 		}
+
+		return first;
 	}
 
 	/**
@@ -668,7 +722,13 @@ public final class TranslationCache {
 			for (Path entry : entries.toList()) {
 				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
 					if (prunePartials) {
-						Files.deleteIfExists(entry);
+						try {
+							Files.deleteIfExists(entry);
+						} catch (IOException ignored) {
+							// Dead, and held by something outside this process. It is not reachable
+							// and not counted, and the next install tries again: refused out of here
+							// it would have left the whole cache off over one file nothing reads.
+						}
 					}
 				} else {
 					try {

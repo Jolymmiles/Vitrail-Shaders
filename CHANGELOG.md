@@ -118,6 +118,13 @@ what the next one holds.
   taken, and that line decides whether `vaPosition` is a corner of the screen or a constant. A pack
   whose chosen version was a core one and whose other one was not had every corner of the pass
   placed at one point, and the pass drew nothing.
+- **An old cache folder that cannot be deleted no longer turns the caches off.** Vitrail keeps
+  compiled shaders and translated programs on disk so a pack loads faster the second time, and at
+  launch it deletes the folders an earlier version left behind. If one file in those old folders
+  could not be deleted, because an antivirus or a file indexer had it open or it was marked
+  read-only, the whole cache was turned off, and every pack load compiled everything from scratch
+  at every launch until the file went. Now the cache stays on, whatever can go is deleted, and
+  the next launch tries again with the rest.
 
 ## 0.12.0-beta
 

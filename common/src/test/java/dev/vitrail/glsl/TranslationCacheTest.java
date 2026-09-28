@@ -626,9 +626,8 @@ class TranslationCacheTest {
 
 	// -------------------------------------------------------------------------- neighbours
 
-	/** A fix is coming elsewhere for how old folders are handled: what follows is pinned as it is. */
 	@Test
-	void characterizes_aReleaseInstallDeletesEveryOtherFolderOfTheStore() throws IOException {
+	void aReleaseInstallDeletesEveryOtherFolderOfTheStore() throws IOException {
 		Path translations = this.root.resolve("translations");
 		Files.createDirectories(translations.resolve("0.11.0-beta"));
 		Files.writeString(translations.resolve("0.11.0-beta").resolve("x.tr"), "old");
@@ -639,9 +638,8 @@ class TranslationCacheTest {
 		assertEquals(List.of("0.12.0-beta"), names(translations));
 	}
 
-	/** Same: pinned as it is until the other change lands. */
 	@Test
-	void characterizes_aBuildWithACommitKeepsTheNewestNeighbourOfItsFamilyAndNoOtherFolder() throws IOException {
+	void aBuildWithACommitKeepsTheNewestNeighbourOfItsFamilyAndNoOtherFolder() throws IOException {
 		Path translations = this.root.resolve("translations");
 		Files.createDirectories(translations.resolve("0.12.0-beta_old"));
 		Files.createDirectories(translations.resolve("0.12.0-beta_older"));
@@ -660,9 +658,12 @@ class TranslationCacheTest {
 		assertEquals(List.of("0.12.0-beta_abc", "0.12.0-beta_old"), names(translations));
 	}
 
-	/** A fix is coming elsewhere: today one folder that cannot be emptied leaves the cache off for the run. */
+	/**
+	 * What another edition left is nothing this build reads, so a folder of it that cannot be
+	 * emptied costs its disk and is named, and the cache is on all the same.
+	 */
 	@Test
-	void knownBug_oneFolderThatCannotBeDeletedSwitchesTheCacheOffForTheRun() throws IOException {
+	void oneFolderThatCannotBeDeletedLeavesTheCacheOnAndIsNamed() throws IOException {
 		Path translations = this.root.resolve("translations");
 		Path stuck = Files.createDirectories(translations.resolve("0.10.0-beta"));
 		Files.writeString(stuck.resolve("x.tr"), "old");
@@ -676,8 +677,9 @@ class TranslationCacheTest {
 			assumeTrue(!Files.isWritable(stuck), "a user who can write anywhere cannot be refused");
 			TranslationCache.install(this.root, "0.12.0-beta", "0.12.0-beta");
 
-			assertFalse(TranslationCache.installed());
-			assertFalse(TranslationCache.problem().isEmpty());
+			assertTrue(TranslationCache.installed(), TranslationCache.problem());
+			assertTrue(Files.exists(stuck.resolve("x.tr")));
+			assertTrue(TranslationCache.problem().contains("0.10.0-beta"), TranslationCache.problem());
 		} finally {
 			Files.setPosixFilePermissions(stuck, PosixFilePermissions.fromString("rwxr-xr-x"));
 		}

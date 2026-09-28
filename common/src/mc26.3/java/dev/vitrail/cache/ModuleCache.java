@@ -636,6 +636,13 @@ public final class ModuleCache {
 	 * The only moment at which a leftover neighbour can be swept up: nothing else has been handed
 	 * the directory yet, because {@link #directory} is set on the last line, so a {@code .part} seen
 	 * here is a dead one from a run that was killed and never a live write of a worker's.
+	 * <p>
+	 * <strong>Only this edition's own directory decides whether there is a cache this run.</strong>
+	 * What another build left is cleared on the way in and is nothing this build reads, so a file in
+	 * it that will not go, held by a scanner or an indexer or made read-only by hand, costs the disk
+	 * it sits on and is said once. It used to throw out of here, and one stale file in a folder no
+	 * build would ever read again then turned the store off at every launch for as long as the file
+	 * stayed.
 	 */
 	private static void open() {
 		try {
@@ -643,7 +650,13 @@ public final class ModuleCache {
 			Path mine = root.resolve(Vitrail.cacheEdition());
 			Files.createDirectories(mine);
 			touch(mine);
-			dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
+			String left = dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
+			if (!left.isEmpty()) {
+				Vitrail.logger().warn("The module cache could not take away all that another build "
+						+ "left in {}: {}. This build keeps its own store all the same, and the next "
+						+ "launch tries again", root, left);
+			}
+
 			BYTES.set(total(scan(mine, true)));
 			directory = mine;
 		} catch (IOException | RuntimeException e) {
@@ -668,30 +681,44 @@ public final class ModuleCache {
 	 * A build whose edition IS the family spares none, so a player's store holds the one edition it
 	 * always held. That is every RELEASE, and also a development build git could answer no question
 	 * for, which carries no commit to name a folder of its own with.
+	 * <p>
+	 * <strong>It never throws</strong>, and goes on past whatever refuses it: every folder is
+	 * attempted, and within one every file that will go does. What it could not take away is
+	 * answered for {@link #open} to say, and the next launch finds it and tries again.
+	 *
+	 * @return each folder left behind with the first refusal it gave, or empty when all of it went
 	 */
-	private static void dropOtherEditions(Path root, Path mine, String family) throws IOException {
+	static String dropOtherEditions(Path root, Path mine, String family) {
 		List<Path> entries;
 		try (Stream<Path> found = Files.list(root)) {
 			entries = found.toList();
+		} catch (IOException | RuntimeException e) {
+			return "the folder could not be listed (" + e + ")";
 		}
 
 		String kept = mine.getFileName().toString().equals(family)
 				? "" : newestSibling(entries, mine, family);
+		List<String> left = new ArrayList<>();
 
 		for (Path entry : entries) {
 			if (!entry.equals(mine) && !entry.getFileName().toString().equals(kept)) {
-				dropTree(entry);
+				Exception refusal = dropTree(entry);
+				if (refusal != null) {
+					left.add(entry.getFileName() + " (" + refusal + ")");
+				}
 			}
 		}
+
+		return String.join(", ", left);
 	}
 
 	/**
 	 * The name of the edition of this family used most recently, or empty when this build is the
 	 * only one of its family to have run here. A directory has a name, so an empty answer matches
-	 * nothing.
+	 * nothing. A folder whose stamp cannot be read is not a candidate, which costs a swap one
+	 * store at worst.
 	 */
-	private static String newestSibling(List<Path> entries, Path mine, String family)
-			throws IOException {
+	private static String newestSibling(List<Path> entries, Path mine, String family) {
 		String newest = "";
 		long stamp = Long.MIN_VALUE;
 
@@ -701,7 +728,13 @@ public final class ModuleCache {
 				continue;
 			}
 
-			long when = Files.getLastModifiedTime(entry).toMillis();
+			long when;
+			try {
+				when = Files.getLastModifiedTime(entry).toMillis();
+			} catch (IOException e) {
+				continue;
+			}
+
 			if (when > stamp) {
 				stamp = when;
 				newest = name;
@@ -724,12 +757,34 @@ public final class ModuleCache {
 		return name.equals(family) || name.startsWith(family + EDITION_SEPARATOR);
 	}
 
-	private static void dropTree(Path entry) throws IOException {
-		try (Stream<Path> tree = Files.walk(entry)) {
-			for (Path found : tree.sorted(Comparator.reverseOrder()).toList()) {
+	/**
+	 * Deletes what it can of one folder, deepest first, and goes on past a file that refuses: the
+	 * files beside it are space as well. The folders above a refusal then refuse in their turn, not
+	 * being empty, so the FIRST refusal is the one that says why.
+	 *
+	 * @return that first refusal, or null when the whole folder went
+	 */
+	private static @Nullable Exception dropTree(Path entry) {
+		List<Path> tree;
+		try (Stream<Path> walk = Files.walk(entry)) {
+			tree = walk.sorted(Comparator.reverseOrder()).toList();
+		} catch (IOException | RuntimeException e) {
+			// A folder inside it that cannot be read, which the walk throws unchecked.
+			return e;
+		}
+
+		Exception first = null;
+		for (Path found : tree) {
+			try {
 				Files.deleteIfExists(found);
+			} catch (IOException e) {
+				if (first == null) {
+					first = e;
+				}
 			}
 		}
+
+		return first;
 	}
 
 	private static byte[] sha256(byte[] raw) {
@@ -810,7 +865,13 @@ public final class ModuleCache {
 			for (Path entry : entries.toList()) {
 				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
 					if (prunePartials) {
-						Files.deleteIfExists(entry);
+						try {
+							Files.deleteIfExists(entry);
+						} catch (IOException ignored) {
+							// Dead, and held by something outside this process. It is not reachable
+							// and not counted, and the next open tries again: refused out of here it
+							// would have turned the whole store off over one file nothing reads.
+						}
 					}
 				} else {
 					try {
