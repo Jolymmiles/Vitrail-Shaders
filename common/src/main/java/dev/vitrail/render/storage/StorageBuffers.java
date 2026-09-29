@@ -135,9 +135,16 @@ public final class StorageBuffers implements AutoCloseable {
 		// pushed as the placeholder's uniform buffer under a layout that declared a storage one,
 		// the two types under one binding StorageImages#refused describes. The map follows the list
 		// on both roads, so no descriptor push is handed a buffer destroyed here.
+		//
+		// An Error takes the same road as a RuntimeException. LWJGL raises a native
+		// OutOfMemoryError from its stack and its allocators, and the colour targets catch only
+		// the RuntimeException, so a half-made set would otherwise stay standing for whatever
+		// catches the Error further out. The road only queues the destructions and copies the list
+		// into a map, with no call into the driver, so it does not replace the failure it is
+		// handling, and what is rethrown is the throwable that was caught.
 		try {
 			allocate(vulkan, first, resized, screenWidth, screenHeight);
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | Error e) {
 			this.allocated.forEach(buffer -> buffer.destroy(vulkan));
 			this.allocated.clear();
 			rebind();
