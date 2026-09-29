@@ -382,6 +382,22 @@ covered them: a block of stone or wood showed none while it was mined. While a p
 transparency is off and `SubmitNodeCollectionCrumblingMixin` submits all of them to the breaking
 overlay phase again, which 26.3 executes where 26.2 did.
 
+The game's method is not the only one that makes that choice. On Fabric, Fabric API's renderer
+module (in Fabric API and in the copy of it Sodium carries) replaces the level's call to it with a
+call to an overload of its own that takes the block's mesh, a copy of the game's body that ends in
+the module's `ExtendedBlockModelSubmit`. There it is the overload that sends an opaque block's
+cracks to the solid features, and the game's method is never reached for a block in the level, so
+the mixin edits both, each selected by its full descriptor. A name alone selects only the first
+method of that name, which is the game's, and a wildcard skips a method another mixin merged; a
+descriptor selects the overload whichever mixin config applied first, because Mixin merges every
+mixin's methods into a class before it looks for targets. Mixin also refuses to inject into a
+merged method unless the injecting mixin's priority is strictly higher than that of the mixin that
+merged it, and the module's is the default 1000, so `SubmitNodeCollectionCrumblingMixin` has 1100;
+below that the apply fails and the game does not start. The overload's injector is optional,
+since NeoForge, and Fabric without the module, has no such method. The copy asks the same
+`useImprovedTransparency` and submits to the same phases, so the row and the phase are those above.
+The cracks over a block entity go through `submitCrumblingOverlay`, which the module does not touch.
+
 **The block outline** is the third of those four, drawn from the lines format of the game's, and it
 is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed
 onto the first target the pack's translucent pass writes, which is the scene colour for most packs

@@ -75,6 +75,11 @@ what the next one holds.
   them at the old moment, so the game drew them on its own picture, which the pack's image covers.
   Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack is loaded,
   they are now sent to the moment 26.2 used, and the pack draws them with its own program.
+- **The cracks over a block being mined show under a shader pack on Fabric too, on 26.3.** Fabric
+  API's renderer module, of which Sodium carries a copy, submits them through a method of its own in
+  place of the game's, and Vitrail sent only the game's to the moment 26.2 used. So on Fabric stone,
+  wood and dirt still showed no cracks while mined, and only glass kept them. Both methods are sent
+  there now. NeoForge, which has no such module, is unchanged.
 - **A pack's own `min`, `max` and long `if` read every value they are given.** A custom uniform
   written as `min(a, b, c)`, or as a `max` of three values or more, compared the first value with
   the second over and over and never looked at the rest, so it could come out wrong. And the last
