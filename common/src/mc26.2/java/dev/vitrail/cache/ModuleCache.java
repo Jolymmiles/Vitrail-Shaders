@@ -68,6 +68,12 @@ import java.util.List;
  * comes later and rewrites the bytes for one pipeline's bindings, so a module is stored before any
  * caller has had it, and every hit is an allocation of its own.
  * <p>
+ * <strong>The same digest names the unit in memory.</strong> {@link ModuleShare} keeps what one pack
+ * load has made under it, so a second program with the same text is handed a copy of the first one's
+ * unit instead of a second compile or a second file read; {@link #keep} is what fills both places
+ * and {@link #shared} reads the first. It is made without a disk when there is none
+ * ({@link #shareKeyOf}), so a load with this cache switched off shares all the same.
+ * <p>
  * Everything from the digest that vouches for a file to the ceiling and the folder of each
  * edition is the same on both games and is written in {@link ModuleStore}.
  */
@@ -144,6 +150,23 @@ public final class ModuleCache {
 			return null;
 		}
 
+		return digestOf(source, stage, ours);
+	}
+
+	/**
+	 * What names this unit in {@link ModuleShare}: the same digest as {@link #keyOf}, made whether or
+	 * not there is a disk to keep it on, so a load with the cache switched off shares its units all
+	 * the same. Null only where a unit cannot be rebuilt from what is kept, which is a build that did
+	 * not find the game's module records.
+	 * <p>
+	 * Asked only where {@link #keyOf} answered null: with a disk cache the one digest names the unit
+	 * in both places, and hashing a composite's hundreds of kilobytes twice is work for nothing.
+	 */
+	public static @Nullable String shareKeyOf(String source, String stage, boolean ours) {
+		return ModuleShape.available() ? digestOf(source, stage, ours) : null;
+	}
+
+	private static String digestOf(String source, String stage, boolean ours) {
 		MessageDigest digest = ModuleStore.keyStart(FORMAT);
 		// The last of those switches, and the one 26.3 leaves out of its key: the samplers it drops from
 		// a table are stored here, where 26.3 applies it to the words a served unit already is.
@@ -189,6 +212,31 @@ public final class ModuleCache {
 		}
 
 		ModuleStore.served(hit.file());
+
+		return module;
+	}
+
+	/**
+	 * The module an earlier asker of this load made of the unit, built afresh around a copy of it, or
+	 * null when nobody has made it yet.
+	 * <p>
+	 * A hit costs one allocation and a handful of small records, nothing from disk and nothing
+	 * native. What comes back is the caller's exactly as a served or compiled module is, carrying
+	 * {@code filename} as its name and holding bytes of its own, so the {@code rebind} that follows
+	 * rewrites nobody else's.
+	 *
+	 * @param unit the key {@link ModuleShare} files the unit under
+	 */
+	public static @Nullable IntermediaryShaderModule shared(@Nullable String unit, String filename) {
+		ModuleShare.Blob blob = ModuleShare.load().find(unit);
+		if (blob == null) {
+			return null;
+		}
+
+		IntermediaryShaderModule module = rebuild(filename, blob.raw(), blob.length());
+		if (module != null) {
+			ModuleStore.shared();
+		}
 
 		return module;
 	}
@@ -274,8 +322,27 @@ public final class ModuleCache {
 	 * it, which is the one instant at which it is both finished and untouched.
 	 */
 	public static void store(@Nullable String key, IntermediaryShaderModule module) {
-		Path root = ModuleStore.directory();
-		if (key == null || root == null || module.spirv() == null) {
+		if (key == null || ModuleStore.directory() == null || module.spirv() == null) {
+			return;
+		}
+
+		keep(key, key, module);
+	}
+
+	/**
+	 * Keeps a module the compiler has just built, or a served one, where the rest of this load can
+	 * have a copy of it and on disk where there is a disk, from one description of it.
+	 * <p>
+	 * The same instant as {@link #store} takes: the module is finished and nothing has bent it to a
+	 * pipeline, so both places hold it as its maker handed it over.
+	 *
+	 * @param unit the key {@link ModuleShare} files it under, or null for a unit that is not to be
+	 *             shared, which is every unit of the game's own
+	 * @param key  the key of its file, or null where there is nowhere to write one
+	 */
+	public static void keep(@Nullable String unit, @Nullable String key,
+			IntermediaryShaderModule module) {
+		if ((unit == null && key == null) || module.spirv() == null) {
 			return;
 		}
 
@@ -288,7 +355,14 @@ public final class ModuleCache {
 			return;
 		}
 
-		ModuleStore.keep(root, key, raw);
+		if (unit != null) {
+			ModuleShare.load().offer(unit, new ModuleShare.Blob(raw, raw.length));
+		}
+
+		Path root = ModuleStore.directory();
+		if (key != null && root != null) {
+			ModuleStore.keep(root, key, raw);
+		}
 	}
 
 	/** Everything a module is, in the order {@link #rebuild} reads it back. */

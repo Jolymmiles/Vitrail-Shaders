@@ -842,8 +842,8 @@ final class GeometryProgram {
 		// here and not read off the program: where it is folded into the fragment text the
 		// fragment text already carries it, and only a stage the compiler is handed by itself is
 		// one more input.
-		ModuleCensus.built(pass.family(), vertex, fragment, GeometryStage.shipped(this.pipeline),
-				format);
+		ModuleCensus.built(pass.family(), vertexId, fragmentId, vertex, fragment,
+				GeometryStage.shipped(this.pipeline), format);
 
 		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {

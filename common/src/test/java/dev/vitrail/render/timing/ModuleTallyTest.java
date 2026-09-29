@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.util.List;
 
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 /**
  * How many of a family's programs are the same compile over again, and the line that says so.
- * Driven by plain calls, with the two stage texts as the short strings they stand in for.
+ * Driven by plain calls, with the two stage texts as the short strings they stand in for. What the
+ * compiler answered for their modules is {@link ModuleSupplyTest}'s.
  */
 class ModuleTallyTest {
 
@@ -24,7 +26,14 @@ class ModuleTallyTest {
 	}
 
 	private void built(String family, String vertex, String fragment, long geometry, Object format) {
-		this.tally.built(family, ModuleTally.hash(vertex), ModuleTally.hash(fragment), geometry, format);
+		this.tally.built(family, ModuleTally.hash(vertex), ModuleTally.hash(fragment), geometry, format,
+				List.of());
+	}
+
+	/** What a family that asked its compiler for nothing says of its modules. */
+	private static String unasked() {
+		return "modules asked for 0: compiled 0 (of which repeats 0), served from the disk cache 0, "
+				+ "shared within the load 0";
 	}
 
 	@Test
@@ -42,8 +51,8 @@ class ModuleTallyTest {
 
 		assertEquals(1, this.tally.triples("entity"));
 		assertEquals(List.of("Module census, entity: programs built 3, distinct (vertex text, fragment "
-				+ "text, vertex format) triples 1, so repeats 2; modules made 6, distinct vertex texts 1, "
-				+ "distinct fragment texts 1"), this.tally.lines());
+				+ "text, vertex format) triples 1, distinct vertex texts 1, distinct fragment texts 1; "
+				+ unasked()), this.tally.lines());
 	}
 
 	@Test
@@ -53,7 +62,7 @@ class ModuleTallyTest {
 
 		assertEquals(2, this.tally.triples("particles"));
 		assertTrue(this.tally.lines().getFirst().contains("programs built 2, distinct (vertex text, "
-				+ "fragment text, vertex format) triples 2"));
+				+ "fragment text, vertex format) triples 2, distinct vertex texts 1"));
 	}
 
 	@Test
@@ -64,9 +73,9 @@ class ModuleTallyTest {
 		built("chunk", "v", "f", ModuleTally.hash("void main() { gl_Position = vec4(1.0); }"), LAYOUT);
 
 		assertEquals(3, this.tally.triples("chunk"));
-		assertEquals(List.of("Module census, chunk: programs built 4, distinct (vertex text, fragment "
-				+ "text, vertex format) triples 3, so repeats 1; modules made 11, distinct vertex texts "
-				+ "1, distinct fragment texts 1"), this.tally.lines());
+		assertTrue(this.tally.lines().getFirst().contains("programs built 4, distinct (vertex text, "
+				+ "fragment text, vertex format) triples 3, distinct vertex texts 1, distinct fragment "
+				+ "texts 1"));
 	}
 
 	@Test
@@ -77,8 +86,8 @@ class ModuleTallyTest {
 
 		assertEquals(3, this.tally.triples("sky"));
 		assertEquals(List.of("Module census, sky: programs built 3, distinct (vertex text, fragment "
-				+ "text, vertex format) triples 3, so repeats 0; modules made 6, distinct vertex texts 2, "
-				+ "distinct fragment texts 2"), this.tally.lines());
+				+ "text, vertex format) triples 3, distinct vertex texts 2, distinct fragment texts 2; "
+				+ unasked()), this.tally.lines());
 	}
 
 	@Test
@@ -135,8 +144,14 @@ class ModuleTallyTest {
 	void theHookCountsNothingWhileTheSwitchIsOff() {
 		assumeFalse(PassTimings.enabled(), "the switch is on for this run, which is what is being tested");
 
-		ModuleCensus.built("chunk", "v", "f", "g", LAYOUT);
+		Identifier stage = Identifier.fromNamespaceAndPath("vitrail", "pack/1/entity/vertex");
+		ModuleCensus.built("chunk", stage, stage, "v", "f", null, LAYOUT);
+		ModuleCensus.compiled("vitrail_pack_1_entity_vertex", "key");
+		ModuleCensus.served("vitrail_pack_1_entity_vertex", "key");
+		ModuleCensus.shared("vitrail_pack_1_entity_vertex", "key");
 
 		assertEquals(0, ModuleCensus.tally().triples("chunk"));
+		assertEquals(0, ModuleCensus.tally().compiled("chunk"));
+		assertEquals(0, ModuleCensus.tally().compiled(ModuleTally.UNOWNED));
 	}
 }

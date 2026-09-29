@@ -15,6 +15,14 @@ what the next one holds.
 
 ### Changed
 
+- **A pack's entity shaders are made once each, not once for every piece of an entity.** On
+  Complementary and Photon the entities, from mobs and armour to the glint on an enchanted item,
+  are drawn by some 140 programs that use only a few dozen different shaders between them, and
+  Vitrail made each program its own copy of both of its shaders, compiling it or reading it back
+  from the shader cache on disk. It now makes each shader once when the pack loads and hands the
+  other programs a copy from memory, which is about a fifth of the entity shader work a load did.
+  With the shader cache switched off that is compiles saved, and with it on it is file reads saved.
+  Nothing about the picture changes.
 - **Reading a pack's shader files takes about half the time.** Before a pack can draw, Vitrail
   reads each of its shader files and pastes in the shared files they include, which is part of the
   wait before the picture appears when you choose a pack, apply a setting or step through a portal.

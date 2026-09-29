@@ -654,6 +654,16 @@ final class ModuleStore {
 	}
 
 	/**
+	 * A unit answered out of the load's own {@link ModuleShare}: neither served from disk nor built,
+	 * so neither count moves. It is still a unit the load asked for, and the quiet that ends a load is
+	 * measured from the last one asked for, so the tail of a load made of shared units is not read as
+	 * the end of it.
+	 */
+	static void shared() {
+		lastUnitNanos = System.nanoTime();
+	}
+
+	/**
 	 * The words at the head of a stored file, read and checked to be SPIR-V: a plausible length, a
 	 * whole number of words, and the magic word first. The game's own tables, where it keeps any,
 	 * follow them in the stream.

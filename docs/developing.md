@@ -368,17 +368,28 @@ run of draws it serves. Every ring turned by this engine is a fence created and 
 census costs one read of a static final per hook while the switch is off, and allocates nothing
 while it is on. It says how often, not how dear: read it beside the frame rate.
 
-**How much of a load's module work is one text compiled twice is said once a family.** Under the
-same switch, the log carries a `Module census, <family>:` line per family when the background
-warm-up closes: how many programs the family built, how many of those are distinct by the text of
-their vertex stage, the text of their fragment stage, the text of a geometry stage the device binds
-as a module of its own, and their mesh layout, and how many modules that makes against how many
-distinct texts. A program's modules are named after its table row, so two rows that translate to
-one text still compile it twice, and the gap between the two numbers is the most a memo keyed on
-the text could take off, before the pipeline's own build, which it would not touch. The terrain builds its programs when the renderer first asks for its shader, which can be
-after the warm-up has closed, so its line, and any other family's that grew since, comes with the next
-pass table instead. The texts are hashed where the programs are built and never kept: a fraction of
-a second of the workers' time at load, and nothing at all with the switch off.
+**How much of a load's module work is one text compiled twice is said once a family, with what the
+compiler did about it beside it.** Under the same switch, the log carries a
+`Module census, <family>:` line per family when the background warm-up closes. It says what the pack
+asked for: how many programs the family built, how many of those are distinct by the text of their
+vertex stage, the text of their fragment stage, the text of a geometry stage the device binds as a
+module of its own, and their mesh layout, and how many distinct vertex and fragment texts they come
+to. And it says what became of the modules those programs asked the game's compiler for: how many
+were compiled, how many the disk cache served, how many were shared within the load, and how many of
+the compiled ones were a repeat, a text some earlier compile of the load had already made. A
+program's modules are named after its table row, so the compiler is asked for every row's copy of a
+text, and `cache/ModuleShare` answers the copies out of memory under the key the disk cache files a
+unit by. The number to want at nought is the repeats, and `-Dvitrail.shareModules=false` among the
+JVM arguments takes the table away, which gives the before of the same jar: the copies are then
+served from the disk cache where there is one, and compiled again where
+`-Dvitrail.moduleCache=false` has switched it off. Compiled is counted where the module cache counts
+the `built by the compiler` of its own line, so the compiled figures of every family, and of the
+last line, which gathers the composites, the computes and the game's own shaders that no program
+owns, add up to that number for the same load. The terrain builds its programs when the renderer
+first asks for its shader, which can be after the warm-up has closed, so its line, and any other
+family's that grew since, comes with the next pass table instead. The texts are hashed where the
+programs are built and never kept: a fraction of a second of the workers' time at load, and nothing
+at all with the switch off.
 
 **The Khronos validation layer reads the whole frame on request.** The game's own
 `--vulkanValidation` argument turns it on wherever the layer is installed, and `glDebugVerbosity:2`

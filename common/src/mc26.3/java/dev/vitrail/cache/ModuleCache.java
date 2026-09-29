@@ -65,6 +65,12 @@ import java.util.HexFormat;
  * of a module it builds a pipeline from, so a module is stored before any caller has had it, and
  * every hit is an allocation of its own.
  * <p>
+ * <strong>The same digest names the unit in memory.</strong> {@link ModuleShare} keeps what one pack
+ * load has made under it, so a second program with the same text is handed a copy of the first one's
+ * unit instead of a second compile or a second file read; {@link #keep} is what fills both places
+ * and {@link #shared} reads the first. It is made without a disk when there is none
+ * ({@link #shareKeyOf}), so a load with this cache switched off shares all the same.
+ * <p>
  * Everything from the digest that vouches for a file to the ceiling and the folder of each
  * edition is the same on both games and is written in {@link ModuleStore}.
  */
@@ -132,6 +138,24 @@ public final class ModuleCache {
 			return null;
 		}
 
+		return digestOf(source, stage, defines, ours);
+	}
+
+	/**
+	 * What names this unit in {@link ModuleShare}: the same digest as {@link #keyOf}, made whether or
+	 * not there is a disk to keep it on, so a load with the cache switched off shares its units all
+	 * the same. Null for a unit that includes another file, which is no unit for the reason
+	 * {@link #keyOf} gives.
+	 * <p>
+	 * Asked only where {@link #keyOf} answered null: with a disk cache the one digest names the unit
+	 * in both places, and hashing a composite's hundreds of kilobytes twice is work for nothing.
+	 */
+	public static @Nullable String shareKeyOf(String source, String stage, String defines,
+			boolean ours) {
+		return source.contains("#include") ? null : digestOf(source, stage, defines, ours);
+	}
+
+	private static String digestOf(String source, String stage, String defines, boolean ours) {
 		MessageDigest digest = ModuleStore.keyStart(FORMAT);
 		// Whose unit this is: a unit of the game's that shares its text with one of ours is compiled
 		// with other options and walked by neither pass, so the same text is two modules.
@@ -162,6 +186,30 @@ public final class ModuleCache {
 		}
 
 		ModuleStore.served(hit.file());
+
+		return spirv;
+	}
+
+	/**
+	 * The words an earlier asker of this load made of the unit, copied into a buffer of their own, or
+	 * null when nobody has made it yet.
+	 * <p>
+	 * A hit costs one allocation; nothing is read from disk and nothing native runs. What comes back
+	 * is native memory the module made around it owns and frees at its {@code close}, holding bytes
+	 * of its own so that the binding rewrite a pipeline builder makes rewrites nobody else's.
+	 *
+	 * @param unit the key {@link ModuleShare} files the unit under
+	 */
+	public static @Nullable ByteBuffer shared(@Nullable String unit) {
+		ModuleShare.Blob blob = ModuleShare.load().find(unit);
+		if (blob == null) {
+			return null;
+		}
+
+		ByteBuffer spirv = rebuild(blob.raw(), blob.length());
+		if (spirv != null) {
+			ModuleStore.shared();
+		}
 
 		return spirv;
 	}
@@ -214,8 +262,26 @@ public final class ModuleCache {
 	 * reflected it, which is the one instant at which it is both finished and untouched.
 	 */
 	public static void store(@Nullable String key, ByteBuffer spirv) {
-		Path root = ModuleStore.directory();
-		if (key == null || root == null) {
+		if (key == null || ModuleStore.directory() == null) {
+			return;
+		}
+
+		keep(key, key, spirv);
+	}
+
+	/**
+	 * Keeps the words of a unit the compiler has just made, or of a served one, where the rest of this
+	 * load can have a copy of them and on disk where there is a disk, from one description of them.
+	 * <p>
+	 * The same instant as {@link #store} takes: the words are finished and nothing has reflected them
+	 * or rewritten their bindings, so both places hold them as their maker handed them over.
+	 *
+	 * @param unit the key {@link ModuleShare} files them under, or null for a unit that is not to be
+	 *             shared, which is every unit of the game's own
+	 * @param key  the key of their file, or null where there is nowhere to write one
+	 */
+	public static void keep(@Nullable String unit, @Nullable String key, ByteBuffer spirv) {
+		if (unit == null && key == null) {
 			return;
 		}
 
@@ -228,7 +294,14 @@ public final class ModuleCache {
 			return;
 		}
 
-		ModuleStore.keep(root, key, raw);
+		if (unit != null) {
+			ModuleShare.load().offer(unit, new ModuleShare.Blob(raw, raw.length));
+		}
+
+		Path root = ModuleStore.directory();
+		if (key != null && root != null) {
+			ModuleStore.keep(root, key, raw);
+		}
 	}
 
 	/** The words, behind their length, in the order {@link #rebuild} reads them back. */

@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.cache.ModuleShare;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.pack.option.OptionValue;
@@ -269,6 +270,13 @@ final class FamilyWarmup {
 			if (!this.released) {
 				ModuleCensus.report();
 			}
+
+			// Every family the workers read has been compiled by now, so what the load made of each
+			// text has nothing left to be shared with but the terrain's few programs and whatever a
+			// first draw still owes, which ask again and are answered from disk where there is one.
+			// Emptied on every road out, the released one too: a chain nothing draws has no use for
+			// a table of its units.
+			ModuleShare.load().clear();
 
 			return (Void) null;
 		});

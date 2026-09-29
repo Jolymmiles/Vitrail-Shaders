@@ -70,6 +70,20 @@ like the previous one, with nothing logged and no compile error to look at. Iden
 to vary with whatever varies in the source; if a pack selection can change the text, the pack must
 be part of the identity.
 
+**The engine keeps modules by source under the compiler, and that leaves the rule above as it was.**
+The game's own memo is by identity, and 26.3 has none at all: the compile of every pipeline makes
+its two modules again, whatever their text. So a pack that draws its entities with a hundred and
+forty programs of forty different texts would have the compiler make each text three or four times,
+and the identifiers still have to carry the load and the pass, since the device keys on them.
+`cache/ModuleShare` holds what one pack load has made of each text, in memory and under the digest
+`cache/ModuleCache` files it by on disk, at the one method both games' compilers are asked
+through, so the road a program compiles by does not decide whether its text is made again. What it
+holds is a copy of the unit's bytes and never a module: both games rewrite a module to the one
+pipeline built from it and free it with that pipeline, so a module handed to two pipelines would be
+rewritten by the second and freed twice, and every hit is a module built afresh around bytes of its
+own. Only this engine's units go through it, and it is emptied where a load begins and where its
+warm-up ends.
+
 **And a pipeline that reaches the pass uncompiled compiles against the wrong source.** Binding one
 goes through the same get-or-compute, but hands it the game's *default* shader source rather than
 whatever the caller would have offered. For a pipeline of a mod's own that source has nothing under
