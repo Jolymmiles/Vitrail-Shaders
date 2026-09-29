@@ -213,8 +213,8 @@ final class GeometryProgram {
 	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
 
 	/**
-	 * The pass the answers that do NOT follow the draw's image are currently standing in, and the
-	 * program that put them there.
+	 * The pass the block and the answers that do NOT follow the draw's image are currently standing
+	 * in, and the program that put them there.
 	 * <p>
 	 * A bind writes a name into a map the pass keeps until it closes, allocating the pair it stores,
 	 * so a name whose answer cannot move inside a pass only has to be written once. Two things can
@@ -234,8 +234,13 @@ final class GeometryProgram {
 	 * against any of those, so nothing enforces it.
 	 * <p>
 	 * <strong>Settling raises what a collision would cost.</strong> A foreign write over one of
-	 * these names used to be undone by the next bind of the same program; it now stands for the
-	 * rest of the pass.
+	 * these names, or over the block's, stands for the rest of the pass: the next bind of the same
+	 * program does not put its own back.
+	 * <p>
+	 * What a bind of the program that is standing in the pass leaves out is the block and the storage
+	 * placeholders as well as those names, see {@link #bind}. So this is also what makes them safe to
+	 * leave out, and it is cleared wherever any of them could have moved: {@link #resolve},
+	 * {@link #rotate} and {@link #release}.
 	 */
 	private static RenderPass settledIn;
 
@@ -461,6 +466,13 @@ final class GeometryProgram {
 	private GpuBuffer blockSliceOf;
 
 	private int blockSliceBytes;
+
+	/**
+	 * The slice this program last set as its block on the pass it is standing in, so that a bind
+	 * sets it again only when the ring has turned to another buffer under a pass that outlived the
+	 * turn. Dropped at {@link #resolve}, {@link #rotate} and {@link #release}.
+	 */
+	private GpuBufferSlice blockSent;
 
 	/**
 	 * The device's one-texel constants, for a sprite the resource pack ships nothing for and for
@@ -1377,16 +1389,24 @@ final class GeometryProgram {
 	 * were settled by {@link #resolve}, at the one point of a pass that stands outside it, and this
 	 * walks them in order out of an array rather than asking for each of them by name.
 	 * <p>
-	 * <strong>And only those are WRITTEN here, past the first bind of a pass.</strong> A pack's
-	 * geometry program declares ten to twenty five names of which two to four move with the draw,
-	 * and the pass holds what it was told until it closes, so the rest were a pair allocated and a
-	 * map entry replaced by its own value, once for every draw of the frame. {@link #settledIn}
-	 * carries what makes that safe.
+	 * <strong>And past the first bind of a pass, the block and the names that answer the same for
+	 * the whole pass are not WRITTEN again.</strong> A pack's geometry program declares ten to
+	 * twenty five names of which two to four move with the draw, and the pass holds what it was
+	 * told until it closes. The block, the storage placeholders and those names are written when
+	 * the program starts standing in a pass, and the block again when the slice is not the one last
+	 * set, which is the ring having turned under a pass that outlived the turn. Writing an equal
+	 * value again allocates a pair, replaces a map entry by its own value and, on both games, marks
+	 * the descriptors dirty. {@link #settledIn} carries what makes that safe.
+	 * <p>
+	 * The names that follow the draw's image are written at every bind, being the draw's own. The
+	 * game folds consecutive draws of one render type into one draw, so the next draw of a run
+	 * brings another image and the descriptors are owed a push whatever is compared here.
+	 * <p>
+	 * {@code keepRedoneWork} writes the block and the storage placeholders at every bind, so that
+	 * one jar measures the difference.
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	void bind(RenderPass pass) {
-		FrameCensus.programBound();
-
 		// Once, and it is the one thing that tells a pass that draws from a pass that only compiled:
 		// announce() says a program was prepared, which happens whether or not the renderer goes on
 		// to record a single command against it.
@@ -1404,15 +1424,25 @@ final class GeometryProgram {
 							: "");
 		}
 
-		pass.setUniform(UNIFORM_BLOCK, blockSlice());
-		StorageBuffers.bind(pass, this.storage);
-
-		// The rest are already standing in this pass, put there by this program's own last bind into
-		// it, and writing them again would allocate a pair and put back what the map already holds.
-		// {@link #settledIn} says what can undo that and why nothing else can.
+		// What this program put in the pass at its last bind into it is still there, and writing it
+		// again would allocate a pair, put back what the map already holds and leave the next draw a
+		// descriptor push to make. settledIn says what can undo it and why nothing else can.
+		boolean keep = PassTimings.keepRedoneWork();
 		boolean settle = settledIn != pass || settled != this;
 		settledIn = pass;
 		settled = this;
+
+		// The slice as well as the pass: the ring turns once a frame and a pass that outlived the turn
+		// would hold the buffer before it, which the identity of the slice says without asking when.
+		GpuBufferSlice slice = blockSlice();
+		if (settle || keep || slice != this.blockSent) {
+			FrameCensus.programBound();
+			pass.setUniform(UNIFORM_BLOCK, slice);
+			this.blockSent = slice;
+			StorageBuffers.bind(pass, this.storage);
+		} else {
+			FrameCensus.programKept();
+		}
 
 		for (Sampled one : this.following) {
 			GraphicsApi.bindTexture(pass, one.name, imageView(one), imageSampler(one));
@@ -1460,6 +1490,8 @@ final class GeometryProgram {
 			one.servedFor = null;
 			one.served = null;
 		}
+
+		this.blockSent = null;
 	}
 
 	/**
@@ -1863,8 +1895,19 @@ final class GeometryProgram {
 		return this.shadowArea;
 	}
 
-	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
+	/**
+	 * Rotates the ring buffer. Called once the frame's terrain draw has been recorded.
+	 * <p>
+	 * A pass never outlives the frame that opened it, but the block this program set on one is the
+	 * buffer the ring is leaving, so what is standing is dropped here rather than trusted to that.
+	 */
 	void rotate() {
+		if (settled == this) {
+			settled = null;
+			settledIn = null;
+		}
+
+		this.blockSent = null;
 		if (this.block != null) {
 			FrameCensus.rotated();
 			this.block.rotate();
@@ -1901,6 +1944,7 @@ final class GeometryProgram {
 		// as valid.
 		this.blockSlice = null;
 		this.blockSliceOf = null;
+		this.blockSent = null;
 
 		// The reference is dropped, the textures are not: they are the device's, not this
 		// program's, and re-clearing them once per program was about ninety of the standalone

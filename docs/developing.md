@@ -361,10 +361,14 @@ call, so the game's and Sodium's are in it beside this engine's, in a row of the
 counted the same way and filed under the family of the pipeline their pass holds. **Terrain draws are
 the one gap and it shows as a dash**: Sodium records them into the command buffer itself, past the
 pass. Descriptor pushes are counted at the game's push, with the descriptors each carried, and a
-push bound as an allocated set instead is named apart. Uniform block writes are split into the
-geometry programs', the chain's and the far terrain's, and the geometry line says how many programs
-wrote their block more than once in a frame, which is nought when the block is written once for the
-run of draws it serves. Every ring turned by this engine is a fence created and is counted as one. The
+push bound as an allocated set instead is named apart. Program binds are the times a geometry
+program's block and samplers were set on a pass it was not already standing in, and beside them the
+binds that found it standing there, which set only the images the draw brought. Both games mark the
+descriptors dirty on every set, so a draw whose bind set an image pushes, and one whose bind set
+nothing pushes only if something else on it did. Uniform block writes are split into the geometry
+programs', the chain's and the far terrain's, and the geometry line says how many programs wrote
+their block more than once in a frame, which is nought when the block is written once for the run of
+draws it serves. Every ring turned by this engine is a fence created and is counted as one. The
 census costs one read of a static final per hook while the switch is off, and allocates nothing
 while it is on. It says how often, not how dear: read it beside the frame rate.
 

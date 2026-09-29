@@ -165,6 +165,35 @@ class FrameTallyTest {
 				this.tally.lines(1.0).toString());
 	}
 
+	@Test
+	void aProgramFoundStandingInItsPassIsCountedApartFromOneThatWasSet() {
+		this.tally.programBound();
+		this.tally.programKept();
+		this.tally.programKept();
+		this.tally.programKept();
+		this.tally.endFrame();
+
+		// One set and three kept over one frame: the first is the number to want at one a program
+		// and pass, and the second says how many binds found their program standing in the pass.
+		assertTrue(this.tally.lines(1.0).contains("  1.0 program binds, each one a uniform block and "
+				+ "its samplers set on the pass, and 3.0 more that found the program already "
+				+ "standing in it and set only the images the draw brought"),
+				this.tally.lines(1.0).toString());
+	}
+
+	@Test
+	void aClearEmptiesTheBindsThatFoundTheirProgramStanding() {
+		this.tally.programKept();
+		this.tally.programKept();
+		this.tally.clear();
+		this.tally.programBound();
+		this.tally.endFrame();
+
+		assertTrue(this.tally.lines(1.0).stream()
+				.anyMatch(line -> line.contains("1.0 program binds") && line.contains("and 0.0 more")),
+				this.tally.lines(1.0).toString());
+	}
+
 	// -- families ------------------------------------------------------------------------------
 
 	@Test
@@ -233,6 +262,10 @@ class FrameTallyTest {
 			this.tally.programBound();
 		}
 
+		for (int i = 0; i < 10; i++) {
+			this.tally.programKept();
+		}
+
 		this.tally.chainWritten();
 		this.tally.chainWritten();
 		for (int i = 0; i < 4; i++) {
@@ -286,7 +319,9 @@ class FrameTallyTest {
 				"       2.0 binds      0.0 redundant      1.0 draws  not this engine's",
 				"  4.0 descriptor pushes, 5.0 descriptors each, 1.0 bound as an allocated set "
 						+ "instead (a push a draw is the most it can be)",
-				"  3.0 program binds, each one a uniform block and its samplers set on the pass",
+				"  3.0 program binds, each one a uniform block and its samplers set on the pass, "
+						+ "and 5.0 more that found the program already standing in it and set only "
+						+ "the images the draw brought",
 				"  2.0 geometry block writes over 1.5 programs, 0.5 of them written more than once "
 						+ "(0 would be ideal), 1.0 chain block writes, 2.0 far terrain block writes",
 				"  3.0 ring rotations, each one a fence created",

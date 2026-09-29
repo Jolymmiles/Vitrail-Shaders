@@ -128,10 +128,23 @@ public final class FrameCensus {
 		}
 	}
 
-	/** A geometry program's block and samplers set on a pass. */
+	/**
+	 * A geometry program's block and samplers set on a pass it was not standing in, which is once for
+	 * each program and pass that meet and again where the program's own answers moved.
+	 */
 	public static void programBound() {
 		if (ENABLED) {
 			TALLY.programBound();
+		}
+	}
+
+	/**
+	 * A geometry program bound into a pass it was already standing in, which sets the images the draw
+	 * brought and nothing else.
+	 */
+	public static void programKept() {
+		if (ENABLED) {
+			TALLY.programKept();
 		}
 	}
 

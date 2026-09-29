@@ -44,10 +44,13 @@ The pipeline is the run's, bound at its first draw and never again inside it. Th
 transform block are put on the pass only when they differ from what the run last gave it, since the
 pass holds both until it is told another and both games mark the descriptors dirty on every set,
 equal or not. The first draw of a run gives the pipeline, the scissor and the transform block
-whatever the pass stood on, so a held pass's leftover state is never a draw's to inherit;
-`SentState` is where that is decided, and the game's own draws and every other family's are not
-counted in it, which is why a run forgets it at both ends. `vitrail/keep-redone-work` sends the
-three at every draw, for measuring the difference.
+whatever the pass stood on, and the first bind of a program into a pass gives the block and every
+name the program declares, so a held pass's leftover state is never a draw's to inherit.
+`SentState` decides the first three, and the game's own draws and every other family's are not
+counted in it, which is why a run forgets it at both ends. The image is given at every draw: the
+game folds consecutive draws of one render type into one, so the next draw of a run brings another
+image and the descriptors are owed a push whatever is compared. `vitrail/keep-redone-work` sends
+the three and the block at every draw, for measuring the difference.
 
 One family never reaches this door. The particle renderer implements the feature interface directly
 instead of extending the class that owns `executeGroup`, so it has an `executeGroup` of its own,

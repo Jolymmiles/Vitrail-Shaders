@@ -68,6 +68,7 @@ final class FrameTally {
 	private long allocatedSets;
 	private long descriptors;
 	private long programBinds;
+	private long programKept;
 
 	private long geometryWrites;
 	private long geometryPrograms;
@@ -136,6 +137,11 @@ final class FrameTally {
 
 	void programBound() {
 		this.programBinds++;
+	}
+
+	/** A program bound into a pass it was already standing in. */
+	void programKept() {
+		this.programKept++;
 	}
 
 	/** A geometry program's block, written. The block says whether this is its second time. */
@@ -235,6 +241,7 @@ final class FrameTally {
 		this.allocatedSets = 0;
 		this.descriptors = 0;
 		this.programBinds = 0;
+		this.programKept = 0;
 		this.geometryWrites = 0;
 		this.geometryPrograms = 0;
 		this.geometryRewritten = 0;
@@ -295,7 +302,9 @@ final class FrameTally {
 						this.descriptors / (double) this.pushes),
 				per(this.allocatedSets, frames)));
 		lines.add(String.format(Locale.ROOT, "  %s program binds, each one a uniform block and its "
-				+ "samplers set on the pass", per(this.programBinds, frames)));
+						+ "samplers set on the pass, and %s more that found the program already "
+						+ "standing in it and set only the images the draw brought",
+				per(this.programBinds, frames), per(this.programKept, frames)));
 		lines.add(String.format(Locale.ROOT, "  %s geometry block writes over %s programs, %s of them "
 						+ "written more than once (0 would be ideal), %s chain block writes, %s far "
 						+ "terrain block writes",
