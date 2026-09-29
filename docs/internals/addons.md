@@ -180,3 +180,93 @@ element one of the six leaves to the others already has. Whether the compiled mo
 input, on which the location of everything after it depends, is what the off-game harness measures
 for the elements the corpus leaves unread. It has not been measured for one that every program
 leaves unread.
+
+### The copy
+
+`TerrainMeshEvents.built` runs at the head of the public `RenderRegionManager.uploadResults`, on the
+render thread, before anything is uploaded. That is the one point that sees exactly what is about to
+be uploaded: `processChunkBuildResults` has already had `applyBuildOutputs` discard the output of a
+section removed meanwhile and any output older than one already applied, so an output that reaches
+`uploadResults` is one that will reach the arena, and nothing reaches the arena without passing
+there. The end of the build task sees outputs that are then thrown away. `BuilderTaskOutput.destroy`
+frees the buffers right after `processChunkBuilds` finishes, so a listener's views are valid for the
+call and no longer, which the API says.
+
+Only `ChunkBuildOutput` is reported. The sorter's other outputs carry an index buffer and no
+vertices: reordering the quads of a translucent mesh as the camera moves adds, removes and moves no
+vertex, so a copy of positions has no need to hear of it. Each of the three passes is looked up by
+identity in `DefaultTerrainRenderPasses`, the way `uploadResults` walks them; a pass a mod added is
+not one of the three and is not uploaded either.
+
+The view is `NativeBuffer.getDirectBuffer` made read-only and put in native byte order, the order
+the encoder wrote its words in. The order has to be set, because a duplicate of a byte buffer starts
+big endian whatever it was cut from. Each listener gets views of its own, since position and byte
+order are state and a listener that reads relatively would otherwise hand the next one a buffer in
+the place it left it. What cannot be described, a mesh whose length is not whole quads or a format
+this engine did not lay out, is logged once and nothing is handed over: it is this engine's failure
+and is never charged to the add-on.
+
+**An output replaces its section whole.** `uploadResults` removes the section's vertex data from all
+three passes before it uploads what the output holds, so a pass the output has no mesh for is a pass
+that has none any more, and a section that became empty is an output with no meshes at all. That is
+reported as `built` with an empty list of meshes and not as a removal, because the section is still
+there and Sodium keeps it; it is also how Sodium itself handles it, with no case of its own. A
+section that is empty when it is created gets no output and no event, and there is nothing to
+forget.
+
+**Removal is `RenderSection.delete`**, the one road every section leaves by. A chunk unloading goes
+through `onSectionRemoved`, but a renderer torn down, which is every dimension change and every
+rebuild of the world, goes through `deleteAll` without it. A section removed while the storage is
+queueing stays in it until the queue is flushed, and a teardown in between deletes it a second time,
+so the disposed flag is what makes the call once per section. `removed` is made for sections that
+never had a mesh as well, and an add-on takes it as "forget this section if it is held".
+
+### What the copy is and is not
+
+**It is the whole mesh, and Sodium does not draw the whole mesh.** At draw time Sodium drops the
+groups of quads facing away from where the camera stands (`getVisibleFaces`, when block face culling
+is on). The copy holds them, which is what a ray needs and a rasteriser does not.
+
+**It is what is rasterised and no more.** A translucent quad is recorded by the sorter and, unless
+the sorter refuses it as degenerate, is still pushed to the vertex buffer, so it is in the copy; a
+degenerate one is dropped there and here alike. Where the sorter changed the quads themselves, which
+it may do to sort them exactly, `createModifiedTranslucentMesh` builds the buffer out of the changed
+quads and that is what is copied. The index data only decides the order the quads are blended in.
+The writers of it that were read, the shared quad index buffer and the static topological one, index
+whole quads of the buffer, and neither addresses a vertex it does not hold.
+
+**Vertices are not in build order, and a quad is implicit.** A mesh is the buffers Sodium keeps for
+each side a quad is filed under, laid end to end. Within a side the quads are in the order the
+blocks were meshed, y outermost, then z, then x. Across sides the order is one Sodium chose for
+drawing: the quads that face no axis first and then the sides in the order +X, +Y, +Z, -X, -Y, -Z,
+or, where it reorders the sides, the ones the camera could see at the time of the build before the
+rest, which makes the order depend on where the camera stood. The table that says where a side
+starts is not part of the copy, so an add-on takes a pass as an unordered set of quads. A quad is
+four consecutive vertices at the layout's stride, in the order the source model gave its corners,
+and the renderer draws it as the triangles (0, 1, 2) and (2, 3, 0) of its shared index buffer. The
+fluid renderer writes some quads twice, the second with its corners reversed and filed under the
+opposite side, for a surface seen from either side.
+
+### The layout
+
+`TerrainLayout` counts where the appended elements sit, and `TerrainMesh` lays its format and its
+encoder out from it, so the description an add-on is handed and the bytes are one computation. The
+order is `SodiumVertex.ATTRIBUTES`' from the block id on: `BLOCK_ID`, `MID_TEX_COORD`, `MID_BLOCK`,
+`TANGENT_FRAME`, and the separated colour, which answers no attribute but takes its word all the
+same. The mesh's constructor holds that order against the encoder's and the layout against the
+format it built, element by element; a disagreement leaves the terrain on Sodium's own format with
+an error in the log, where the alternative is a wrong description in an add-on's hands.
+`TerrainMesh.layout` follows `current` and moves at the same instant.
+
+**The compact vertex, checked against Sodium 0.9.2-beta.1 on 26.2 and 0.9.2 on 26.3, whose encoders
+are identical.** The position is two words at offset 0 holding, per coordinate,
+`(int) ((8 + p) / 32 * 2^20) & 0xFFFFF`, the high ten bits of x, y and z at bits 0, 10 and 20 of the
+first word and the low ten in the second; `SodiumVertex.prologue` undoes it with
+`(top * 1024 + bottom) * (32 / 2^20) - 8`. The value is cut and not rounded, so a coordinate is
+stored to a step of 2^-15 of a block, and a position outside `[-8, 24)` wraps. `p` is measured from
+the section's minimum corner: the block renderer adds the block's place in its section, `x & 15`, to
+the model's own coordinates and the fluid renderer does the same, so it is neither the region's
+corner nor the world's. Light and data at offset 16 are one byte each: block light, sky light,
+material bits, and `(x & 7) << 5 | (z & 7) << 2 | (y & 3)` of the section, its place in a region of
+8 by 4 by 8, which is a function of the section's coordinates and needed by nobody who has them. The
+API's javadoc states all of it.

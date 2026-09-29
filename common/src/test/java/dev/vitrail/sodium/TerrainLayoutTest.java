@@ -6,13 +6,16 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitrail.api.TerrainAttribute;
+import dev.vitrail.api.TerrainVertexLayout;
 import dev.vitrail.glsl.SodiumVertex;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,9 @@ import org.junit.jupiter.api.Test;
  * encoder's order against this one when it is built, and this test is what holds the other side.
  */
 class TerrainLayoutTest {
+
+	/** Sodium's own bytes, the compact vertex the first four elements make. */
+	private static final int SODIUM = 20;
 
 	private static final List<String> ORDER = List.of("a_BlockId", "a_MidTexCoord", "a_MidBlock",
 			"a_TangentFrame", "a_TintAndAo");
@@ -97,6 +103,91 @@ class TerrainLayoutTest {
 		assertEquals(TerrainLayout.ABSENT, TerrainLayout.appendedOffset("a_Unknown", subset(31)));
 		assertEquals(4, TerrainLayout.appendedOffset("a_MidBlock",
 				List.of("a_Unknown", "a_BlockId", "a_BlockId", "a_MidBlock")));
+	}
+
+	@Test
+	void everyCombinationOfTheFiveGivesItsOwnStrideAndOffsets() {
+		TerrainAttribute[] attributeAt = {TerrainAttribute.BLOCK_ID, TerrainAttribute.MID_TEX_COORD,
+				TerrainAttribute.MID_BLOCK, TerrainAttribute.TANGENT_FRAME, null};
+
+		for (int mask = 0; mask < 1 << ORDER.size(); mask++) {
+			TerrainVertexLayout layout = TerrainLayout.of(SODIUM, subset(mask));
+
+			assertEquals(SODIUM + Integer.BYTES * Integer.bitCount(mask), layout.stride(), "stride of " + mask);
+
+			Map<TerrainAttribute, Integer> expected = new EnumMap<>(TerrainAttribute.class);
+			for (int at = 0; at < ORDER.size(); at++) {
+				if ((mask >> at & 1) != 0 && attributeAt[at] != null) {
+					expected.put(attributeAt[at],
+							SODIUM + Integer.BYTES * Integer.bitCount(mask & ((1 << at) - 1)));
+				}
+			}
+
+			assertEquals(expected, layout.offsets(), "offsets of " + mask);
+		}
+	}
+
+	@Test
+	void aVertexWithNothingAppendedIsSodiumsOwnTwentyBytes() {
+		TerrainVertexLayout own = TerrainLayout.of(SODIUM, OWN);
+
+		assertEquals(SODIUM, own.stride());
+		assertEquals(Map.of(), own.offsets());
+		assertEquals(own, TerrainLayout.of(SODIUM, List.of()));
+	}
+
+	@Test
+	void anElementLeftOutClosesTheGapInTheLayoutToo() {
+		TerrainVertexLayout layout = TerrainLayout.of(SODIUM,
+				List.of("a_BlockId", "a_MidBlock", "a_TangentFrame"));
+
+		assertEquals(Map.of(TerrainAttribute.BLOCK_ID, 20, TerrainAttribute.MID_BLOCK, 24,
+				TerrainAttribute.TANGENT_FRAME, 28), layout.offsets());
+		assertEquals(32, layout.stride());
+	}
+
+	@Test
+	void theSeparatedColourTakesAWordInTheStrideAndNamesNoAttribute() {
+		TerrainVertexLayout before = TerrainLayout.of(SODIUM, List.of("a_TintAndAo", "a_TangentFrame"));
+		TerrainVertexLayout after = TerrainLayout.of(SODIUM, List.of("a_BlockId", "a_TintAndAo"));
+
+		assertEquals(Map.of(TerrainAttribute.TANGENT_FRAME, 20), before.offsets());
+		assertEquals(28, before.stride());
+		assertEquals(Map.of(TerrainAttribute.BLOCK_ID, 20), after.offsets());
+		assertEquals(28, after.stride());
+	}
+
+	@Test
+	void theStrideSodiumStartsFromIsWhereTheOffsetsStart() {
+		TerrainVertexLayout layout = TerrainLayout.of(32, List.of("a_BlockId"));
+
+		assertEquals(Map.of(TerrainAttribute.BLOCK_ID, 32), layout.offsets());
+		assertEquals(36, layout.stride());
+	}
+
+	@Test
+	void namesOutsideTheFiveAndRepeatsChangeNothingInTheLayout() {
+		List<String> noisy = new ArrayList<>(subset(0b00101));
+		noisy.add("a_Unknown");
+		noisy.add("a_BlockId");
+
+		assertEquals(TerrainLayout.of(SODIUM, subset(0b00101)), TerrainLayout.of(SODIUM, noisy));
+	}
+
+	@Test
+	void theOffsetsOfTheLayoutAreTheWordsAppendedOffsetCountsPlusSodiumsBytes() {
+		for (int mask = 0; mask < 1 << ORDER.size(); mask++) {
+			List<String> carried = subset(mask);
+			TerrainVertexLayout layout = TerrainLayout.of(SODIUM, carried);
+
+			for (String element : ORDER) {
+				TerrainAttribute attribute = TerrainLayout.attribute(element);
+				int offset = TerrainLayout.appendedOffset(element, carried);
+				if (attribute != null && offset != TerrainLayout.ABSENT) {
+					assertEquals(SODIUM + offset, layout.offsets().get(attribute), element + " of " + mask);
+				}
+			}
+		}
 	}
 
 	@Test

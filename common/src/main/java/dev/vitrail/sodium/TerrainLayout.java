@@ -1,11 +1,14 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.api.TerrainAttribute;
+import dev.vitrail.api.TerrainVertexLayout;
 import dev.vitrail.glsl.SodiumVertex;
 
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
@@ -15,9 +18,11 @@ import org.jspecify.annotations.Nullable;
  * for are named and unioned into what the mesh carries.
  * <p>
  * <strong>The one place the order is counted.</strong> {@link TerrainMesh} lays its format and its
- * encoder out from {@link #appendedOffset}. The order is {@link SodiumVertex#ATTRIBUTES}' from the
- * block id on, which is also the order the pack's programs declare their inputs in and the one
- * {@code TerrainProgram.carries} compares the bound format against.
+ * encoder out from {@link #appendedOffset}, and the layout an add-on is handed comes from
+ * {@link #of}, so a mesh's own bytes and the description of them cannot part company. The order is
+ * {@link SodiumVertex#ATTRIBUTES}' from the block id on, which is also the order the pack's programs
+ * declare their inputs in and the one {@code TerrainProgram.carries} compares the bound format
+ * against.
  * <p>
  * Nothing here names a Minecraft or a Sodium class, so every combination of elements is checked
  * off the game.
@@ -119,5 +124,31 @@ public final class TerrainLayout {
 		}
 
 		return ABSENT;
+	}
+
+	/**
+	 * The layout of a vertex whose format is Sodium's own bytes and then the appended elements in
+	 * {@code carried}.
+	 *
+	 * @param sodiumStride the bytes Sodium's own four elements take
+	 * @param carried      the whole format, by names, in which only the appended ones matter
+	 */
+	public static TerrainVertexLayout of(int sodiumStride, Collection<String> carried) {
+		Map<TerrainAttribute, Integer> offsets = new EnumMap<>(TerrainAttribute.class);
+		int stride = sodiumStride;
+		for (String element : APPENDED) {
+			if (!carried.contains(element)) {
+				continue;
+			}
+
+			TerrainAttribute attribute = attribute(element);
+			if (attribute != null) {
+				offsets.put(attribute, stride);
+			}
+
+			stride += WORD;
+		}
+
+		return new TerrainVertexLayout(stride, offsets);
 	}
 }

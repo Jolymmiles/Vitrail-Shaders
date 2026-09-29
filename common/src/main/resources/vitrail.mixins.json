@@ -57,6 +57,8 @@
 		"RenderPipelineBuilderMixin",
 		"RenderPipelineMixin",
 		"sodium.MixinRenderRegion",
+		"sodium.RenderRegionManagerMixin",
+		"sodium.RenderSectionMixin",
 		"access.RenderSectionManagerAccessor",
 		"access.RenderTargetAccessor",
 		"RenderTypeFeatureRendererGroupMixin",

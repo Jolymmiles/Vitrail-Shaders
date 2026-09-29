@@ -1,6 +1,8 @@
 package dev.vitrail.sodium;
 
 import dev.vitrail.addon.TerrainAttributes;
+import dev.vitrail.api.TerrainAttribute;
+import dev.vitrail.api.TerrainVertexLayout;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.TangentFrame;
 import dev.vitrail.render.BlockStateIds;
@@ -156,6 +158,9 @@ public final class TerrainMesh implements ChunkVertexType {
 	private final VertexFormat format;
 	private final int stride;
 
+	/** What an add-on is told about where the elements sit, counted by the same code as {@link #offsets}. */
+	private final TerrainVertexLayout layout;
+
 	/** What {@link #offsets} holds for an element the pack was not asked to carry. */
 	private static final int ABSENT = TerrainLayout.ABSENT;
 
@@ -197,6 +202,33 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		this.format = extend(this.inner.getVertexFormat(), this.extras);
 		this.stride = this.format.getVertexSize();
+		this.layout = TerrainLayout.of(this.innerStride, this.carried);
+		checkLayout(this.format, this.layout);
+	}
+
+	/**
+	 * Holds what an add-on is told against the format the renderer binds, element by element, so
+	 * that a description of the bytes that has drifted from the bytes fails here and not in the
+	 * add-on's acceleration structure.
+	 */
+	private static void checkLayout(VertexFormat format, TerrainVertexLayout layout) {
+		if (layout.stride() != format.getVertexSize()) {
+			throw new IllegalStateException("The layout says " + layout.stride() + " bytes a vertex and "
+					+ "the format " + format.getVertexSize());
+		}
+
+		for (VertexFormatElement element : format.getElements()) {
+			TerrainAttribute attribute = TerrainLayout.attribute(element.name());
+			if (attribute == null) {
+				continue;
+			}
+
+			Integer said = layout.offsets().get(attribute);
+			if (said == null || said != element.offset()) {
+				throw new IllegalStateException(element.name() + " sits at byte " + element.offset()
+						+ " and the layout says " + said);
+			}
+		}
 	}
 
 	/**
@@ -215,6 +247,19 @@ public final class TerrainMesh implements ChunkVertexType {
 	 */
 	public static synchronized ChunkVertexType current() {
 		return built;
+	}
+
+	/**
+	 * Where each attribute an add-on may ask for sits in a vertex of the format in force, which is
+	 * Sodium's own twenty bytes with none of them when {@link #current()} answers null.
+	 * <p>
+	 * The same answer as {@link #current()} and moved by the same instant, so a section built at one
+	 * stride is never described at another.
+	 */
+	public static synchronized TerrainVertexLayout layout() {
+		return built != null
+				? built.layout
+				: TerrainLayout.of(ChunkMeshFormats.COMPACT.getVertexFormat().getVertexSize(), List.of());
 	}
 
 	/**
