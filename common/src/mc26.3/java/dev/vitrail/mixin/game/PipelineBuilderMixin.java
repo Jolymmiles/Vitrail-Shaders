@@ -63,7 +63,7 @@ public abstract class PipelineBuilderMixin {
 							+ "dimensions()I"))
 	private int vitrail$allowLineAndVolume(SpvModule.Reflection.Type type, Operation<Integer> original) {
 		int dimensions = original.call(type);
-		return dimensions == 0 || dimensions == 2 ? 1 : dimensions;
+		return (dimensions == 0 || dimensions == 2) ? 1 : dimensions;
 	}
 
 	/**

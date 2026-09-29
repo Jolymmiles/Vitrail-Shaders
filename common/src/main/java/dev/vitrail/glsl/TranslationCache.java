@@ -160,8 +160,9 @@ public final class TranslationCache {
 	 * The edition names a whole set of keys at once: nothing under another one can be asked for by
 	 * this build, and the ceiling has to be about what is still reachable. One neighbour is spared
 	 * for the build that owns it, and {@link #dropOtherEditions} says which and why. Called once,
-	 * before the first pack is read; a failure here leaves the cache off for the run and the loads
-	 * exactly as long as they were.
+	 * before the first pack is read; a failure of this edition's own folder leaves the cache off
+	 * for the run and the loads exactly as long as they were, while a leftover of another edition
+	 * that will not go leaves it on and is kept in {@link #problem()}.
 	 *
 	 * @param edition what this build translates into, which carries the commit it was built from
 	 *                when there is one to carry and is otherwise the family entire
@@ -179,8 +180,8 @@ public final class TranslationCache {
 	 * <strong>Only this edition's own directory decides whether it is taken into service.</strong>
 	 * What another edition left is nothing this build reads, so a file in it that will not go, held
 	 * by a scanner or an indexer or made read-only by hand, costs the disk it sits on and is kept in
-	 * {@link #problem} for whoever has a logger. It used to throw out of here, and one stale file in
-	 * a folder no build would ever read again then left the cache off at every launch for as long
+	 * {@link #problem} for whoever has a logger. Were it to throw out of here, one stale file in a
+	 * folder no build would ever read again would leave the cache off at every launch for as long
 	 * as the file stayed.
 	 *
 	 * @param family the sanitized family of this edition, or empty to leave every neighbour alone.

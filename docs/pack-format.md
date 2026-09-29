@@ -552,11 +552,17 @@ This is the frame to keep in mind for everything above. A shader pack is a file 
 **Any path a pack writes is refused if it normalises to somewhere outside `shaders/`.** Without that
 check, a pack can make the engine read an arbitrary file from the user's disk and hand it to a
 shader. That door is not only the include directive: the texture keys go through it too, which is
-why they were routed through the same resolution rather than given their own.
+why they were routed through the same resolution rather than given their own. In a folder pack the
+check also follows the links: a link inside the pack that leads out of it is refused exactly as a
+climb out of it is, and [pack loading](internals/pack-loading.md#resolving-a-path-a-pack-wrote)
+says how.
 
 Path resolution also falls back to a case-insensitive lookup in the parent directory, cached per
 directory, because a folder on a case-insensitive filesystem and a zip do not agree: a pack that
-misspells the case of one of its own files works in one shape and breaks in the other.
+misspells the case of one of its own files works in one shape and breaks in the other. A path that
+names `shaders/` itself is never matched that way.
 
-And every loop whose trip count depends on pack content is bounded on **total work** rather than on
-nesting depth. [Translation](translation.md) covers why that distinction is the one that matters.
+And every loop whose trip count depends on pack content is bounded on **total work**, and depth
+limits stand beside those budgets without replacing them: thirty-two levels of include, sixty-four
+of an expression and a hundred and twenty-eight of a custom uniform, among others.
+[Translation](translation.md) covers why the total is the bound that matters.

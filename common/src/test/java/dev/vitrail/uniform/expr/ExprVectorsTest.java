@@ -290,7 +290,7 @@ class ExprVectorsTest {
 		assertFalse(this.rig.boolOf("equals(ivec3(1, 2, 3), ivec3(1, 2, 4))"), "only the last differs");
 	}
 
-	// the shared buffers
+	// calls that share no buffer
 
 	@Test
 	void twoCallsOfOneVectorOperationInOneExpressionKeepTheirOwnResults() {

@@ -237,7 +237,9 @@ So a flat, unlit mob is not a mask bug, and before reading it as one, check whic
 are looking at. The family goes through the pack out of the box, so the first question is whether
 somebody wrote `entities=off` in `vitrail/options.txt`, which hands every entity straight back to
 the game's shader. Failing that, an entity that still looks flat is one the pack's own program did
-not reach: the log names the reason at the moment it happens. Neither case is the coverage mask.
+not reach, or one whose family the pack-load worker could not read: the log names the reason at the
+moment it happens, and the settings screen says so as well for an unread family. Neither case is
+the coverage mask.
 
 ### What the entity door can carry, and what the mesh keeps out
 

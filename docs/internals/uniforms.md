@@ -389,8 +389,8 @@ rather than to find a test that almost works.
 
 The generated noise image is the standing example: two different generators both produce something
 that looks exactly like noise, and swapping the two loop axes produces a transposed image that also
-looks exactly like noise. Only a fingerprint compared bit for bit decides, and that runs in an
-out-of-game check which does not ship with this repository.
+looks exactly like noise. Only a fingerprint compared bit for bit decides, and that runs in
+`uniform/NoiseTextureTest`, outside the game.
 
 The same applies to depth precision, and the claim there has to be kept narrow. Publishing a
 legacy-convention matrix does not switch reversed Z off for the game: the world is still rasterised,

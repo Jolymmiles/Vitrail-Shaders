@@ -285,14 +285,15 @@ over the whole text and steps over the directives without evaluating one, since 
 reading are themselves what a conditional would be evaluated against. Everything a setting can
 decide is left to the walk above.
 
-The expression evaluator itself is a recursive descent over C precedence, in integers rather than
-floating point, because the compiler that sees the same line later will give the C answer whatever is
-decided here. Two small things bite: two-character operators are matched before single ones, or `<=`
-is read as `<` followed by `=`; and the base of a numeric literal has to be settled before a type
-suffix is stripped, since in hexadecimal `f` is a digit and taking it for a float suffix silently
-truncates the number. A division by zero, a shift by a negative or absurd amount, and the one
-overflowing division are treated as no answer rather than thrown: a condition that cannot be worked
-out is not a reason to abandon the load.
+The expression evaluator itself is a recursive descent over C precedence, carrying a double beside a
+long so that whole numbers stay exact and the arithmetic widens once a side is fractional, because
+the compiler that sees the same line later will give the C answer whatever is decided here. Two
+small things bite: two-character operators are matched before single ones, or `<=` is read as `<`
+followed by `=`; and the base of a numeric literal has to be settled before a type suffix is
+stripped, since in hexadecimal `f` is a digit and taking it for a float suffix silently truncates
+the number. A division by zero, a shift by a negative or absurd amount, and the one overflowing
+division are treated as no answer rather than thrown: a condition that cannot be worked out is not a
+reason to abandon the load.
 
 ## Flattening an entry file
 

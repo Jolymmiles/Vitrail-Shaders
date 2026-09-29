@@ -193,7 +193,7 @@ public abstract class GlslCompilerMixin {
 					target = "Lcom/mojang/blaze3d/vulkan/glsl/SpvSampler;dimensions()I"))
 	private static int vitrail$allowLineAndVolume(@Coerce Object sampler, Operation<Integer> original) {
 		int dimension = original.call(sampler);
-		return dimension == 0 || dimension == 2 ? 1 : dimension;
+		return (dimension == 0 || dimension == 2) ? 1 : dimension;
 	}
 
 	/**

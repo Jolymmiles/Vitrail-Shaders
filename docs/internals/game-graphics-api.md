@@ -247,7 +247,10 @@ declared as a sampler has to be two-dimensional or cube, while a name declared a
 format has to be a buffer, and is bound as a texel buffer rather than as an image. Three survive,
 then, but not interchangeably, and everything outside that set is rejected by name, which is why
 several pack features are hard refusals rather than unfinished work, as
-[translation](../translation.md) explains.
+[translation](../translation.md) explains. The one exception is this engine's own: a mixin
+(`GlslCompilerMixin.vitrail$allowLineAndVolume` on 26.2, `PipelineBuilderMixin` on 26.3) makes the
+compiler read a one- and a three-dimensional sampler as two-dimensional, so such a declaration
+binds, and that page says what is still refused.
 
 Finally, explicit binding and set qualifiers must not be written into the GLSL at all: the compiler
 assigns them and an intermediate module rewrites them afterwards. The same reflection machinery also

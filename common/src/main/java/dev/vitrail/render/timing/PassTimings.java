@@ -438,11 +438,11 @@ public final class PassTimings {
 	}
 
 	/**
-	 * Puts back the render-thread first-draw compiles of the six on-demand families, so that the
-	 * hitch and its absence are read off ONE jar, for the reason {@link #keepRedoneWork} gives.
-	 * Armed by {@code vitrail/keep-first-draw-compiles} beside the pack or by
-	 * {@code -Dvitrail.keepFirstDrawCompiles}, read again at every pack load, and off otherwise,
-	 * so a player never carries the old path.
+	 * Puts back the render-thread first-draw compiles of the six families the worker reads ahead,
+	 * so that the hitch and its absence are read off ONE jar, for the reason
+	 * {@link #keepRedoneWork} gives. Armed by {@code vitrail/keep-first-draw-compiles} beside the
+	 * pack or by {@code -Dvitrail.keepFirstDrawCompiles}, read again at every pack load, and off
+	 * otherwise, so a player never carries the old path.
 	 */
 	public static boolean keepFirstDrawCompiles() {
 		if (keepFirstDraw < 0) {

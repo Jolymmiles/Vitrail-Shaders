@@ -1965,11 +1965,11 @@ public final class PackChain {
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
 
-		// Caught like every other entry point this bus calls. These two were the only ones without
-		// it, and they are the worst place to be missing one: an exception here reaches the game
-		// through an event handler and comes back on the very next frame, so what the player sees
-		// is not a pack that stopped drawing but a game that will not run. The layer's compile is
-		// inside it too, a pipeline the driver refuses throwing rather than coming back invalid.
+		// Caught like every other entry point this bus calls, every hook ending in HookFailure: an
+		// exception here reaches the game through an event handler and comes back on the very next
+		// frame, so what the player sees is not a pack that stopped drawing but a game that will
+		// not run. The layer's compile is inside it too, a pipeline the driver refuses throwing
+		// rather than coming back invalid.
 		try {
 			// The layer's own pipeline is compiled on the refused frames too, and deliberately
 			// before the question below rather than after it: it is one more pipeline the frame
@@ -2533,11 +2533,12 @@ public final class PackChain {
 	 * <p>
 	 * After the composites, terrain pipelines compile a call. The other families translate AND
 	 * compile on a worker: Complementary Unbound's leftover pipelines are the minute between
-	 * packs, and holding the world for them is that minute. A first draw the worker has not
-	 * reached yet still pays shaderc on the render thread, which is the fallback and no longer
-	 * the rule. {@link #pumpWarmup} repeats the compiles here for as long as a short budget on
-	 * the frame allows. The device cache itself is only ever written on the render thread: the
-	 * worker builds the objects, {@code GeometryProgram.compile} hands them over.
+	 * packs, and holding the world for them is that minute. A first draw of a family the worker
+	 * has read and not yet compiled pays shaderc on the render thread, which is the fallback and
+	 * not the rule, and a family it has not read is drawn by the game. {@link #pumpWarmup}
+	 * repeats the compiles here for as long as a short budget on the frame allows. The device
+	 * cache itself is only ever written on the render thread: the worker builds the objects,
+	 * {@code GeometryProgram.compile} hands them over.
 	 * <p>
 	 * A place with no full screen pass at all has nothing here to compile and is not refused for
 	 * it, so long as computes stand alone in it. It has a frame to run then: the reference builds
@@ -2569,9 +2570,10 @@ public final class PackChain {
 		startFamilyPrefetch();
 
 		// Terrain is the world frame. Complementary Unbound's leftover families are the minute
-		// between packs; the worker compiles them while the world is already being played, and a
-		// first draw that outruns it falls back here. Terrain is a handful of pipelines, and the
-		// first world frame hitches without them.
+		// between packs; the worker reads and compiles them while the world is already being
+		// played, a first draw of one it has read and not yet compiled falls back to compiling
+		// here, and one it has not read is drawn by the game. Terrain is a handful of pipelines,
+		// and the first world frame hitches without them.
 		//
 		// THE LEFTOVERS ARE NOT COMPILED ON THIS THREAD, and that is a decision rather than an
 		// omission. Doing it a program a frame, here, cost two minutes at two frames a second on

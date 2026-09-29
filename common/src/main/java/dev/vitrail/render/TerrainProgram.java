@@ -94,7 +94,8 @@ public final class TerrainProgram extends FamilyProgram {
 	/**
 	 * Never ahead: the chunk programs compile while the world is still held back, on the render
 	 * thread where the renderer asks for its shader, and the load worker leaves them alone. The
-	 * six on-demand families take the base's road; this one turns it off where it stands.
+	 * six families the worker reads ahead take the base's road; this one turns it off where it
+	 * stands.
 	 */
 	@Override
 	public boolean warmAhead(AheadCompiler compiler) {

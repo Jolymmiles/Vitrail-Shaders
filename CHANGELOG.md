@@ -52,7 +52,7 @@ what the next one holds.
   armour piece, trident or shield together with its glint in one pass, a kind of pass Vitrail did not
   know. So these were drawn by the game and pasted into the pack's image. Under Complementary they
   looked unshaded. Under Photon they became a purple smear, and a held pickaxe lost its own colours.
-  While a pack draws, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
+  While a pack is loaded, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
   The pack lights the piece and draws the glint with its own glint program. Without a pack the game
   draws them as before.
 - **The sky no longer turns one flat pink when far terrain is loaded and none of it is in view.**
@@ -65,7 +65,7 @@ what the next one holds.
 - **The cracks over a block being mined show again under a shader pack on 26.3.** 26.3 draws the
   cracks over an opaque block at a different moment of the frame from 26.2. Vitrail only looked for
   them at the old moment, so the game drew them on its own picture, which the pack's image covers.
-  Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack draws,
+  Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack is loaded,
   they are now sent to the moment 26.2 used, and the pack draws them with its own program.
 - **A pack's own `min`, `max` and long `if` read every value they are given.** A custom uniform
   written as `min(a, b, c)`, or as a `max` of three values or more, compared the first value with

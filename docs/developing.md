@@ -95,6 +95,11 @@ pack:
   frame is divided into, and the catch every frame hook ends in.
 - **The Distant Horizons bridge**, against a fake of the mod that the test compiles itself, so it
   needs a JDK and not only a JRE.
+- **What sits beside those**: the module store both games share and the translation cache on disk,
+  the frame and module census, the material-map mip reduction, the block-origin word of a chunk
+  vertex, the pack-reading limits and the macro work budget, the refusals a family answers with,
+  and the settings files a game directory holds. The list above names families and not test
+  classes: a class under `common/src/test` says in its own javadoc which rule it holds.
 
 Two habits carry over from the section below. A test that pins a defect is named for it
 (`knownBug_...`) and is kept apart from the ordinary ones, so the fix flips one method rather than

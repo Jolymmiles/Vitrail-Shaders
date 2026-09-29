@@ -564,8 +564,8 @@ final class ModuleStore {
 	 * <strong>Only this edition's own directory decides whether there is a cache this run.</strong>
 	 * What another build left is cleared on the way in and is nothing this build reads, so a file in
 	 * it that will not go, held by a scanner or an indexer or made read-only by hand, costs the disk
-	 * it sits on and is said once. It used to throw out of here, and one stale file in a folder no
-	 * build would ever read again then turned the store off at every launch for as long as the file
+	 * it sits on and is said once. Were it to throw out of here, one stale file in a folder no
+	 * build would ever read again would turn the store off at every launch for as long as the file
 	 * stayed.
 	 */
 	private static void open() {

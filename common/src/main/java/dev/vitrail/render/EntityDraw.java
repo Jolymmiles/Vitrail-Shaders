@@ -2539,11 +2539,11 @@ public final class EntityDraw extends FamilyDraw {
 
 		// Built aside and handed over whole, which is the same rule carried through the build. A
 		// program can still throw on its way into being, over a uniform whose size nothing here
-		// knows or a pipeline with no colour target to read a blend off, and it used to throw out of
-		// the middle of this group into the reading's own catch: the pieces built before it stayed
-		// served beside the rest drawn by the game, and every group still to come, the hand, the
-		// glint and the shadow table among them, was never built at all. Caught here, it costs this
-		// group and no other, which is where the rule draws the line.
+		// knows or a pipeline with no colour target to read a blend off, and thrown out of the
+		// middle of this group into the reading's own catch it would leave the pieces built before
+		// it served beside the rest drawn by the game, and every group still to come, the hand,
+		// the glint and the shadow table among them, would never be built at all. Caught here, it
+		// costs this group and no other, which is where the rule draws the line.
 		Map<String, EntityProgram> built = new LinkedHashMap<>();
 		try {
 			for (Element element : group) {

@@ -9,6 +9,10 @@ That single fact decides most of what follows, and it decides the biggest thing 
 screen is the reference's screen, ported rather than approximated.** The lists, the cells, the
 gestures, the panels, the buttons and the texture they are drawn from all come from it. Where this
 document says the reference behaves some way, that is not a comparison; it is the specification.
+One thing is the engine's own rather than the reference's: the settings no page names, which the
+`*` token gathers and which are the whole of the one page a pack without a `screen=` line gets,
+come in the order the pack's shaders declare them and not the order the reference lists them in
+([the pack format](pack-format.md) has the rule).
 
 Open it from the video settings, where it sits under the mod's own name in the list of pages, with
 the key bound in the game's controls (`I` by default), or from wherever else you reached the mod's

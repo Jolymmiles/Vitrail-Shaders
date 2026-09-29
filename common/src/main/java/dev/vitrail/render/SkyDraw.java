@@ -505,10 +505,10 @@ public final class SkyDraw extends FamilyDraw {
 
 				// Built aside and handed over whole, for the rule the class comment gives. A program
 				// can still throw on its way into being, over a uniform whose size nothing here knows,
-				// and it used to throw out of the middle of this walk: the pieces built before it
-				// stayed served and the rest went to the game, which is the half of a sky that rule
-				// exists to refuse. Thrown on from here, it takes the whole sky back to the game on
-				// the catch below.
+				// and a throw out of the middle of this walk would leave the pieces built before it
+				// served and the rest with the game, which is the half of a sky that rule exists to
+				// refuse. Thrown on from here, it takes the whole sky back to the game on the catch
+				// below.
 				Map<String, SkyProgram> built = new LinkedHashMap<>();
 				try {
 					ELEMENTS.values().stream()

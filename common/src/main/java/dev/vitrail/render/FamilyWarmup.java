@@ -402,10 +402,10 @@ final class FamilyWarmup {
 	 * settings screen: every one from the first it did not finish, in the chain's order.
 	 * <p>
 	 * Nothing else reads a family, so each one named here is drawn by the game's own shaders until
-	 * the pack is loaded again, and a dying worker used to say that it died and nothing about what
-	 * that cost. What it costs reads on screen as the pack's own choice rather than as a fault:
-	 * mobs, sky, clouds and rain as the game draws them, beside terrain the pack lights. A family
-	 * switched off in the options is named with the others, the game drawing it either way.
+	 * the pack is loaded again, and the worker's death is said together with that cost and not
+	 * alone. The cost reads on screen as the pack's own choice rather than as a fault: mobs, sky,
+	 * clouds and rain as the game draws them, beside terrain the pack lights. A family switched
+	 * off in the options is named with the others, the game drawing it either way.
 	 * <p>
 	 * A release or a stop ends the walk on purpose, for a chain nothing will draw again, and is not
 	 * a failure to name.
