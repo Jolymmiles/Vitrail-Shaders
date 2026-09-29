@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.addon.StagePrograms;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
@@ -247,6 +248,13 @@ public final class PackChain {
 	/** Whether the half of the chain that belongs before the world's translucents has run. */
 	private boolean early;
 
+	/**
+	 * The number the add-ons' stages are called with this frame, or negative before the first of
+	 * them: taken from the session's clock by the first stage of the frame and kept by the others,
+	 * so that every stage of one frame carries one number. Lowered by {@link #closeFrame}.
+	 */
+	private long stageFrame = -1;
+
 	/** Whether this frame's uniform blocks have been written and its notes said. */
 	private boolean filled;
 
@@ -364,6 +372,14 @@ public final class PackChain {
 	 * place that ships both halves of every program it writes a compute for, which is most of them.
 	 */
 	private List<Standalone> standalone = List.of();
+
+	/**
+	 * The programs the add-ons' stage listeners want to be called after, out of the ones this chain
+	 * runs, settled once when the passes are built. Empty for a player with no such add-on, which is
+	 * then the whole cost of the stage in the walk: {@link StagePrograms#wants} answers false before
+	 * it looks at a name.
+	 */
+	private StagePrograms afterPrograms = StagePrograms.NONE;
 
 	/** Whether any program of this chain reads centerDepthSmooth, settled once the passes are built. */
 	private boolean centerDepthRead;
@@ -1271,6 +1287,7 @@ public final class PackChain {
 		this.begun = false;
 		this.prepared = false;
 		this.early = false;
+		this.stageFrame = -1;
 		// A per frame picture like the depths: a frame that takes none reads the pixel, never the
 		// frame before's world.
 		this.targets.copies().forget();
@@ -1582,6 +1599,13 @@ public final class PackChain {
 							this.targets.surface(attachment.target(), attachment.side()));
 				}
 			}
+
+			// The add-ons that asked for this program, after its computes and its pass and before
+			// the next program's. One lookup in a set settled per load, and none at all where no
+			// listener names a program.
+			if (this.afterPrograms.wants(pass.program())) {
+				afterProgram(device, pass.program(), at + 1, depth);
+			}
 		}
 
 		// A rank that falls exactly on the end of this half is painted here, at its tail, and never
@@ -1641,6 +1665,11 @@ public final class PackChain {
 			ran = true;
 			this.compute.dispatchAlone(waiting.program(), encoder, device, this.values, this.targets,
 					waiting.step(), depth, distant, ready.main().width, ready.main().height);
+			// The program has no pass, so its compute is all it runs, and the listeners follow that.
+			// The pass that draws next is the one this compute was placed before.
+			if (this.afterPrograms.wants(waiting.program())) {
+				afterProgram(device, waiting.program(), waiting.at(), depth);
+			}
 		}
 
 		if (ran) {
@@ -2383,7 +2412,8 @@ public final class PackChain {
 		// The pass that draws next says which half of each target the listener is handed.
 		if (AddonStages.wanted()) {
 			AddonStages.beforeDeferred(device, this.targets,
-					world < this.programs.size() ? this.programs.get(world) : null);
+					world < this.programs.size() ? this.programs.get(world) : null,
+					this.targets.depth().opaque(), stageFrame());
 		}
 
 		drawRange(device, ready, world, end, this.targets.depth().opaque(),
@@ -2580,6 +2610,8 @@ public final class PackChain {
 		this.programs = List.copyOf(built);
 		this.standalone = FrameCuts.standaloneOf(this.compute.standingAlone(),
 				this.targets.schedule(), built.stream().map(PackPass::program).toList());
+		this.afterPrograms = AddonStages.programs(runningPrograms(),
+				this.chain.packName() + (this.chain.place().isEmpty() ? "" : "/" + this.chain.place()));
 		// Asked of the plan and not of the list: FrameCuts.ordered() puts the final at the end when
 		// there is one, and where there is none the last of the list is an ordinary composite that
 		// writes its own targets. Drawing that one onto the game's target would be the chain's
@@ -2589,6 +2621,47 @@ public final class PackChain {
 		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth)
 				|| this.compute.readsCenterDepth();
 		this.blockBytes = Math.max(alignment, offset);
+	}
+
+	/**
+	 * The programs this chain runs, by the bare names its passes and its standalone computes carry:
+	 * every one a stage listener can be called after, and no other.
+	 */
+	private Set<String> runningPrograms() {
+		Set<String> running = new LinkedHashSet<>();
+		for (PackPass pass : this.programs) {
+			running.add(pass.program());
+		}
+
+		for (Standalone waiting : this.standalone) {
+			running.add(waiting.program());
+		}
+
+		return running;
+	}
+
+	/**
+	 * Calls the stage listeners that named this program, right after it has run and right before the
+	 * next thing of the frame, and forgets which chains the walk has filled: what a listener writes
+	 * can be any of the targets a chain was built from.
+	 *
+	 * @param nextAt the index in {@link #programs} of the pass that draws next, which is one past the
+	 *               program's own for a pass and its {@code at} for a compute that has none
+	 * @param depth  what the program read as {@code depthtex0}, null for the far plane
+	 */
+	private void afterProgram(GpuDevice device, String program, int nextAt, GpuTextureView depth) {
+		AddonStages.afterProgram(device, this.targets, this.afterPrograms.listeners(program), program,
+				nextAt < this.programs.size() ? this.programs.get(nextAt) : null, depth, stageFrame());
+		this.currentChains.clear();
+	}
+
+	/** The number of the frame the stages are called in, taken by the first of them. */
+	private long stageFrame() {
+		if (this.stageFrame < 0) {
+			this.stageFrame = AddonStages.tick();
+		}
+
+		return this.stageFrame;
 	}
 
 	/**

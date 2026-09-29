@@ -11,9 +11,19 @@ public interface FrameContext {
 
 	/**
 	 * A number that grows by one for every frame the pack draws, from 0 for the first the session
-	 * draws, and does not restart when the pack is reloaded.
+	 * draws, and does not restart when the pack is reloaded. Every stage of one frame is called
+	 * with the same number.
 	 */
 	long frame();
+
+	/**
+	 * The pack program a {@link FrameStage#AFTER_PROGRAM} call follows, by the name
+	 * {@link StageListener#programs()} gives it: {@code deferred3}, {@code composite1},
+	 * {@code prepare}. Null at every other stage.
+	 */
+	default @Nullable String program() {
+		return null;
+	}
 
 	/**
 	 * The frame's {@code VkCommandBuffer}, recording and outside any render pass. The add-on
@@ -38,12 +48,22 @@ public interface FrameContext {
 	 * for a name the pack does not use, or one that holds nothing yet.
 	 * <p>
 	 * A colour target the pack turns over between passes carries two images, and the one handed
-	 * over is the half the next pass of the pack's chain reads, which is the one the opaque
-	 * geometry wrote unless the pack states a {@code flip.deferred_pre}. Whatever the add-on writes
-	 * to it is what the deferred passes read first. {@code depthtex0} and {@code depthtex1} are the
-	 * opaque world's depth, which the deferred passes read under both names, and {@code depthtex2}
-	 * is the depth from before the player's hand where the engine took one and the same image as
-	 * the other two where it did not. A depth image is to be read and not written.
+	 * over is the half the next pass of the pack's chain reads, so whatever the add-on writes to it
+	 * is what that pass reads first. At {@link FrameStage#BEFORE_DEFERRED} that is the half the
+	 * opaque geometry wrote unless the pack states a {@code flip.deferred_pre}. At
+	 * {@link FrameStage#AFTER_PROGRAM} it is the half the program that draws after the named one
+	 * reads, which is the half the named one wrote unless the pack turns the target over in
+	 * between; a program the pack gives a compute file and no pass is not counted as one that
+	 * draws. Where no pass is left, it is the half the pack's frame ends on.
+	 * <p>
+	 * The depths are the images the pass before the stage read under those names (at
+	 * {@link FrameStage#BEFORE_DEFERRED}, the deferred passes about to run), and a depth image is
+	 * to be read and not written. {@code depthtex1} is the opaque world's depth and
+	 * {@code depthtex2} the depth from before the player's hand where the engine took one, the
+	 * same image as {@code depthtex1} where it did not. {@code depthtex0} is the opaque world's
+	 * depth for the deferred programs, the whole scene's, translucents included, for the composite
+	 * programs and the final, and nothing (null) for {@code begin} and {@code prepare}, which run
+	 * before the world is drawn and read the frame before's images under the other two names.
 	 * <p>
 	 * The image is in {@code VK_IMAGE_LAYOUT_GENERAL}, and is left there.
 	 */

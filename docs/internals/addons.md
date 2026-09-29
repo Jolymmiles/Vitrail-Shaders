@@ -225,19 +225,21 @@ on which pass asks.
 ## Frame stages
 
 A `StageListener` records into the frame's command buffer at fixed points of the pack's frame. There
-is one, `BEFORE_DEFERRED`, called from `PackChain.drawEarly` immediately before
+are two. `BEFORE_DEFERRED` is called from `PackChain.drawEarly` immediately before
 `drawRange(..., Cut.BEFORE_TRANSLUCENTS)`, which runs the deferred passes. By then `takeOpaque` has
 copied `depthtex1`, the centre depth and the motion vectors have been drawn, and none of the passes
-those calls opened is left open. Nothing runs where no listener is registered:
+those calls opened is left open. `AFTER_PROGRAM` is called from inside `drawRange`, after a program
+a listener named, and has a section of its own below. Nothing runs where no listener is registered:
 `AddonStages.wanted` is `AddonRegistry.any()`, which allocates nothing and is false for a player with
 no add-on, then the stage list.
 
-**Getting a buffer that records.** `AddonStages.beforeDeferred` takes the road `PackCompute` takes
-before it records outside a pass, in the same order: `GeometryHold.flush`, which ends the pass object
-the geometry keeps open across draws (ending the pass under it would leave that object to close a
-pass the encoder no longer has); `GpuRecording.endPass`; `GraphicsApi.suspendLevelPass`, which ends
-the level's pass on 26.3 and does nothing on 26.2; and then the encoder's backend and its command
-buffer through `CommandEncoderAccessor` and `VulkanCommandEncoderAccessor`. Between the last two it
+**Getting a buffer that records.** `AddonStages.record`, the one road both stages take, does what
+`PackCompute` does before it records outside a pass, in the same order: `GeometryHold.flush`, which
+ends the pass object the geometry keeps open across draws (ending the pass under it would leave that
+object to close a pass the encoder no longer has); `GpuRecording.endPass`; and then the encoder's
+backend and its command buffer through `CommandEncoderAccessor` and `VulkanCommandEncoderAccessor`.
+`BEFORE_DEFERRED` also calls `GraphicsApi.suspendLevelPass`, which ends the level's pass on 26.3 and
+does nothing on 26.2; `AFTER_PROGRAM` does not, and the reason is under it. Between the last two it
 pays `ColorTargets.flushPending`: a target still owed its clear is emptied by the load-op of the
 first pass that attaches it, which would erase what a listener wrote there and hand a listener the
 frame before's image to read.
@@ -255,13 +257,16 @@ dispatch records before its own. Layouts are the listener's: every image it touc
 label open, submit or reset the buffer; a pass it opened through the game's encoder anyway is ended
 after it, because the next pass cannot open over one. A listener that throws is cut off by
 `AddonRegistry.each` and the frame goes on with the barrier recorded and any pass ended, which is
-what the `finally` in `beforeDeferred` is for.
+what the `finally` in `record` is for.
 
 **`FrameContext`.** It is made for one call and closed when the call returns, and asking a closed one
 for the command buffer or a target throws, so that a stale buffer is an exception in the add-on and
 not a device loss. `frame()` counts frames drawn: `FrameClock` in `AddonStages`, one number per
 session that starts at 0 and does not wrap, because the pack's `frameCounter` does both and starts
-over with a load. `vulkan()` is read off the game's device once and kept while the device is the same
+over with a load. The clock is read once for a frame and not once for a stage: the first stage the
+chain calls in a frame takes the number (`PackChain.stageFrame`), the others of the frame are handed
+the same one, and `closeFrame` lowers it with every other per frame flag. `program()` is the
+program `AFTER_PROGRAM` follows, and null anywhere else. `vulkan()` is read off the game's device once and kept while the device is the same
 object: every field is a public member of `VulkanDevice` (`instance().vkInstance()`,
 `vkDevice().getPhysicalDevice()`, `vkDevice()`, `vma()`, `graphicsQueue().vkQueue()` and
 `queueFamilyIndex()`), so no accessor was needed and the mixin lists are unchanged.
@@ -271,15 +276,87 @@ object: every field is a public member of `VulkanDevice` (`instance().vkInstance
 `AddonImage` carries the `VkImageView`, the `VkImage`, the `VkFormat` (`VulkanConst.toVk`), the size
 of the base level and whether the surface was created storable. A colour target the pack turns over
 has two halves, and the one handed over is the half the next pass of the chain reads: the step
-of `programs.get(world)`, the first pass after the point, read through `Bound.read(index)`. That is
-the half the opaque geometry wrote, moved by whatever `flip.deferred_pre` the pack states, so what a
-listener writes is what the deferred passes read first. Where the chain has no pass left the main half
-stands. For a storable target the view is the base level alone, the one a storage descriptor takes;
-otherwise the whole chain. The depths are the images the deferred passes bind: `depthtex0` and
-`depthtex1` are the opaque copy `takeOpaque` just made, and `depthtex2` is the copy from before the
-hand where one was taken and the opaque one where not. Null while an image has not been written,
-and never the one-texel constant a pass falls back to: a coordinate past that texel is not an image
-an add-on can use.
+of that pass, read through `Bound.read(index)`. At `BEFORE_DEFERRED` that pass is
+`programs.get(world)`, and the half is the one the opaque geometry wrote, moved by whatever
+`flip.deferred_pre` the pack states, so what a listener writes is what the deferred passes read
+first. Where the chain has no pass left, or the pass is the final, which has no step of its own and
+reads the half the frame ends on, the half is `flippedAtEnd`'s: the main one unless the pack turns
+the target over at the end. For a storable target the view is the base level alone, the one a
+storage descriptor takes; otherwise the whole chain. The depths are the images the pass before the
+stage read under those names, settled by the rule a pass binds them by (`PackPass.depth`) and not
+by a second one: `depthtex0` is the depth the range hands its passes, `depthtex1` the opaque copy
+`takeOpaque` made, and `depthtex2` the copy from before the hand where one was taken and the opaque
+one where not, each falling back to the range's depth while nothing has filled it. At
+`BEFORE_DEFERRED` that range's depth is the opaque copy, so all three are what the deferred passes
+bind. Null while an image has not been written, and never the one-texel constant a pass falls back
+to: a coordinate past that texel is not an image an add-on can use.
+
+### After a named program
+
+**The case it was written for.** A ray tracer's add-on patches a pack, through a `SourcePatcher`, so
+that one of the pack's own programs (the bridge, say a `deferred3` the patch adds) writes a summary
+of the G-buffer into an image the add-on owns. The add-on then has to run its own GPU work right
+after THAT program and before the next one reads what it produces. `BEFORE_DEFERRED` is one moment
+of the frame and cannot say which. `FrameStage.AFTER_PROGRAM` is called after every program a
+listener names, `FrameContext.program()` says which one it was, and
+`StageListener.programs()` is how a listener names them.
+
+**A name is the pack's own, and one program has one name.** `StagePrograms.nameOf` is
+`ProgramNames.computeBase`, the mapping the chain already places computes by, so the two cannot
+disagree: the families `drawRange` runs are `begin`, `prepare`, `deferred`, `composite` and `final`,
+numbered as the pack numbers them, and `deferred0` is `deferred`. A compute file names the program
+it hangs off, `composite3_a` is `composite3`, because that is the moment its work belongs to.
+Geometry, `shadow`, `shadowcomp` and `setup` programs are not among them: none is a pass the walk
+runs, and a name that comes to none of the five families is logged with the add-on's id and never
+called.
+
+**The answer is settled once per load, and the frame only looks it up.** `PackChain.build`, where
+the passes are made, asks every stage listener for `programs()` through `AddonRegistry.call`
+(`StagePrograms.settle`), so a listener that throws or answers null is cut off there like anywhere
+else. What is kept is the names the chain runs: the programs of its passes and of its standalone
+computes. A name the pack does not run is logged at info with the pack's name and dropped, which is
+what an add-on sees when its patch did not apply. The result is a map from program to the listeners
+that named it, in registry order, and it is empty for a player with no listener naming a program,
+which is then the whole cost: the walk's one question, `StagePrograms.wants(pass.program())`, answers
+false on an empty map before it looks at the name. A listener cut off later leaves `wants` false when
+it was the last one for a program, so a cut-off add-on costs no barriers either. A load asks again,
+because a load builds again; a frame never does.
+
+**Where it is called.** From the two places `drawRange` runs a program. After a pass, once its
+`draw` or `drawFinal` has returned and the walk has taken it out of the chains it kept, and so after
+its computes as well: the computes hanging off a pass are dispatched before the pass, as Iris
+runs them, so "after the program's computes" and "after its pass" are one moment. And after
+`dispatchAlone` for a program that has a compute file and no pass, which is all it runs. Every cut
+walks through the same code, so the begins are reached from the head of the frame, the prepares
+from behind the shadow stage, the deferred passes from `drawEarly` and the composites and the final
+from `run`, and all of them under one rule. It is not called for the seed, which is not a program.
+
+**What is true when it is called.** Everything `BEFORE_DEFERRED` promises, by the same code: no pass
+open, the full barrier before and after, the owed clears paid. The last is needed here as much as
+there: a pass pays every pending clear when it opens, but a program that is only a compute has paid
+none, and a listener that writes a target must not have the next pass's load-op empty it. The walk
+forgets which chains it has filled after a listener returns, as it does after a compute, because a
+listener may have written a target a chain was built from.
+
+**Which halves it hands over.** The next pass that DRAWS: `programs.get(at + 1)` after a pass, and
+the pass the compute was placed before, `Standalone.at`, after a compute-only program. A compute-only
+program standing between the two is not counted, since it has no half of its own to hand over.
+`FrameContext`'s section says what the depths are and why.
+
+**The level's pass is not suspended, on either game.** On 26.3 the whole level is drawn through one
+pass, and a stage that records outside a pass has to be sure it is not open. Nothing a program can
+be called from has it open: `frameGraphSetup` builds the frame graph, which is before any pass of it
+runs; `afterOpaqueFeatures` suspends the pass before it calls `drawBeforeTranslucents`; and
+`afterLevel` runs after the level has closed it. Inside a range nothing opens it again, since only a
+call the game makes on it does and no such call is made between two programs, and every pass the
+walk opens goes through `createRenderPass`, which suspends it first (`CommandEncoderMixin`). The
+walk's own computes record outside a pass on that footing without suspending anything, and a
+stage is a compute's twin. `BEFORE_DEFERRED` keeps its call, which on 26.3 is a null check and on
+26.2 nothing. On 26.2 every phase closes its own pass and there is nothing to suspend.
+
+**Order within a frame.** The stages run in the order of the frame: the `AFTER_PROGRAM` of the begins
+and the prepares, then `BEFORE_DEFERRED`, then the `AFTER_PROGRAM` of the deferred programs, the
+composites and the final, all under one `frame()` number.
 
 ## Far terrain
 

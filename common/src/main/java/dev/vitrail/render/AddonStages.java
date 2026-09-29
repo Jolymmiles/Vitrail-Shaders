@@ -2,7 +2,9 @@ package dev.vitrail.render;
 
 import dev.vitrail.addon.AddonRegistry;
 import dev.vitrail.addon.FrameClock;
+import dev.vitrail.addon.StagePrograms;
 import dev.vitrail.api.FrameStage;
+import dev.vitrail.api.StageListener;
 import dev.vitrail.api.VulkanHandles;
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
@@ -12,11 +14,15 @@ import dev.vitrail.render.storage.GpuRecording;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.GpuDeviceBackend;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * Calls the add-ons' {@link dev.vitrail.api.StageListener}s at the points of the pack's frame the
@@ -40,11 +46,20 @@ import org.lwjgl.vulkan.VkCommandBuffer;
  * <p>
  * A listener that opened a pass through the game's encoder anyway has it ended here, because the
  * next pass of the frame cannot open over it.
+ * <p>
+ * Both stages take one road, {@link #record}, so that what is true before a listener runs and what
+ * is put right after it is one rule and not two that drift: {@code BEFORE_DEFERRED} once a frame
+ * from the head of the deferred half, {@code AFTER_PROGRAM} from the walk over the chain's passes
+ * after each program a listener named. The second is the one that can be called a dozen times a
+ * frame, which is why what it looks up is a set settled once for a load ({@code StagePrograms}).
  */
 final class AddonStages {
 
 	/** Per session and never reset: the number an add-on counts frames by does not restart on a reload. */
 	private static final FrameClock CLOCK = new FrameClock();
+
+	private static final String RECORD_DEFERRED = "record at " + FrameStage.BEFORE_DEFERRED;
+	private static final String RECORD_AFTER = "record at " + FrameStage.AFTER_PROGRAM;
 
 	/** The handles of the device they were read from, which is the same object for the session. */
 	private static @Nullable VulkanDevice handlesOf;
@@ -62,13 +77,67 @@ final class AddonStages {
 	}
 
 	/**
+	 * The programs the listeners want to be called after, out of the ones this pack runs. Settled
+	 * once for a load, where the pack's passes are built, and empty without asking anyone where no
+	 * listener is registered.
+	 *
+	 * @param running the bare names of the programs the chain draws or dispatches a compute for
+	 * @param pack    what the log calls the pack by
+	 */
+	static StagePrograms programs(Collection<String> running, String pack) {
+		return wanted() ? StagePrograms.settle(AddonRegistry.stages(), running, pack) : StagePrograms.NONE;
+	}
+
+	/** The number of the frame that starts, once for each frame the chain calls a stage in. */
+	static long tick() {
+		return CLOCK.tick();
+	}
+
+	/**
 	 * {@link FrameStage#BEFORE_DEFERRED}: the opaque world is drawn, the depth copies are taken and
 	 * no pass is open, and the first deferred pass is about to run.
 	 *
-	 * @param next the pass of the chain that draws next, whose reads decide which half of each
-	 *             colour target the listeners are handed; null where the chain has none left
+	 * @param next  the pass of the chain that draws next, whose reads decide which half of each
+	 *              colour target the listeners are handed; null where the chain has none left
+	 * @param depth what the deferred passes read as {@code depthtex0}
+	 * @param frame the frame's number, the same for every stage of it
 	 */
-	static void beforeDeferred(GpuDevice device, ColorTargets targets, @Nullable PackPass next) {
+	static void beforeDeferred(GpuDevice device, ColorTargets targets, @Nullable PackPass next,
+			@Nullable GpuTextureView depth, long frame) {
+		record(device, targets, FrameStage.BEFORE_DEFERRED, null, next, depth, frame,
+				AddonRegistry.stages(), true);
+	}
+
+	/**
+	 * {@link FrameStage#AFTER_PROGRAM}: the program has drawn, its computes have run and no pass is
+	 * open, and the pass that follows it has not begun.
+	 * <p>
+	 * The level's pass is not suspended here, unlike at the deferred stage: a program's range is
+	 * entered with it already suspended or not yet opened, on both games, and nothing inside the
+	 * range gives it a draw to reopen for. The pack's own computes in the same loop record outside
+	 * a pass on that footing, and every pass of the range opens through {@code createRenderPass},
+	 * which suspends it first on the game that has one.
+	 *
+	 * @param listeners the listeners that named the program
+	 * @param program   the program that has run, by the pack's bare name
+	 * @param next      the pass that draws after it, whose reads decide which half of each colour
+	 *                  target the listeners are handed; null where the chain has none left
+	 * @param depth     what the program read as {@code depthtex0}, null for the far plane
+	 * @param frame     the frame's number, the same for every stage of it
+	 */
+	static void afterProgram(GpuDevice device, ColorTargets targets,
+			List<AddonRegistry.Entry<StageListener>> listeners, String program, @Nullable PackPass next,
+			@Nullable GpuTextureView depth, long frame) {
+		record(device, targets, FrameStage.AFTER_PROGRAM, program, next, depth, frame, listeners, false);
+	}
+
+	/**
+	 * The one road every stage takes: what has to be true before a listener records, the call, and
+	 * what has to be true after, so that two stages cannot disagree about either.
+	 */
+	private static void record(GpuDevice device, ColorTargets targets, FrameStage stage,
+			@Nullable String program, @Nullable PackPass next, @Nullable GpuTextureView depth, long frame,
+			List<AddonRegistry.Entry<StageListener>> listeners, boolean levelPass) {
 		CommandEncoder encoder = device.createCommandEncoder();
 		VulkanCommandEncoder recorder = recorder(encoder);
 		VulkanDevice vulkan = vulkan(device);
@@ -76,28 +145,35 @@ final class AddonStages {
 			return;
 		}
 
-		// The same three steps the pack's computes take before they record, in the same order: the
-		// hold that keeps a pass open across draws first, and only then the pass under it.
-		GeometryHold.flush(() -> "the add-on stage BEFORE_DEFERRED");
+		// The same steps the pack's computes take before they record, in the same order: the hold
+		// that keeps a pass open across draws first, and only then the pass under it.
+		GeometryHold.flush(() -> "the add-on stage " + stage);
 		GpuRecording.endPass(encoder);
-		GraphicsApi.suspendLevelPass();
+		if (levelPass) {
+			GraphicsApi.suspendLevelPass();
+		}
+
 		// The clears still owed are paid first, whatever was drawn so far: a target no pass has
 		// attached yet this frame is emptied by the load-op of the first one that does, and that
 		// would erase what a listener wrote into it, or hand it the frame before's image to read.
 		targets.flushPending(encoder);
 
 		VkCommandBuffer commands = ((VulkanCommandEncoderAccessor) recorder).vitrail$commandBuffer();
-		StageFrame frame = new StageFrame(CLOCK.tick(), commands.address(), handles(vulkan), targets,
-				next == null ? null : next.step());
+		StageFrame handed = new StageFrame(frame, commands.address(), handles(vulkan), targets, program,
+				next == null ? null : next.step(), depth);
 		barrier(commands);
 		try {
-			AddonRegistry.each(AddonRegistry.stages(), "record at BEFORE_DEFERRED",
-					listener -> listener.onStage(FrameStage.BEFORE_DEFERRED, frame));
+			AddonRegistry.each(listeners, what(stage), listener -> listener.onStage(stage, handed));
 		} finally {
-			frame.close();
+			handed.close();
 			GpuRecording.endPass(encoder);
 			barrier(commands);
 		}
+	}
+
+	/** What a failure is logged as having been asked to do, made once so that a frame allocates none. */
+	private static String what(FrameStage stage) {
+		return stage == FrameStage.BEFORE_DEFERRED ? RECORD_DEFERRED : RECORD_AFTER;
 	}
 
 	private static void barrier(VkCommandBuffer commands) {
