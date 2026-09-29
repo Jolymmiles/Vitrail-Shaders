@@ -17,6 +17,7 @@ invariant gl_Position;
 
 #define TAPS 4
 float taps() { return float(TAPS); }
+#undef TAPS
 #define TAPS 8
 float fresnel(float x) { return ROUGH_FRESNEL * x + SHADOW_BIAS; }
 
