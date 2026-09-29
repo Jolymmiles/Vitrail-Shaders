@@ -37,6 +37,7 @@ the traps that were paid for once already.
 | Textures a pack supplies, and treating its paths as untrusted | [Pack textures](internals/pack-textures.md) |
 | The normal and specular maps a resource pack ships | [Material maps](internals/material-maps.md) |
 | What the game's graphics API offers and closes | [The game's graphics API](internals/game-graphics-api.md) |
+| Feeding the pack from another mod | [Add-ons](internals/addons.md) |
 
 ## The one idea the whole project rests on
 
