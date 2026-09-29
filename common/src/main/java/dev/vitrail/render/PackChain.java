@@ -2376,6 +2376,15 @@ public final class PackChain {
 			}
 		}
 
+		// The add-ons' stage, and only here: the opaque copies of both depths are taken above, the
+		// passes those calls opened are closed, and the first deferred pass has not begun, so a
+		// listener sees the gbuffers as this frame drew them and writes what the deferreds read.
+		// The pass that draws next says which half of each target the listener is handed.
+		if (AddonStages.wanted()) {
+			AddonStages.beforeDeferred(device, this.targets,
+					world < this.programs.size() ? this.programs.get(world) : null);
+		}
+
 		drawRange(device, ready, world, end, this.targets.depth().opaque(),
 				this.targets.depth().distantOpaque(), true, Cut.BEFORE_TRANSLUCENTS);
 

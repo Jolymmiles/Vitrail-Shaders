@@ -216,6 +216,63 @@ on which pass asks.
 
 ## Frame stages
 
+A `StageListener` records into the frame's command buffer at fixed points of the pack's frame. There
+is one, `BEFORE_DEFERRED`, called from `PackChain.drawEarly` immediately before
+`drawRange(..., Cut.BEFORE_TRANSLUCENTS)`, which runs the deferred passes. By then `takeOpaque` has
+copied `depthtex1`, the centre depth and the motion vectors have been drawn, and none of the passes
+those calls opened is left open. Nothing runs where no listener is registered:
+`AddonStages.wanted` is `AddonRegistry.any()`, which allocates nothing and is false for a player with
+no add-on, then the stage list.
+
+**Getting a buffer that records.** `AddonStages.beforeDeferred` takes the road `PackCompute` takes
+before it records outside a pass, in the same order: `GeometryHold.flush`, which ends the pass object
+the geometry keeps open across draws (ending the pass under it would leave that object to close a
+pass the encoder no longer has); `GpuRecording.endPass`; `GraphicsApi.suspendLevelPass`, which ends
+the level's pass on 26.3 and does nothing on 26.2; and then the encoder's backend and its command
+buffer through `CommandEncoderAccessor` and `VulkanCommandEncoderAccessor`. Between the last two it
+pays `ColorTargets.flushPending`: a target still owed its clear is emptied by the load-op of the
+first pass that attaches it, which would erase what a listener wrote there and hand a listener the
+frame before's image to read.
+
+**What the listener leaves behind.** Nothing has to be put back, and the reasons are read off the
+game's backend on both versions. Every render pass sets its own viewport and scissor when it is
+made, binds its pipeline in `setPipeline` and marks its descriptors dirty there, and pushes them
+before each draw; every dispatch of the pack binds its own compute pipeline and pushes its own
+descriptors. So a pipeline, a descriptor set or a piece of dynamic state a listener left bound is
+never read by anything of Vitrail's. What would be read is memory and layouts. Memory is Vitrail's:
+the game's own barrier (all commands, memory read and write) is recorded before the listeners and
+again after them, which is what the game records after each of its own passes and what the compute
+dispatch records before its own. Layouts are the listener's: every image it touches ends in
+`GENERAL`, as everything else in the frame is. A listener may not begin or end a pass, leave a debug
+label open, submit or reset the buffer; a pass it opened through the game's encoder anyway is ended
+after it, because the next pass cannot open over one. A listener that throws is cut off by
+`AddonRegistry.each` and the frame goes on with the barrier recorded and any pass ended, which is
+what the `finally` in `beforeDeferred` is for.
+
+**`FrameContext`.** It is made for one call and closed when the call returns, and asking a closed one
+for the command buffer or a target throws, so that a stale buffer is an exception in the add-on and
+not a device loss. `frame()` counts frames drawn: `FrameClock` in `AddonStages`, one number per
+session that starts at 0 and does not wrap, because the pack's `frameCounter` does both and starts
+over with a load. `vulkan()` is read off the game's device once and kept while the device is the same
+object: every field is a public member of `VulkanDevice` (`instance().vkInstance()`,
+`vkDevice().getPhysicalDevice()`, `vkDevice()`, `vma()`, `graphicsQueue().vkQueue()` and
+`queueFamilyIndex()`), so no accessor was needed and the mixin lists are unchanged.
+
+**Which target `target(name)` answers.** `TargetRef` accepts `colortex0` to `colortex15` and
+`depthtex0` to `depthtex2`, spelled exactly; the legacy names are the pack's business.
+`AddonImage` carries the `VkImageView`, the `VkImage`, the `VkFormat` (`VulkanConst.toVk`), the size
+of the base level and whether the surface was created storable. A colour target the pack turns over
+has two halves, and the one handed over is the half the next pass of the chain reads: the step
+of `programs.get(world)`, the first pass after the point, read through `Bound.read(index)`. That is
+the half the opaque geometry wrote, moved by whatever `flip.deferred_pre` the pack states, so what a
+listener writes is what the deferred passes read first. Where the chain has no pass left the main half
+stands. For a storable target the view is the base level alone, the one a storage descriptor takes;
+otherwise the whole chain. The depths are the images the deferred passes bind: `depthtex0` and
+`depthtex1` are the opaque copy `takeOpaque` just made, and `depthtex2` is the copy from before the
+hand where one was taken and the opaque one where not. Null while an image has not been written,
+and never the one-texel constant a pass falls back to: a coordinate past that texel is not an image
+an add-on can use.
+
 ## Far terrain
 
 ## Terrain meshes
