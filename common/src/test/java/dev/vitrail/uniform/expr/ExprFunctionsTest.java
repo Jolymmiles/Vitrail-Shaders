@@ -518,12 +518,14 @@ class ExprFunctionsTest {
 
 	@Test
 	void theVectorEqualityIsNamedEqualAndItsInverseNotEquals() {
-		// "equal" used to be added once as equality and once as its inverse. The inverse now goes
-		// by the name of the != operator, notEquals, beside the other types, and no "notEqual" is
-		// registered for it.
+		// The inverse of "equal" goes by the name of the != operator, notEquals, beside the other
+		// types, and no "notEqual" is registered for it. The name notEquals is taken by the scalar
+		// forms as well, so its being listed says nothing about the vector one: that is asked by
+		// calling it on two vectors, and an inverse registered under another name resolves nothing.
 		List<String> names = ExprFunctions.functions.names();
 		assertTrue(names.contains("equal"));
-		assertTrue(names.contains("notEquals"));
 		assertFalse(names.contains("notEqual"));
+		assertTrue(this.rig.boolOf("notEquals(vec3(1.0, 2.0, 3.0), vec3(1.0, 2.0, 4.0))"));
+		assertFalse(this.rig.boolOf("notEquals(vec3(1.0, 2.0, 3.0), vec3(1.0, 2.0, 3.0))"));
 	}
 }
