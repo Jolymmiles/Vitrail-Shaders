@@ -20,7 +20,11 @@ class ModuleTallyTest {
 	private final ModuleTally tally = new ModuleTally();
 
 	private void built(String family, String vertex, String fragment, Object format) {
-		this.tally.built(family, ModuleTally.hash(vertex), ModuleTally.hash(fragment), format);
+		built(family, vertex, fragment, 0L, format);
+	}
+
+	private void built(String family, String vertex, String fragment, long geometry, Object format) {
+		this.tally.built(family, ModuleTally.hash(vertex), ModuleTally.hash(fragment), geometry, format);
 	}
 
 	@Test
@@ -50,6 +54,19 @@ class ModuleTallyTest {
 		assertEquals(2, this.tally.triples("particles"));
 		assertTrue(this.tally.lines().getFirst().contains("programs built 2, distinct (vertex text, "
 				+ "fragment text, vertex format) triples 2"));
+	}
+
+	@Test
+	void aGeometryStageTheDeviceBindsIsANewTripleWhereTheOtherTwoTextsAreNot() {
+		built("chunk", "v", "f", 0L, LAYOUT);
+		built("chunk", "v", "f", ModuleTally.hash("void main() { gl_Position = vec4(0.0); }"), LAYOUT);
+		built("chunk", "v", "f", ModuleTally.hash("void main() { gl_Position = vec4(1.0); }"), LAYOUT);
+		built("chunk", "v", "f", ModuleTally.hash("void main() { gl_Position = vec4(1.0); }"), LAYOUT);
+
+		assertEquals(3, this.tally.triples("chunk"));
+		assertEquals(List.of("Module census, chunk: programs built 4, distinct (vertex text, fragment "
+				+ "text, vertex format) triples 3, so repeats 1; modules made 11, distinct vertex texts "
+				+ "1, distinct fragment texts 1"), this.tally.lines());
 	}
 
 	@Test
@@ -118,7 +135,7 @@ class ModuleTallyTest {
 	void theHookCountsNothingWhileTheSwitchIsOff() {
 		assumeFalse(PassTimings.enabled(), "the switch is on for this run, which is what is being tested");
 
-		ModuleCensus.built("chunk", "v", "f", LAYOUT);
+		ModuleCensus.built("chunk", "v", "f", "g", LAYOUT);
 
 		assertEquals(0, ModuleCensus.tally().triples("chunk"));
 	}

@@ -13,10 +13,13 @@ import java.util.Set;
  * The sums behind {@link ModuleCensus}, held apart for the reason {@link FrameTally} is.
  * <p>
  * A program is identified by what it hands the compiler: the text of its vertex stage, the text of
- * its fragment stage, and the layout of the mesh it reads. Two programs with all three equal are one
- * compile made twice, and two with only a stage equal are a module made twice. Texts are held as a
- * 64 bit hash and never as the text, so a tally over a pack of a few hundred programs costs a few
- * hundred longs instead of the megabytes the stages come to.
+ * its fragment stage, the text of a geometry stage the device binds as a module of its own, and the
+ * layout of the mesh it reads. Two programs with all of those equal are one compile made twice, and
+ * two with only a stage equal are a module made twice. The geometry stage is one more input only
+ * where the device binds it: a stage folded into the fragment text is in that text already, and a
+ * program without one hands the compiler nothing there. Texts are held as a 64 bit hash and never
+ * as the text, so a tally over a pack of a few hundred programs costs a few hundred longs instead
+ * of the megabytes the stages come to.
  * <p>
  * <strong>Synchronized, unlike the frame tally</strong>: the programs are built on the pack-load
  * workers, more than one at a time, and the report is read from the render thread and from the
@@ -24,14 +27,17 @@ import java.util.Set;
  */
 final class ModuleTally {
 
-	/** The three things a program hands the compiler that decide whether it is a new one. */
-	private record Triple(long vertex, long fragment, Object format) {
+	/** The things a program hands the compiler that decide whether it is a new one. */
+	private record Triple(long vertex, long fragment, long geometry, Object format) {
 	}
 
 	/** One family's programs, in the order they arrived. */
 	private static final class Family {
 
 		int programs;
+
+		/** How many of those programs had a geometry stage of their own to compile. */
+		int geometries;
 
 		/** How many programs the last line printed for this family knew of. */
 		int reported;
@@ -63,12 +69,19 @@ final class ModuleTally {
 	 * @param family   what the log calls the family, {@code entity} or {@code chunk}
 	 * @param vertex   {@link #hash} of the vertex stage the compiler is handed
 	 * @param fragment {@link #hash} of the fragment stage
+	 * @param geometry {@link #hash} of the geometry stage the device binds as a module, or 0 for a
+	 *                 program with none
 	 * @param format   the mesh layout, compared by {@code equals}, or null for a family with none
 	 */
-	synchronized void built(String family, long vertex, long fragment, Object format) {
+	synchronized void built(String family, long vertex, long fragment, long geometry,
+			Object format) {
 		Family tally = this.families.computeIfAbsent(family, name -> new Family());
 		tally.programs++;
-		tally.triples.add(new Triple(vertex, fragment, format));
+		if (geometry != 0L) {
+			tally.geometries++;
+		}
+
+		tally.triples.add(new Triple(vertex, fragment, geometry, format));
 		tally.vertices.add(vertex);
 		tally.fragments.add(fragment);
 	}
@@ -92,7 +105,8 @@ final class ModuleTally {
 							+ "(vertex text, fragment text, vertex format) triples %d, so repeats %d; "
 							+ "modules made %d, distinct vertex texts %d, distinct fragment texts %d",
 					entry.getKey(), family.programs, family.triples.size(),
-					family.programs - family.triples.size(), 2 * family.programs,
+					family.programs - family.triples.size(),
+					2 * family.programs + family.geometries,
 					family.vertices.size(), family.fragments.size()));
 		}
 

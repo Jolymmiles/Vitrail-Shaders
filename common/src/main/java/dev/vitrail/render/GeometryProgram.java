@@ -836,9 +836,14 @@ final class GeometryProgram {
 			this.broken = true;
 		}
 
-		// The two texts the source below answers with, and the mesh layout the pipeline reads: what
-		// decides whether a program is a compile another program already made.
-		ModuleCensus.built(pass.family(), vertex, fragment, format);
+		// The two texts the source below answers with, the geometry stage a device that runs one
+		// is handed as a module of its own, and the mesh layout the pipeline reads: what decides
+		// whether a program is a compile another program already made. The stage is asked for
+		// here and not read off the program: where it is folded into the fragment text the
+		// fragment text already carries it, and only a stage the compiler is handed by itself is
+		// one more input.
+		ModuleCensus.built(pass.family(), vertex, fragment, GeometryStage.shipped(this.pipeline),
+				format);
 
 		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
