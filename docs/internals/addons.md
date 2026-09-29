@@ -17,6 +17,14 @@ add-on's failure, because that is what an add-on built against another version o
 throws. Every later call into an add-on goes through `AddonRegistry.each` or `call`: a piece that
 throws is cut off for the session, logged once with the add-on's id, and the others still run.
 
+**Most calls are on the render thread, and the first reading of the pack is the exception.** The
+pack is first read on a loader worker while the game starts, so what decides what it is told is
+asked there: `DefineSource.write` and `revision`, `DistantTerrainSource.attach` and the first
+`present`, and the first ask of `ImageSource.names` and `TerrainMeshListener.attributes` (the last
+two are on the render thread instead when no pack is read before them). Every later call of those,
+and every call of the other pieces, is on the render thread; the patchers are the one piece that
+is asked from any thread.
+
 ## Defines
 
 A `DefineSource` writes into a map of its own, and `AddonDefines.gather` folds the maps into one:

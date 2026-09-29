@@ -25,8 +25,10 @@ import org.jspecify.annotations.Nullable;
  * {@code dhFarPlane} and {@code dhProjection} are made out of {@link #window}. The depth the far
  * terrain leaves is what the pack reads as {@code dhDepthTex0} and {@code dhDepthTex1}.
  * <p>
- * All of it is called on the render thread. The exceptions are the two objects {@code attach}
- * hands over, which any thread may use.
+ * All of it is called on the render thread once the game draws frames. The pack is first read
+ * while the game starts, on a loader thread, and the questions that decide what it is told at that
+ * read come from there: {@link #attach} and the first {@link #present}. The two objects
+ * {@code attach} hands over may be used from any thread.
  */
 public interface DistantTerrainSource {
 
@@ -34,7 +36,8 @@ public interface DistantTerrainSource {
 	 * Whether this source has far terrain in this session at all. While true, the pack sees
 	 * {@code DISTANT_HORIZONS} defined and its {@code dh_*} programs are compiled. Read every frame,
 	 * and a change from one answer to the other reads the pack again, so it should follow what the
-	 * player can switch on and off and nothing quicker.
+	 * player can switch on and off and nothing quicker. The first read comes with the pack's first
+	 * reading, on the loader thread that does it, and every later one on the render thread.
 	 */
 	boolean present();
 
@@ -52,9 +55,10 @@ public interface DistantTerrainSource {
 	int renderDistanceBlocks();
 
 	/**
-	 * Hands the source the place it puts its geometry. Called once, on the render thread, before
-	 * the first {@link #present}; the object is the source's own, is never replaced and may be
-	 * kept and used from any thread.
+	 * Hands the source the place it puts its geometry. Called once, before the first
+	 * {@link #present}, on the thread that first reads the pack, which is a loader thread while
+	 * the game starts and not the render thread; the object is the source's own, is never
+	 * replaced and may be kept and used from any thread.
 	 * <p>
 	 * When a source is cut off after throwing, everything it uploaded is released.
 	 */

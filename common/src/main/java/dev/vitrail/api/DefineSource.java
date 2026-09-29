@@ -20,7 +20,9 @@ public interface DefineSource {
 	 * Adds this add-on's defines, name to value; an empty value is a bare {@code #define NAME}.
 	 * Names follow the preprocessor's rule, an ASCII letter or an underscore and then ASCII
 	 * letters, digits and underscores; a value holds no line break, since it is written on one
-	 * line. Called on the render thread whenever Vitrail gathers the pack's defines.
+	 * line. Called whenever Vitrail gathers the pack's defines, on the thread that reads the pack:
+	 * a loader thread for the first reading, while the game starts, and the render thread after
+	 * it. {@link #revision} is asked on the same terms.
 	 */
 	void write(Map<String, String> defines);
 

@@ -46,7 +46,11 @@ import org.jspecify.annotations.Nullable;
  */
 public interface ImageSource {
 
-	/** The names this add-on serves, fixed for as long as the add-on is loaded. */
+	/**
+	 * The names this add-on serves, fixed for as long as the add-on is loaded. Asked once, by
+	 * whichever thread first needs them: the loader thread that reads the pack while the game
+	 * starts, or the render thread.
+	 */
 	Set<String> names();
 
 	/**

@@ -10,8 +10,10 @@ public interface TerrainMeshListener {
 
 	/**
 	 * The attributes this add-on needs in every terrain vertex whether the pack reads them or not.
-	 * Read once, before Sodium's renderer is created; a change of the set the vertex carries
-	 * rebuilds the world, as a pack that reads a new attribute does.
+	 * Read once, before Sodium's renderer is created, by whichever thread first needs it: the
+	 * loader thread that reads the pack while the game starts, or the render thread when no pack is
+	 * read first. A change of the set the vertex carries rebuilds the world, as a pack that reads a
+	 * new attribute does.
 	 */
 	Set<TerrainAttribute> attributes();
 
