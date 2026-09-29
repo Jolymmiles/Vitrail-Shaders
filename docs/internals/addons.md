@@ -502,4 +502,7 @@ the model's own coordinates and the fluid renderer does the same, so it is neith
 corner nor the world's. Light and data at offset 16 are one byte each: block light, sky light,
 material bits, and `(x & 7) << 5 | (z & 7) << 2 | (y & 3)` of the section, its place in a region of
 8 by 4 by 8, which is a function of the section's coordinates and needed by nobody who has them. The
-API's javadoc states all of it.
+texture coordinate at offset 12 is two 16-bit halves, u in the low one: the low 15 bits are
+`round(uv * 32768)` moved one step towards the middle of the quad's four corners (up by one below the
+middle, down by one at or above it, which is what bit 15 marks), as `CompactChunkVertex.encodeTexture`
+writes it, and the mean of the four is `MID_TEX_COORD`. The API's javadoc states all of it.

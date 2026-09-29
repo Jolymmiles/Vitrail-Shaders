@@ -17,6 +17,13 @@ import java.util.Map;
  * The corner is 16 times the section's own coordinates, in {@link TerrainSection}: not the corner of
  * the region and not the world's origin.
  * <p>
+ * The texture coordinate is two 16-bit halves, u in the low one. A half holds
+ * {@code round(uv * 32768)} in its low 15 bits, moved one step towards the middle of the quad's
+ * four corners: up by one for a corner below the middle, down by one for a corner at or above it,
+ * which is the case bit 15 is set for. So
+ * {@code uv = ((half & 0x7FFF) - (half >>> 15 == 0 ? 1 : -1)) / 32768}, and the mean of a quad's
+ * four corners is what {@link TerrainAttribute#MID_TEX_COORD} holds.
+ * <p>
  * Light and data are one byte each, in order: block light, sky light, Sodium's material bits, and
  * the section's index in its region, {@code (x & 7) << 5 | (z & 7) << 2 | (y & 3)}. That index is
  * a function of the section's coordinates and is not needed to place the vertex.
