@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.zip.DeflaterOutputStream;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,7 +27,9 @@ import org.junit.jupiter.api.io.TempDir;
  * The blob planted is a real one written for another vertex format than the one asked for: the
  * format is in the key, so no ordinary road reaches it, and it is refused inside the codec after
  * the digest has passed, which is the silence this holds shut. The refusal is latched once a run,
- * so this is the one test in the suite that raises it.
+ * and {@link TranslationCacheTest} raises it as well, so the statics are put back around each test
+ * here as they are there: a latch left up would leave the first refusal of the other unsaid, and a
+ * cache left installed would point at a folder JUnit has already deleted.
  */
 class TranslationCacheDecodeRefusalTest {
 
@@ -33,6 +37,16 @@ class TranslationCacheDecodeRefusalTest {
 
 	@TempDir
 	Path temp;
+
+	@BeforeEach
+	void startWithTheStaticsAsTheClassLoadLeftThem() throws ReflectiveOperationException {
+		TranslationCacheTest.putTheStaticsBack();
+	}
+
+	@AfterEach
+	void leaveTheStaticsAsTheClassLoadLeftThem() throws ReflectiveOperationException {
+		TranslationCacheTest.putTheStaticsBack();
+	}
 
 	@Test
 	void saysSoWhenABlobPassesItsDigestAndStillDoesNotRead() throws IOException {

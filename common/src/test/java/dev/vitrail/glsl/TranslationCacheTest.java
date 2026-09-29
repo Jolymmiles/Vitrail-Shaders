@@ -80,7 +80,7 @@ class TranslationCacheTest {
 		putTheStaticsBack();
 	}
 
-	private static void putTheStaticsBack() throws ReflectiveOperationException {
+	static void putTheStaticsBack() throws ReflectiveOperationException {
 		set("directory", null);
 		set("problem", "");
 		// Nothing is asked of the clock at class load, and the smallest value is the one no clock is behind.

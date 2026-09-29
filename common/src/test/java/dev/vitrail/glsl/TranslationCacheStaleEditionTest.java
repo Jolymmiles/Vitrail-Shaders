@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,6 +23,9 @@ import org.junit.jupiter.api.io.TempDir;
  * A folder whose write permission is taken away is how a file nothing may delete is planted, the
  * POSIX shape of what a scanner or an indexer holding a file does on Windows. The permission is put
  * back in a {@code finally}, so the folder JUnit made can still be cleared after the test.
+ * <p>
+ * An install leaves the cache standing at the folder JUnit is about to delete, so the statics are
+ * put back around each test as {@link TranslationCacheTest} does.
  */
 class TranslationCacheStaleEditionTest {
 
@@ -28,6 +33,16 @@ class TranslationCacheStaleEditionTest {
 
 	@TempDir
 	Path temp;
+
+	@BeforeEach
+	void startWithTheStaticsAsTheClassLoadLeftThem() throws ReflectiveOperationException {
+		TranslationCacheTest.putTheStaticsBack();
+	}
+
+	@AfterEach
+	void leaveTheStaticsAsTheClassLoadLeftThem() throws ReflectiveOperationException {
+		TranslationCacheTest.putTheStaticsBack();
+	}
 
 	@Test
 	void installsPastAnOtherEditionThatWillNotGo() throws IOException {
