@@ -252,6 +252,19 @@ public final class PackChain {
 	private boolean filled;
 
 	/**
+	 * What this frame is drawn against, once a call of {@link #ready} has been answered with it, and
+	 * null before that, after {@link #closeFrame} and after {@link #release}.
+	 * <p>
+	 * A call that finds the chain drawable does the same work each time: it asks the targets and the
+	 * ring whether they stand, walks every target's storage, probes the device's cache for every
+	 * pipeline of the chain and prepares the seed. None of it can have moved between the two or three
+	 * calls of one frame, and every call allocates the record. It is not kept across a frame, where
+	 * the size of the window is asked again, and not while the chain is still compiling, where each
+	 * call is what compiles the next pipeline.
+	 */
+	private Ready frame;
+
+	/**
 	 * Whether the game's own frame has already been painted in this one. The seed's rank falls on
 	 * the boundary between the two halves whenever a place ships no deferred, so both halves reach
 	 * it, and it is the earlier one that has it: this is what keeps the later one from painting the
@@ -1243,6 +1256,7 @@ public final class PackChain {
 		// frame before's world.
 		this.targets.copies().forget();
 		this.filled = false;
+		this.frame = null;
 		this.seeded = false;
 		this.sceneDepth = false;
 
@@ -1373,6 +1387,15 @@ public final class PackChain {
 			return null;
 		}
 
+		// The frame's answer, for as long as it is still the target the game draws into: a target
+		// the game made again in the middle of a frame is another set of views and is asked for again.
+		Ready held = this.frame;
+		if (held != null && held.stands(main)) {
+			FrameCensus.readyDone();
+
+			return held;
+		}
+
 		if (this.programs == null) {
 			build(device);
 		}
@@ -1417,8 +1440,10 @@ public final class PackChain {
 		openTargets(device);
 		FrameCensus.readyDone();
 
-		return new Ready(main, mainView, GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null,
-				seeding);
+		this.frame = new Ready(main, mainView,
+				GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null, seeding);
+
+		return this.frame;
 	}
 
 	/**
@@ -1599,6 +1624,13 @@ public final class PackChain {
 	/** What one frame of the chain is drawn against, settled once and read by both halves. */
 	private record Ready(RenderTarget main, GpuTextureView mainView, GpuTextureView depthView,
 			boolean seeding) {
+
+		/** Whether this is still the game's target and the two images of it that were read. */
+		@SuppressWarnings("ReferenceEquality")
+		boolean stands(RenderTarget target) {
+			return this.main == target && this.mainView == target.getColorTextureView()
+					&& this.depthView == (GraphicsApi.hasDepth(target) ? target.getDepthTextureView() : null);
+		}
 	}
 
 	/**
@@ -3123,6 +3155,8 @@ public final class PackChain {
 			this.warmup.familyPrograms(family).forEach(DumpedProgram::discardAhead);
 		}
 
+		// Ahead of the targets going back, so that no answer names an image that is no longer there.
+		this.frame = null;
 		CustomImages.clear();
 		// Beside it, and said here as well as at the head of a load: leaving a world releases the
 		// chain without replacing it, so this is the moment the pack's declaration stops holding,
