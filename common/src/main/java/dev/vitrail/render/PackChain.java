@@ -369,12 +369,17 @@ public final class PackChain {
 	/** Whether any program of this chain reads centerDepthSmooth, settled once the passes are built. */
 	private boolean centerDepthRead;
 
-	private MappableRingBuffer block;
+	/**
+	 * Where the full screen passes' uniform blocks stand, laid out one after another by
+	 * {@link PackPass#uniformOffset}: a range of {@link #blocks}, or a ring of its own where that has
+	 * no room. Made in {@link #prepare} and given back in {@link #release}.
+	 */
+	private BlockRing.Slot block;
 
 	/**
-	 * Where every geometry program of this chain keeps its uniform block: the one ring that turns
-	 * beside {@link #block} in {@link #closeFrame}, so that the programs together cost one fence a
-	 * frame and not one each. Made with the chain and never null, because the programs are handed it
+	 * Where every uniform block of this chain stands, the passes' above and each geometry program's:
+	 * one ring turned once a frame in {@link #closeFrame}, so that all of them together cost one fence
+	 * a frame and not one each. Made with the chain and never null, because the programs are handed it
 	 * by the draws while they are built, on the worker, long before any device call is made; the ring
 	 * itself is made at the first block, and taken down in {@link #release}.
 	 */
@@ -1285,15 +1290,14 @@ public final class PackChain {
 		// The far terrain's pair is on the same per frame rule, and PackDepth says why.
 		this.targets.depth().forgetDistant();
 
+		// The ring every block stands in turns here, once, and by the chain: a block that has a ring
+		// of its own turns it beside, and a program's own rotate below drops what the program set on
+		// a pass. Turned from the programs' rotates it would turn once for every one of them, and not
+		// at all on a frame that reaches none.
 		if (this.block != null) {
-			FrameCensus.rotated();
 			this.block.rotate();
 		}
 
-		// The ring the programs share turns here as well, once, and by the chain: a program's own
-		// rotate below turns a ring of its own and drops what the program set on a pass. Turned from
-		// the programs' rotates it would turn once for every one of them, and not at all on a frame
-		// that reaches none.
 		this.blocks.rotate();
 		this.terrain.rotate();
 		// Only families the worker has finished translating. drawable() is true once the
@@ -1503,7 +1507,8 @@ public final class PackChain {
 		// the chain is one whole serialisation of the GPU per program and there is no way around
 		// it short of knowing which passes do not overlap.
 		CommandEncoder encoder = device.createCommandEncoder();
-		GpuBuffer buffer = this.block.currentBuffer();
+		GpuBuffer buffer = this.block.buffer();
+		int blockAt = this.block.offset();
 		// The chains this walk has filled and nothing has written over since, by target and side.
 		// Emptied at the head because the range starts after geometry the plan does not see, and
 		// again wherever a write this loop cannot place lands: the seed paints targets of its own
@@ -1558,7 +1563,8 @@ public final class PackChain {
 				}
 			}
 
-			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
+			GpuBufferSlice uniforms = buffer.slice(blockAt + pass.uniformOffset(),
+					pass.uniformSize());
 			if (pass == this.last) {
 				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, distant, this.quad,
 						uniforms);
@@ -2851,10 +2857,9 @@ public final class PackChain {
 		quad(device);
 
 		if (this.block == null) {
-			// Three buffers and a fence per turn, so a frame never writes over what the previous
-			// one is still being read for.
-			this.block = new MappableRingBuffer(() -> BLOCK_LABEL,
-					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.blockBytes);
+			// The ring has three buffers and a fence per turn, so a frame never writes over what the
+			// previous one is still being read for.
+			this.block = this.blocks.open(device, () -> BLOCK_LABEL, this.blockBytes);
 		}
 
 		// Compared against the window every frame rather than driven by an event: the resize event
@@ -2931,7 +2936,7 @@ public final class PackChain {
 		this.values.projection(null);
 
 		FrameCensus.chainBlockWritten();
-		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
+		try (GpuBufferSlice.MappedView view = this.block.map()) {
 			ByteBuffer data = view.data();
 			for (PackPass pass : this.programs) {
 				data.position(pass.uniformOffset());
@@ -3197,13 +3202,14 @@ public final class PackChain {
 			this.families.forEach(FamilyDraw::release);
 		}
 
-		// After every program has given its range back: one handed back to a ring that is gone could
-		// not be told from a range of the next ring.
-		this.blocks.close();
+		// The passes' block and then the ring, after every program has given its range back: one
+		// handed back to a ring that is gone could not be told from a range of the next ring.
 		if (this.block != null) {
 			this.block.close();
 			this.block = null;
 		}
+
+		this.blocks.close();
 
 		if (this.quad != null) {
 			this.quad.close();

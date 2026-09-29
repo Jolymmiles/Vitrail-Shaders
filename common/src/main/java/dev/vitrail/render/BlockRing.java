@@ -11,27 +11,27 @@ import net.minecraft.client.renderer.MappableRingBuffer;
 import java.util.function.Supplier;
 
 /**
- * Where the geometry programs of one chain keep their uniform blocks: one ring buffer they share,
- * each program standing in a range of it.
+ * Where the uniform blocks of one chain are kept: one ring buffer, the block of each geometry
+ * program and the one that holds the full screen passes' each standing in a range of it.
  * <p>
  * A ring buffer is three buffers and a fence. It turns once a frame, and a turn closes the fence of
  * the buffer it leaves and makes another, and the first look at a buffer after the ring has come
- * round to it waits on the fence the turn before made. A program of its own ring pays that once a
- * frame, and a frame draws sixteen to nineteen programs. One ring for all of them pays it once,
- * which is the rule the chain's own block ring stands on: one ring and not N.
+ * round to it waits on the fence the turn before made. A ring for each program pays that once a
+ * frame for every program, and a frame draws sixteen to nineteen of them. One ring for all of them
+ * pays it once, which is the rule {@code PackChain} states for the passes' block: one ring and not N.
  * <p>
- * <strong>The ring is turned where the chain's own is</strong>, at the close of the frame, and by
- * the chain and not by the programs: {@link #rotate}. A program's own {@link Slot#rotate} is for a
- * ring of its own and does nothing to a range, which is what lets the same call stand in the
- * programs' turn for either kind of block.
+ * <strong>The ring is turned once, at the close of the frame, and by the chain and not by the
+ * programs</strong>: {@link #rotate}. A block's own {@link Slot#rotate} is for a ring of its own and
+ * does nothing to a range, which is what lets the same call stand in the programs' turn for either
+ * kind of block.
  * <p>
- * <strong>Ranges are taken when a program first has a block to write, not when it is made.</strong>
- * A program is built on the pack-load worker, after the chain, and most of the ones a pack ships are
- * never drawn in a given world; a range spent at construction would be spent on all of them. The ring
- * is made at the first range asked for, on the render thread that holds the device, and is a fixed
- * {@value #CAPACITY_BYTES} bytes a buffer: see {@link RingLayout} for why it does not grow. A block
- * that finds no room, or is wider than the buffer, gets a ring of its own, which draws exactly as a
- * range does.
+ * <strong>Ranges are taken when a block is first to be written, not when its program is
+ * made.</strong> A program is built on the pack-load worker, after the chain, and most of the ones
+ * a pack ships are never drawn in a given world; a range spent at construction would be spent on
+ * all of them. The ring is made at the first range asked for, on the render thread that holds the
+ * device, and is a fixed {@value #CAPACITY_BYTES} bytes a buffer: see {@link RingLayout} for why it
+ * does not grow. A block that finds no room, or is wider than the buffer, gets a ring of its own,
+ * which draws exactly as a range does.
  * <p>
  * <strong>Both kinds of block answer the same questions</strong>, which are the buffer to bind a
  * slice of, where in it, the bytes to write, and how many times it has turned, so that the program
@@ -126,14 +126,13 @@ final class BlockRing {
 		this.ring = new MappableRingBuffer(() -> LABEL,
 				GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.layout.capacity());
 		this.refused = 0;
-		Vitrail.logger().info("The geometry programs of this load share one ring of {} bytes a buffer "
-				+ "for their uniform blocks, each block at a multiple of {} bytes", this.layout.capacity(),
-				alignment);
+		Vitrail.logger().info("The uniform blocks of this load share one ring of {} bytes a buffer, "
+				+ "each block at a multiple of {} bytes", this.layout.capacity(), alignment);
 	}
 
 	/**
-	 * Turns the ring, once a frame, where the chain turns its own. Called whether or not a program has
-	 * drawn: the ring is what the terrain writes into on the frames the chain draws nothing.
+	 * Turns the ring, once a frame, at the close of it. Called whether or not a program has drawn:
+	 * the ring is what the terrain writes into on the frames the chain draws nothing.
 	 */
 	void rotate() {
 		if (this.ring == null) {
@@ -155,8 +154,8 @@ final class BlockRing {
 			return;
 		}
 
-		Vitrail.logger().info("The geometry programs of that load held at most {} of the {} bytes of "
-				+ "their shared ring, and {} of them kept a ring of their own", this.layout.peak(),
+		Vitrail.logger().info("The uniform blocks of that load held at most {} of the {} bytes of "
+				+ "their shared ring, and {} kept a ring of their own", this.layout.peak(),
 				this.layout.capacity(), this.refused);
 		this.ring.close();
 		this.ring = null;

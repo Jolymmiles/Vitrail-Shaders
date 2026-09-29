@@ -240,8 +240,8 @@ public final class FrameCensus {
 	}
 
 	/**
-	 * Where the shared ring of the geometry programs' blocks stands, said whenever a program takes a
-	 * range of it or gives one back, and with a capacity of nought when there is none.
+	 * Where the ring the chain's uniform blocks share stands, said whenever a block takes a range of it
+	 * or gives one back, and with a capacity of nought when there is none.
 	 *
 	 * @param capacity how many bytes one buffer of the ring holds for blocks
 	 * @param claimed  how many of them stand claimed

@@ -382,17 +382,18 @@ dear: read it beside the frame rate.
 `vitrail/keep-redone-work` puts the redone binds and block writes back, so that one jar gives both
 readings.
 
-**The geometry programs of a chain keep their blocks in one ring, which the chain turns once a frame
-with its own.** Each program takes a range of it, at an offset the device accepts for a bound
-block, when it first has a block to write, and gives it back when it is released. The ring line
-therefore counts one turn for all of them, and the line under it says how many drawn programs stand
-in the shared ring and how many in one of their own, averaged over the frames like the rest: nought of the second is the number to want, and a block that
-finds the ring full, or wider than a buffer of it, is in one of its own and is named once in the
-log. A last line says how many blocks the shared ring holds now and how many of its bytes, and the
-log carries the ring's size when it is made and the most it held when the load ends.
+**The uniform blocks of a chain, each geometry program's and the one the full screen passes share,
+stand in one ring, which the chain turns once a frame.** A block takes a range of it, at an offset
+the device accepts for a bound block, when it is first to be written, and gives it back when its
+program is released. The ring line therefore counts one turn for all of them, and the line under it
+says how many drawn geometry programs stand in the shared ring and how many in a ring of their own,
+averaged over the frames like the rest: nought of the second is the number to want, and a block that
+finds the ring full, or wider than a buffer of it, is in one of its own and is named once in the log.
+A last line says how many blocks the shared ring holds now and how many of its bytes, and the log
+carries the ring's size when it is made and the most it held when the load ends.
 `-Dvitrail.ringPerProgram=true`, or a file `vitrail/ring-per-program` beside the pack, gives every
-program a ring of its own again, so that one jar gives both readings. The block a program writes is
-the same in both, and so is the frame.
+block a ring of its own again, so that one jar gives both readings. The bytes a block holds are the
+same in both, and so is the frame.
 
 **How much of a load's module work is one text compiled twice is said once a family, with what the
 compiler did about it beside it.** Under the same switch, the log carries a
