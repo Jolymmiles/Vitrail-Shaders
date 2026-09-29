@@ -365,12 +365,16 @@ push bound as an allocated set instead is named apart. Program binds are the tim
 program's block and samplers were set on a pass it was not already standing in, and beside them the
 binds that found it standing there, which set only the images the draw brought. Both games mark the
 descriptors dirty on every set, so a draw whose bind set an image pushes, and one whose bind set
-nothing pushes only if something else on it did. Uniform block writes are split into the geometry
-programs', the chain's and the far terrain's, and the geometry line says how many programs wrote
-their block more than once in a frame, which is nought when the block is written once for the run of
-draws it serves. A geometry program's block is written once for each turn of its ring and version of
-the frame's values, and again only where its pass hands in another matrix or colour, as the hand and
-the sky's elements do, so a program still counted on that line was drawn under two different sets of
+nothing pushes only if something else on it did. A line of its own counts the sets that changed
+nothing, where the pass already held that block, image or transform block as it was last set, split
+by what was set and over the sets of that kind; nought is the number to want, and the block and the
+images are counted only where the bind found its program already standing in the pass, the others
+writing every name the program declares. Uniform block writes are split into the geometry programs',
+the chain's and the far terrain's, and the geometry line says how many programs wrote their block
+more than once in a frame, which is nought when the block is written once for the run of draws it
+serves. A geometry program's block is written once for each turn of its ring and version of the
+frame's values, and again only where its pass hands in another matrix or colour, as the hand and the
+sky's elements do, so a program still counted on that line was drawn under two different sets of
 them, or straddles a turn of its ring, and did not write the same bytes twice. Every ring turned by
 this engine is a fence created and is counted as one. The census costs one read of a static final
 per hook while the switch is off, and allocates nothing while it is on. It says how often, not how

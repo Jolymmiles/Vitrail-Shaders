@@ -13,6 +13,7 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
@@ -2054,6 +2055,7 @@ public final class EntityDraw extends FamilyDraw {
 		if (program.readsGameTransforms()) {
 			GpuBufferSlice transforms = prepared.dynamicTransforms();
 			if (this.sent.transforms(transforms) || keep) {
+				FrameCensus.transformsSet(this.open, LegacyGlsl.GAME_TRANSFORMS, transforms);
 				this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, transforms);
 			}
 		}

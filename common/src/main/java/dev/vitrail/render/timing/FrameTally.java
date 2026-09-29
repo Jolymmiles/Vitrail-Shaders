@@ -2,8 +2,11 @@ package dev.vitrail.render.timing;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * The sums behind {@link FrameCensus}, and the words they are printed in.
@@ -53,7 +56,35 @@ final class FrameTally {
 		}
 	}
 
+	/**
+	 * What a geometry program sets on a pass and this census counts the redundant sets of. The order
+	 * is the order of the columns.
+	 */
+	enum Kind {
+		BLOCK("block"),
+		TEXTURE("texture"),
+		TRANSFORMS("transforms");
+
+		private final String label;
+
+		Kind(String label) {
+			this.label = label;
+		}
+	}
+
+	/**
+	 * What one name of a pass holds, as the census last saw it set: the pass, the value and, for an
+	 * image, the sampler beside it. One per name, made the first time the name is set.
+	 */
+	private static final class Held {
+
+		Object pass;
+		Object value;
+		Object sampler;
+	}
+
 	private static final int FAMILIES = Family.values().length;
+	private static final int KINDS = Kind.values().length;
 
 	private final long[] binds = new long[FAMILIES];
 	private final long[] redundant = new long[FAMILIES];
@@ -69,6 +100,18 @@ final class FrameTally {
 	private long descriptors;
 	private long programBinds;
 	private long programKept;
+
+	private final long[] sets = new long[KINDS];
+	private final long[] unchanged = new long[KINDS];
+
+	/**
+	 * What the pass holds under each name a set has been seen for. Both games keep a pass's uniforms
+	 * by name and keep them across a pipeline bind, so a set is redundant when the pass, the value and
+	 * the sampler are the ones the name was last set with, whichever program set it. Filled as names
+	 * are met, and emptied of what it names at the end of every frame, see {@link #endFrame}.
+	 */
+	private final Map<String, Held> held = new HashMap<>();
+	private final List<Held> heldAll = new ArrayList<>();
 
 	private long geometryWrites;
 	private long geometryPrograms;
@@ -144,6 +187,36 @@ final class FrameTally {
 		this.programKept++;
 	}
 
+	/**
+	 * A set of a value on a pass, and whether the pass already held exactly that under the name.
+	 * <p>
+	 * A set that is not counted still moves what the pass holds, so that the first one that is counted
+	 * is compared with what really stands there. Values are compared by their own equality, which is
+	 * identity for an image and a sampler and the buffer, offset and length for a slice.
+	 *
+	 * @param counted whether this is one of the sets the census is about
+	 * @param sampler the sampler beside an image, or null for a value that has none
+	 */
+	void set(Kind kind, Object pass, String name, Object value, Object sampler, boolean counted) {
+		Held held = this.held.get(name);
+		if (held == null) {
+			held = new Held();
+			this.held.put(name, held);
+			this.heldAll.add(held);
+		}
+
+		boolean same = held.pass == pass && held.sampler == sampler && Objects.equals(held.value, value);
+		held.pass = pass;
+		held.value = value;
+		held.sampler = sampler;
+		if (counted) {
+			this.sets[kind.ordinal()]++;
+			if (same) {
+				this.unchanged[kind.ordinal()]++;
+			}
+		}
+	}
+
 	/** A geometry program's block, written. The block says whether this is its second time. */
 	void geometryWritten(FrameCensus.Block block) {
 		this.geometryWrites++;
@@ -203,7 +276,8 @@ final class FrameTally {
 	/**
 	 * The end of a frame: counted, and the pass forgotten. Holding the last pass past its frame would
 	 * keep a closed one reachable, and a bind on the next frame's pass is a first bind whatever the
-	 * pipeline is.
+	 * pipeline is. What each name held is forgotten for the same reason, and with the pass go the
+	 * images and slices it was holding.
 	 */
 	void endFrame() {
 		this.frames++;
@@ -211,6 +285,12 @@ final class FrameTally {
 		this.lastPass = null;
 		this.lastBound = null;
 		this.lastFamily = Family.OTHER;
+		for (int at = 0; at < this.heldAll.size(); at++) {
+			Held held = this.heldAll.get(at);
+			held.pass = null;
+			held.value = null;
+			held.sampler = null;
+		}
 	}
 
 	long frames() {
@@ -229,6 +309,14 @@ final class FrameTally {
 		return this.draws[family.ordinal()];
 	}
 
+	long sets(Kind kind) {
+		return this.sets[kind.ordinal()];
+	}
+
+	long unchanged(Kind kind) {
+		return this.unchanged[kind.ordinal()];
+	}
+
 	/** Empties the window and keeps the frame number, which only ever goes up. */
 	void clear() {
 		Arrays.fill(this.binds, 0L);
@@ -242,6 +330,8 @@ final class FrameTally {
 		this.descriptors = 0;
 		this.programBinds = 0;
 		this.programKept = 0;
+		Arrays.fill(this.sets, 0L);
+		Arrays.fill(this.unchanged, 0L);
 		this.geometryWrites = 0;
 		this.geometryPrograms = 0;
 		this.geometryRewritten = 0;
@@ -305,6 +395,10 @@ final class FrameTally {
 						+ "samplers set on the pass, and %s more that found the program already "
 						+ "standing in it and set only the images the draw brought",
 				per(this.programBinds, frames), per(this.programKept, frames)));
+		lines.add(String.format(Locale.ROOT, "  %s sets that changed nothing (the pass already held that "
+						+ "value: 0 would be ideal), of those a program made while already standing in "
+						+ "its pass: %s",
+				per(sum(this.unchanged), frames), unchangedByKind(frames)));
 		lines.add(String.format(Locale.ROOT, "  %s geometry block writes over %s programs, %s of them "
 						+ "written more than once (0 would be ideal), %s chain block writes, %s far "
 						+ "terrain block writes",
@@ -326,6 +420,22 @@ final class FrameTally {
 				per(this.readyDone, frames)));
 
 		return lines;
+	}
+
+	/** The redundant sets of each kind over the sets of that kind, as one phrase of the line. */
+	private String unchangedByKind(double frames) {
+		StringBuilder text = new StringBuilder();
+		for (Kind kind : Kind.values()) {
+			int at = kind.ordinal();
+			if (at > 0) {
+				text.append(", ");
+			}
+
+			text.append(kind.label).append(' ').append(per(this.unchanged[at], frames)).append(" of ")
+					.append(per(this.sets[at], frames));
+		}
+
+		return text.toString();
 	}
 
 	private static long sum(long[] counts) {

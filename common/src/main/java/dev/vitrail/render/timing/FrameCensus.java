@@ -22,9 +22,10 @@ import java.util.Map;
  * <strong>The switch is {@code -Dvitrail.passTimings=N}, the same one</strong>, and off it every
  * hook below is one read of a static final and a return, which the compiler removes. Nothing
  * allocates while counting: the sums are longs in {@link FrameTally}, a program's writes are one
- * {@link Block} made when the program is, and the family of a pipeline is looked up in a map that
- * is filled as the programs are built, at the load and once more for each mesh layout another mod
- * brings to one of them.
+ * {@link Block} made when the program is, the family of a pipeline is looked up in a map that is
+ * filled as the programs are built, at the load and once more for each mesh layout another mod
+ * brings to one of them, and what a pass holds under a name is one holder made the first time
+ * anything is set under it.
  * <p>
  * <strong>Every bind is counted where the pass takes it, not where somebody made the call.</strong>
  * The sky, the weather, the clouds, the particles and the terrain never call
@@ -145,6 +146,46 @@ public final class FrameCensus {
 	public static void programKept() {
 		if (ENABLED) {
 			TALLY.programKept();
+		}
+	}
+
+	/**
+	 * A geometry program's block set on a pass. Both games mark the descriptors dirty on every set,
+	 * so one that puts on the pass what it already holds is a descriptor push spent on nothing, and
+	 * this is what says how many of them there are.
+	 *
+	 * @param pass    the pass, by identity
+	 * @param name    the name the block is set under
+	 * @param slice   the slice, compared by value
+	 * @param counted whether the program was already standing in the pass. A bind that finds it
+	 *                elsewhere writes every name it declares, and those sets are not what this
+	 *                counts; they still move what the pass is known to hold
+	 */
+	public static void blockSet(Object pass, String name, Object slice, boolean counted) {
+		if (ENABLED) {
+			TALLY.set(FrameTally.Kind.BLOCK, pass, name, slice, null, counted);
+		}
+	}
+
+	/**
+	 * A sampled image set on a pass, by the same rule as {@link #blockSet}. The view and the sampler
+	 * are compared by identity, as the pass compares nothing at all.
+	 */
+	public static void textureSet(Object pass, String name, Object view, Object sampler,
+			boolean counted) {
+		if (ENABLED) {
+			TALLY.set(FrameTally.Kind.TEXTURE, pass, name, view, sampler, counted);
+		}
+	}
+
+	/**
+	 * The game's per draw transforms set on a pass, by the same rule as {@link #blockSet}. Counted
+	 * whenever they are set, the first draw of a run included: it puts on the pass what the pass may
+	 * already hold as much as any other draw does.
+	 */
+	public static void transformsSet(Object pass, String name, Object slice) {
+		if (ENABLED) {
+			TALLY.set(FrameTally.Kind.TRANSFORMS, pass, name, slice, null, true);
 		}
 	}
 

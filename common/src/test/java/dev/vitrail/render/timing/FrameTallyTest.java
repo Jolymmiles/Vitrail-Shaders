@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import dev.vitrail.render.timing.FrameTally.Family;
+import dev.vitrail.render.timing.FrameTally.Kind;
 
 import java.util.List;
 
@@ -194,6 +195,161 @@ class FrameTallyTest {
 				this.tally.lines(1.0).toString());
 	}
 
+	// -- sets that changed nothing -------------------------------------------------------------
+
+	@Test
+	void aSetOfWhatThePassAlreadyHoldsChangedNothing() {
+		Object pass = new Object();
+		Object slice = new Object();
+
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", new Object(), null, true);
+
+		assertEquals(3, this.tally.sets(Kind.BLOCK));
+		assertEquals(1, this.tally.unchanged(Kind.BLOCK));
+	}
+
+	@Test
+	void aSliceIsTheSameSliceByItsValueAndNotByItsObject() {
+		Object pass = new Object();
+
+		// The game hands a fresh slice for each draw that names the same bytes, so the comparison is
+		// the slice's own equality and never the object's.
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", new String("a slice"), null, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", new String("a slice"), null, true);
+
+		assertEquals(1, this.tally.unchanged(Kind.TRANSFORMS));
+	}
+
+	@Test
+	void anImageOnAnotherSamplerIsAnotherSet() {
+		Object pass = new Object();
+		Object view = new Object();
+		Object sampler = new Object();
+
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, new Object(), true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", new Object(), sampler, true);
+
+		assertEquals(3, this.tally.sets(Kind.TEXTURE));
+		assertEquals(0, this.tally.unchanged(Kind.TEXTURE));
+	}
+
+	@Test
+	void theSameValueOnAnotherPassIsAFirstSet() {
+		Object slice = new Object();
+
+		this.tally.set(Kind.BLOCK, new Object(), "Block", slice, null, true);
+		this.tally.set(Kind.BLOCK, new Object(), "Block", slice, null, true);
+
+		assertEquals(0, this.tally.unchanged(Kind.BLOCK));
+	}
+
+	@Test
+	void everyNameOfAPassHoldsItsOwnValue() {
+		Object pass = new Object();
+		Object view = new Object();
+		Object sampler = new Object();
+
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "normals", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "normals", view, sampler, true);
+
+		assertEquals(4, this.tally.sets(Kind.TEXTURE));
+		assertEquals(2, this.tally.unchanged(Kind.TEXTURE));
+	}
+
+	@Test
+	void aSetNobodyCountsStillMovesWhatThePassHolds() {
+		Object pass = new Object();
+		Object first = new Object();
+		Object second = new Object();
+
+		// A bind that finds the program not standing in the pass writes every name it declares and
+		// is not what the figure is about, but it is what the pass holds afterwards: the count that
+		// follows is against it.
+		this.tally.set(Kind.TEXTURE, pass, "noisetex", first, null, false);
+		this.tally.set(Kind.TEXTURE, pass, "noisetex", first, null, true);
+		this.tally.set(Kind.TEXTURE, pass, "noisetex", second, null, false);
+		this.tally.set(Kind.TEXTURE, pass, "noisetex", first, null, true);
+
+		assertEquals(2, this.tally.sets(Kind.TEXTURE));
+		assertEquals(1, this.tally.unchanged(Kind.TEXTURE));
+	}
+
+	@Test
+	void theKindsAreCountedApart() {
+		Object pass = new Object();
+		Object value = new Object();
+
+		this.tally.set(Kind.BLOCK, pass, "Block", value, null, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", value, null, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", value, null, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", value, null, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", value, null, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", value, null, true);
+
+		assertEquals(2, this.tally.sets(Kind.BLOCK));
+		assertEquals(1, this.tally.unchanged(Kind.BLOCK));
+		assertEquals(1, this.tally.sets(Kind.TEXTURE));
+		assertEquals(0, this.tally.unchanged(Kind.TEXTURE));
+		assertEquals(3, this.tally.sets(Kind.TRANSFORMS));
+		assertEquals(2, this.tally.unchanged(Kind.TRANSFORMS));
+	}
+
+	@Test
+	void aFrameEndForgetsWhatThePassHeld() {
+		Object pass = new Object();
+		Object slice = new Object();
+
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.endFrame();
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+
+		assertEquals(0, this.tally.unchanged(Kind.BLOCK));
+	}
+
+	@Test
+	void aClearEmptiesTheCountsOfTheSets() {
+		Object pass = new Object();
+		Object slice = new Object();
+
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.clear();
+
+		assertEquals(0, this.tally.sets(Kind.BLOCK));
+		assertEquals(0, this.tally.unchanged(Kind.BLOCK));
+	}
+
+	@Test
+	void theSetsThatChangedNothingAreSaidByKindOverTheSetsOfThatKind() {
+		Object pass = new Object();
+		Object view = new Object();
+		Object sampler = new Object();
+		Object slice = new Object();
+
+		// Two frames. Block: two sets, both a move. Texture: four sets of which one repeats.
+		// Transforms: two sets of which one repeats.
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", slice, null, true);
+		this.tally.set(Kind.TRANSFORMS, pass, "Transforms", slice, null, true);
+		this.tally.endFrame();
+		this.tally.set(Kind.BLOCK, pass, "Block", slice, null, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", new Object(), sampler, true);
+		this.tally.endFrame();
+
+		assertTrue(this.tally.lines(1.0).contains("  1.0 sets that changed nothing (the pass already "
+				+ "held that value: 0 would be ideal), of those a program made while already "
+				+ "standing in its pass: block 0.0 of 1.0, texture 0.5 of 2.0, transforms 0.5 of 1.0"),
+				this.tally.lines(1.0).toString());
+	}
+
 	// -- families ------------------------------------------------------------------------------
 
 	@Test
@@ -300,6 +456,17 @@ class FrameTallyTest {
 		this.tally.readyDone();
 		this.tally.readyDone();
 
+		// Four sets of the pass's images of which one repeats, and two blocks and no transforms.
+		Object pass = new Object();
+		Object view = new Object();
+		Object sampler = new Object();
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "gtexture", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "normals", view, sampler, true);
+		this.tally.set(Kind.TEXTURE, pass, "specular", view, sampler, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", view, null, true);
+		this.tally.set(Kind.BLOCK, pass, "Block", new Object(), null, true);
+
 		// One program written twice in the first frame and once in the second, another once in the
 		// first: four writes over three program-frames, one of them a rewrite.
 		FrameCensus.Block twice = new FrameCensus.Block();
@@ -322,6 +489,9 @@ class FrameTallyTest {
 				"  3.0 program binds, each one a uniform block and its samplers set on the pass, "
 						+ "and 5.0 more that found the program already standing in it and set only "
 						+ "the images the draw brought",
+				"  0.5 sets that changed nothing (the pass already held that value: 0 would be "
+						+ "ideal), of those a program made while already standing in its pass: block "
+						+ "0.0 of 1.0, texture 0.5 of 2.0, transforms 0.0 of 0.0",
 				"  2.0 geometry block writes over 1.5 programs, 0.5 of them written more than once "
 						+ "(0 would be ideal), 1.0 chain block writes, 2.0 far terrain block writes",
 				"  3.0 ring rotations, each one a fence created",

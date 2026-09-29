@@ -1448,6 +1448,7 @@ final class GeometryProgram {
 		GpuBufferSlice slice = blockSlice();
 		if (settle || keep || slice != this.blockSent) {
 			FrameCensus.programBound();
+			FrameCensus.blockSet(pass, UNIFORM_BLOCK, slice, !settle);
 			pass.setUniform(UNIFORM_BLOCK, slice);
 			this.blockSent = slice;
 			StorageBuffers.bind(pass, this.storage);
@@ -1456,11 +1457,15 @@ final class GeometryProgram {
 		}
 
 		for (Sampled one : this.following) {
-			GraphicsApi.bindTexture(pass, one.name, imageView(one), imageSampler(one));
+			GpuTextureView view = imageView(one);
+			GpuSampler sampler = imageSampler(one);
+			FrameCensus.textureSet(pass, one.name, view, sampler, !settle);
+			GraphicsApi.bindTexture(pass, one.name, view, sampler);
 		}
 
 		if (settle) {
 			for (Sampled one : this.settledOnce) {
+				FrameCensus.textureSet(pass, one.name, one.view, one.state, false);
 				GraphicsApi.bindTexture(pass, one.name, one.view, one.state);
 			}
 		}
