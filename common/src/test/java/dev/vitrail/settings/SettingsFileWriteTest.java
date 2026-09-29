@@ -16,7 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
  * Holds a pack's settings file to leaving nothing behind it when it cannot be written.
  * <p>
  * The file is written beside itself as a {@code .part} and moved over the old one. A move that
- * failed left that {@code .part} in the shaderpacks folder, among the packs, for good.
+ * fails must not leave that {@code .part} in the shaderpacks folder, among the packs, for good.
  */
 class SettingsFileWriteTest {
 
