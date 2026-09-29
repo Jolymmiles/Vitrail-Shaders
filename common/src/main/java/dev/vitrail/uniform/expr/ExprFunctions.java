@@ -158,19 +158,18 @@ public final class ExprFunctions {
 			ExprFunctions.<II2BFunction>addBooleanVectorizable("equals", (a, b) -> a == b);
 			ExprFunctions.<FF2BFunction>add("equals", (a, b) -> a == b);
 
-			// Float vectors, one boolean for the whole vector. Each group of three sits after the
-			// scalar lines of an operator and was meant to extend it, the first to equals and the
-			// second to notEquals. Both were named "equal" instead, and both declared a vector
-			// where they answer a boolean, as Iris still has them
-			// (parsing/IrisFunctions.java:146-155): a call wanting a boolean, which is every use
-			// there is, found no match, and one wanting a vector found two and threw "Ambiguity".
-			// So == and != answer for vectors now, and equal stays a name as well, since the note
-			// at the top of this class names it. The components compare as the scalar == does:
-			// -0.0 equals 0.0 and NaN equals nothing, where JOML's equals has it the other way.
-			// The reference never answers a comparison of two vectors, so no pack can have been
-			// tuned against one. What it costs the image: a pack that compares two draws with a
-			// boolean where the declaration was dropped and its program read nought, and no
-			// declaration of BSL, Bliss, Photon or either Complementary compares two.
+			// Float vectors, one boolean for the whole vector, under equals, under equal because the
+			// note at the top of this class names it, and under == and != through the operator
+			// table. Each group of three sits after the scalar lines of the operator it extends.
+			// The components compare as the scalar == does: -0.0 equals 0.0 and NaN equals nothing,
+			// where JOML's equals has it the other way. This departs from Iris, whose vector
+			// comparisons (parsing/IrisFunctions.java:146-155) declare a vector as their result and
+			// share one name, so a call wanting a boolean, which is every use there is, resolves to
+			// nothing there and the declaration is dropped. The reference therefore never answers a
+			// comparison of two vectors, so no pack can have been tuned against one. What it costs
+			// the image: a pack comparing two vectors draws with a boolean where Iris drops the
+			// declaration and its program reads nought, and no declaration of BSL, Bliss, Photon
+			// or either Complementary compares two.
 			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC2, false, ExprFunctions::sameComponents);
 			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC3, false, ExprFunctions::sameComponents);
 			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC4, false, ExprFunctions::sameComponents);
