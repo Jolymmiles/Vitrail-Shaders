@@ -273,9 +273,16 @@ public final class StorageImages implements AutoCloseable {
 		// Everything or nothing: a refusal halfway through gives back what was allocated, so the
 		// next screen size the colour targets try again at starts from the first image rather
 		// than skipping the one that failed as already dealt with.
+		//
+		// An Error takes the same road as a RuntimeException. LWJGL raises a native
+		// OutOfMemoryError from its stack and its allocators, and the colour targets catch only
+		// the RuntimeException, so a half-made set would otherwise stay standing for whatever
+		// catches the Error further out. The road only queues the destructions, clears the list
+		// and copies it into a map, with no call into the driver, so it does not replace the
+		// failure it is handling, and what is rethrown is the throwable that was caught.
 		try {
 			allocate(vulkan, first, resized, screenWidth, screenHeight);
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | Error e) {
 			this.allocated.forEach(image -> image.destroy(vulkan));
 			this.allocated.clear();
 			this.laidOut = false;
