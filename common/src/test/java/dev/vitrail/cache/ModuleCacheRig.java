@@ -1,6 +1,7 @@
 package dev.vitrail.cache;
 
 import dev.vitrail.Vitrail;
+import dev.vitrail.api.VitrailAddon;
 import dev.vitrail.platform.VitrailPlatform;
 
 import java.io.IOException;
@@ -395,6 +396,11 @@ final class ModuleCacheRig implements AutoCloseable {
 		@Override
 		public boolean isModLoaded(String modId) {
 			return false;
+		}
+
+		@Override
+		public List<VitrailAddon> addons() {
+			return List.of();
 		}
 	}
 

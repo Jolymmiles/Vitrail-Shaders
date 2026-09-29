@@ -1,5 +1,6 @@
 package dev.vitrail;
 
+import dev.vitrail.addon.AddonRegistry;
 import dev.vitrail.platform.VitrailPlatform;
 
 import org.slf4j.Logger;
@@ -151,5 +152,7 @@ public final class Vitrail {
 				loaderPlatform.loaderName(),
 				loaderPlatform.loaderVersion(),
 				loaderPlatform.minecraftVersion());
+
+		AddonRegistry.load(loaderPlatform.addons());
 	}
 }
