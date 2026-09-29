@@ -575,13 +575,18 @@ final class ModuleStore {
 			Files.createDirectories(mine);
 			ModuleStore.touch(mine);
 			String left = dropOtherEditions(root, mine, Vitrail.cacheEditionFamily());
+			String dead = dropPartials(mine);
+			if (!dead.isEmpty()) {
+				left = left.isEmpty() ? dead : left + ", " + dead;
+			}
+
 			if (!left.isEmpty()) {
-				Vitrail.logger().warn("The module cache could not take away all that another build "
+				Vitrail.logger().warn("The module cache could not take away all that an earlier run "
 						+ "left in {}: {}. This build keeps its own store all the same, and the next "
 						+ "launch tries again", root, left);
 			}
 
-			BYTES.set(total(scan(mine, true)));
+			BYTES.set(total(scan(mine)));
 			directory = mine;
 		} catch (IOException | RuntimeException e) {
 			unavailable = true;
@@ -746,33 +751,57 @@ final class ModuleStore {
 	}
 
 	/**
+	 * Deletes the {@code .part} files a killed writer left in this edition's own folder, and
+	 * answers for the ones that stay.
+	 * <p>
+	 * <strong>A neighbour is only ever deleted here, which is at {@link #open} and nowhere
+	 * else.</strong> A sweep runs while other workers are in the middle of their own writes, and
+	 * deleting what they are holding open takes their unit down on one system and aborts the whole
+	 * sweep with a refusal on the other.
+	 * <p>
+	 * One that refuses is held by something outside this process, and is named beside the folders
+	 * {@link #dropOtherEditions} could not empty, in the one line {@link #open} says: the next open
+	 * tries again, and refused out of here it would have turned the whole store off over one file
+	 * nothing reads. It is not counted, since {@link #scan} does not count a neighbour and a sweep
+	 * has nothing to drop for one.
+	 *
+	 * @return each file left behind with its refusal, or empty when all of it went
+	 * @throws IOException when the folder cannot be listed, which is this edition's own and so
+	 *                     leaves the store off
+	 */
+	private static String dropPartials(Path mine) throws IOException {
+		List<String> left = new ArrayList<>();
+
+		try (Stream<Path> entries = Files.list(mine)) {
+			for (Path entry : entries.toList()) {
+				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
+					try {
+						Files.deleteIfExists(entry);
+					} catch (IOException e) {
+						left.add(mine.getFileName() + "/" + entry.getFileName() + " (" + e + ")");
+					}
+				}
+			}
+		}
+
+		return String.join(", ", left);
+	}
+
+	/**
 	 * Every unit on disk, oldest stamp first.
 	 * <p>
-	 * <strong>A neighbour is only ever deleted when {@code prunePartials} says so, which is at
-	 * {@link #open} and nowhere else.</strong> A sweep runs while other workers are in the middle of
-	 * their own writes, and deleting what they are holding open takes their unit down on one system
-	 * and aborts the whole sweep with a refusal on the other. What a sweep does with a neighbour is
-	 * ignore it: it is not reachable, it is about to become a unit, and it is nobody's to count.
+	 * A neighbour is ignored: it is not reachable, it is about to become a unit, and it is nobody's
+	 * to count. {@link #dropPartials} is what deletes the dead ones.
 	 * <p>
 	 * A file that goes missing between the listing and the question is skipped rather than fatal,
-	 * for the same reason: the listing is a snapshot and the directory is not frozen behind it.
+	 * because the listing is a snapshot and the directory is not frozen behind it.
 	 */
-	private static List<Unit> scan(Path root, boolean prunePartials) throws IOException {
+	private static List<Unit> scan(Path root) throws IOException {
 		List<Unit> units = new ArrayList<>();
 
 		try (Stream<Path> entries = Files.list(root)) {
 			for (Path entry : entries.toList()) {
-				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
-					if (prunePartials) {
-						try {
-							Files.deleteIfExists(entry);
-						} catch (IOException ignored) {
-							// Dead, and held by something outside this process. It is not reachable
-							// and not counted, and the next open tries again: refused out of here it
-							// would have turned the whole store off over one file nothing reads.
-						}
-					}
-				} else {
+				if (!entry.getFileName().toString().endsWith(PART_SUFFIX)) {
 					try {
 						units.add(new Unit(entry, Files.getLastModifiedTime(entry).toMillis(),
 								Files.size(entry)));
@@ -826,7 +855,7 @@ final class ModuleStore {
 			long counted = BYTES.get();
 			long total = counted;
 			try {
-				List<Unit> units = scan(root, false);
+				List<Unit> units = scan(root);
 				total = total(units);
 				long before = total;
 

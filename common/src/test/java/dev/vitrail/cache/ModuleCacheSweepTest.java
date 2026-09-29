@@ -310,7 +310,7 @@ class ModuleCacheSweepTest {
 
 				List<String> said = rig.warnings();
 				assertEquals(1, said.size(), said.toString());
-				assertTrue(said.get(0).startsWith("The module cache could not take away all that another build "
+				assertTrue(said.get(0).startsWith("The module cache could not take away all that an earlier run "
 						+ "left in " + rig.modules() + ": 0.12.0+mc26.2 ("), said.get(0));
 				assertTrue(said.get(0).endsWith("). This build keeps its own store all the same, and the next "
 						+ "launch tries again"), said.get(0));

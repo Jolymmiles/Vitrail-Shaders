@@ -199,9 +199,14 @@ public final class TranslationCache {
 					left = dropOtherEditions(mine.getParent(), mine, family);
 				}
 
-				BYTES.set(total(scan(mine, true)));
+				String dead = dropPartials(mine);
+				if (!dead.isEmpty()) {
+					left = left.isEmpty() ? dead : left + ", " + dead;
+				}
+
+				BYTES.set(total(scan(mine)));
 				directory = mine;
-				problem = left.isEmpty() ? "" : "what another build left in " + mine.getParent()
+				problem = left.isEmpty() ? "" : "what an earlier run left in " + mine.getParent()
 						+ " could not all be taken away, and the next launch tries again: " + left;
 			} catch (IOException | RuntimeException e) {
 				directory = null;
@@ -212,8 +217,9 @@ public final class TranslationCache {
 
 	/**
 	 * What went wrong at install, for whoever has a logger, or empty when nothing did. A cache that
-	 * {@link #installed} can have one too: another edition's folder it could not wholly empty, which
-	 * costs disk and leaves every translation of this build where it was.
+	 * {@link #installed} can have one too: another edition's folder it could not wholly empty, or a
+	 * dead write of this one it could not delete, which costs disk and leaves every translation of
+	 * this build where it was.
 	 */
 	public static String problem() {
 		return problem;
@@ -706,29 +712,52 @@ public final class TranslationCache {
 	}
 
 	/**
-	 * Every blob on disk, oldest stamp first.
+	 * Deletes the {@code .part} files a killed writer left in this edition's own directory, and
+	 * answers for the ones that stay.
 	 * <p>
-	 * <strong>A neighbour is only deleted when {@code prunePartials} says so, which is at install
-	 * and nowhere else.</strong> A sweep runs while other workers are in the middle of their own
-	 * writes, and deleting what they hold open takes their blob down on one system and aborts the
-	 * sweep on the other. What a sweep does with a neighbour is ignore it.
+	 * <strong>A neighbour is only deleted here, which is at install and nowhere else.</strong> A
+	 * sweep runs while other workers are in the middle of their own writes, and deleting what they
+	 * hold open takes their blob down on one system and aborts the sweep on the other.
+	 * <p>
+	 * One that refuses is held by something outside this process, and is named beside the folders
+	 * {@link #dropOtherEditions} could not empty, in the same {@link #problem}: the next install
+	 * tries again, and refused out of here it would have left the whole cache off over one file
+	 * nothing reads. It is not counted, since {@link #scan} does not count a neighbour and a sweep
+	 * has nothing to drop for one.
+	 *
+	 * @return each file left behind with its refusal, or empty when all of it went
+	 * @throws IOException when the directory cannot be listed, which is this edition's own and so
+	 *                     leaves the cache off
 	 */
-	private static List<Blob> scan(Path root, boolean prunePartials) throws IOException {
+	private static String dropPartials(Path mine) throws IOException {
+		List<String> left = new ArrayList<>();
+
+		try (Stream<Path> entries = Files.list(mine)) {
+			for (Path entry : entries.toList()) {
+				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
+					try {
+						Files.deleteIfExists(entry);
+					} catch (IOException e) {
+						left.add(mine.getFileName() + "/" + entry.getFileName() + " (" + e + ")");
+					}
+				}
+			}
+		}
+
+		return String.join(", ", left);
+	}
+
+	/**
+	 * Every blob on disk, oldest stamp first. A neighbour is ignored: it is not reachable, it is
+	 * about to become a blob, and it is nobody's to count. {@link #dropPartials} is what deletes
+	 * the dead ones.
+	 */
+	private static List<Blob> scan(Path root) throws IOException {
 		List<Blob> blobs = new ArrayList<>();
 
 		try (Stream<Path> entries = Files.list(root)) {
 			for (Path entry : entries.toList()) {
-				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
-					if (prunePartials) {
-						try {
-							Files.deleteIfExists(entry);
-						} catch (IOException ignored) {
-							// Dead, and held by something outside this process. It is not reachable
-							// and not counted, and the next install tries again: refused out of here
-							// it would have left the whole cache off over one file nothing reads.
-						}
-					}
-				} else {
+				if (!entry.getFileName().toString().endsWith(PART_SUFFIX)) {
 					try {
 						blobs.add(new Blob(entry, Files.getLastModifiedTime(entry).toMillis(),
 								Files.size(entry)));
@@ -776,7 +805,7 @@ public final class TranslationCache {
 			long counted = BYTES.get();
 			long total = counted;
 			try {
-				List<Blob> blobs = scan(root, false);
+				List<Blob> blobs = scan(root);
 				total = total(blobs);
 
 				for (Blob blob : blobs) {

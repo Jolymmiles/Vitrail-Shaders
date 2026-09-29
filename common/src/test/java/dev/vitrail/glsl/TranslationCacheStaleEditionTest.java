@@ -1,5 +1,6 @@
 package dev.vitrail.glsl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -14,7 +15,8 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Holds the translation cache to one rule at install: only this edition's own directory decides
  * whether the cache is on, and what another edition left, or a dead neighbour of this one, never
- * does.
+ * does. What stays is named in {@link TranslationCache#problem}, the folder of another edition and
+ * the dead neighbour alike.
  * <p>
  * A folder whose write permission is taken away is how a file nothing may delete is planted, the
  * POSIX shape of what a scanner or an indexer holding a file does on Windows. The permission is put
@@ -56,7 +58,7 @@ class TranslationCacheStaleEditionTest {
 	}
 
 	@Test
-	void installsPastADeadNeighbourThatWillNotGo() throws IOException {
+	void installsPastADeadNeighbourThatWillNotGoAndNamesIt() throws IOException {
 		Path mine = Files.createDirectories(temp.resolve("translations").resolve(FAMILY));
 		Path part = Files.writeString(mine.resolve("key-1.part"), "half");
 
@@ -70,8 +72,50 @@ class TranslationCacheStaleEditionTest {
 			assertTrue(TranslationCache.installed(),
 					"the cache is off: " + TranslationCache.problem());
 			assertTrue(Files.exists(part), "the planted refusal did not refuse");
+			// The refusal quotes the path again, so the name is told by the bracket that follows it.
+			String named = FAMILY + "/key-1.part (";
+			String said = TranslationCache.problem();
+			assertTrue(said.contains(named), "the dead neighbour left behind is not named: " + said);
+			assertEquals(said.indexOf(named), said.lastIndexOf(named),
+					"the dead neighbour is named more than once: " + said);
 		} finally {
 			mine.toFile().setWritable(true);
+		}
+
+		// What was refused is tried again by the next install, and said no more once it went.
+		TranslationCache.install(temp, FAMILY, FAMILY);
+
+		assertTrue(TranslationCache.installed(), "the cache is off: " + TranslationCache.problem());
+		assertFalse(Files.exists(part), "the next install left the dead neighbour");
+		assertEquals("", TranslationCache.problem());
+	}
+
+	@Test
+	void namesADeadNeighbourAndAnOtherEditionThatWillNotGoInOneReport() throws IOException {
+		Path root = Files.createDirectories(temp.resolve("translations"));
+		Path mine = Files.createDirectories(root.resolve(FAMILY));
+		Path part = Files.writeString(mine.resolve("key-1.part"), "half");
+
+		Path locked = Files.createDirectories(root.resolve("0.12.0_mc26.2").resolve("locked"));
+		Path held = Files.writeString(locked.resolve("b.tr"), "held");
+
+		assertTrue(mine.toFile().setWritable(false), "the planted folder could not be locked");
+		assertTrue(locked.toFile().setWritable(false), "the planted folder could not be locked");
+		try {
+			assumeFalse(Files.isWritable(mine) || Files.isWritable(locked), "a folder without write "
+					+ "permission is still writable here, as it is to root");
+
+			TranslationCache.install(temp, FAMILY, FAMILY);
+
+			assertTrue(TranslationCache.installed(),
+					"the cache is off: " + TranslationCache.problem());
+			assertTrue(Files.exists(part) && Files.exists(held), "a planted refusal did not refuse");
+			String said = TranslationCache.problem();
+			assertTrue(said.contains("0.12.0_mc26.2") && said.contains(FAMILY + "/key-1.part ("),
+					"what stayed is not all named: " + said);
+		} finally {
+			mine.toFile().setWritable(true);
+			locked.toFile().setWritable(true);
 		}
 	}
 }
