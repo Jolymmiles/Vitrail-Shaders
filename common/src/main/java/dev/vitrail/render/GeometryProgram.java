@@ -54,7 +54,6 @@ import com.mojang.blaze3d.vertex.VertexFormatElement;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
-import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
 
 import org.joml.Matrix4fc;
@@ -455,7 +454,16 @@ final class GeometryProgram {
 	 */
 	private final boolean gameTransforms;
 
-	private MappableRingBuffer block;
+	/**
+	 * Where this program's uniform block stands, which is a range of the ring every program of the
+	 * chain shares or a ring of its own where that has no room; the program asks it everything and does
+	 * not tell them apart. Null until the first prepare, and again after {@link #release}. See
+	 * {@link BlockRing}.
+	 */
+	private BlockRing.Slot block;
+
+	/** Where the chain's programs get their blocks from. */
+	private final BlockRing blocks;
 
 	/** How often this program's block was written in the frame in progress, for the frame census. */
 	private final FrameCensus.Block blockWrites = new FrameCensus.Block();
@@ -464,6 +472,8 @@ final class GeometryProgram {
 	private GpuBufferSlice blockSlice;
 
 	private GpuBuffer blockSliceOf;
+
+	private int blockSliceAt;
 
 	private int blockSliceBytes;
 
@@ -475,14 +485,12 @@ final class GeometryProgram {
 	private GpuBufferSlice blockSent;
 
 	/**
-	 * What the bytes standing in the ring's current buffer were written from, and how many times the
-	 * ring has turned, which is what a second write of a frame is compared against. See
-	 * {@link BlockStamp}. The turn is counted here and not in the ring because the ring is dropped
-	 * and made again with the program's block, and the stamp goes with it.
+	 * What the bytes standing in the block's current buffer were written from, which is what a second
+	 * write of a frame is compared against. See {@link BlockStamp}. The turn it is keyed on is the
+	 * ring's, asked of the block; the stamp is cleared whenever the block is made again, and goes with
+	 * it.
 	 */
 	private final BlockStamp written = new BlockStamp();
-
-	private long turn;
 
 	/**
 	 * The device's one-texel constants, for a sprite the resource pack ships nothing for and for
@@ -558,8 +566,9 @@ final class GeometryProgram {
 
 	GeometryProgram(Pass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
-			boolean chainRuns) {
+			BlockRing blocks, boolean chainRuns) {
 		this.pass = pass;
+		this.blocks = blocks;
 		this.path = loaded.path();
 		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
@@ -1069,8 +1078,7 @@ final class GeometryProgram {
 		this.atlas = atlas;
 		ensureConstants(device);
 		if (this.block == null) {
-			this.block = new MappableRingBuffer(this.blockLabel,
-					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, blockBytes());
+			this.block = this.blocks.open(device, this.blockLabel, blockBytes());
 			this.written.clear();
 		}
 
@@ -1912,10 +1920,12 @@ final class GeometryProgram {
 	}
 
 	/**
-	 * Rotates the ring buffer. Called once the frame's terrain draw has been recorded.
+	 * Rotates the ring buffer where this program has one of its own. Called once the frame's terrain
+	 * draw has been recorded.
 	 * <p>
 	 * A pass never outlives the frame that opened it, but the block this program set on one is the
 	 * buffer the ring is leaving, so what is standing is dropped here rather than trusted to that.
+	 * The ring every program shares is turned by the chain, once, and the same holds for it.
 	 */
 	void rotate() {
 		if (settled == this) {
@@ -1924,9 +1934,7 @@ final class GeometryProgram {
 		}
 
 		this.blockSent = null;
-		this.turn++;
 		if (this.block != null) {
-			FrameCensus.rotated();
 			this.block.rotate();
 		}
 	}
@@ -1957,7 +1965,7 @@ final class GeometryProgram {
 			this.block = null;
 		}
 
-		// With the ring and not after it: a slice outliving the buffer it names is memory that reads
+		// With the block and not after it: a slice outliving the range it names is memory that reads
 		// as valid.
 		this.blockSlice = null;
 		this.blockSliceOf = null;
@@ -2026,32 +2034,35 @@ final class GeometryProgram {
 	/**
 	 * The whole of this program's uniform block, as the one slice that names it.
 	 * <p>
-	 * Both its arguments are fixed for as long as the ring hands back the same buffer: the offset is
-	 * nought and the length is the block's own size, which is what the ring was built against. Built
-	 * again at every bind, it was one object per entity submitted and per Sodium region drawn, twice
-	 * over on a frame with a shadow map. Kept beside the buffer it was cut from, it is one a frame:
-	 * the ring turns once, at the close of the frame, and a turn is the only thing that can make the
-	 * old one name the wrong memory.
+	 * Its arguments are fixed for as long as the ring hands back the same buffer: the offset is where
+	 * the block's range starts, nought for a ring of its own, and the length is the block's own size,
+	 * which is what the range or the ring was made for. Built again at every bind, it was one object
+	 * per entity submitted and per Sodium region drawn, twice over on a frame with a shadow map. Kept
+	 * beside the buffer it was cut from, it is one a frame: the ring turns once, at the close of the
+	 * frame, and a turn is the only thing that can make the old one name the wrong memory.
 	 * <p>
-	 * {@link #release} drops it with the ring, so a slice never outlives the buffer under it.
+	 * {@link #release} drops it with the block, so a slice never outlives the range under it.
 	 */
 	private GpuBufferSlice blockSlice() {
-		GpuBuffer buffer = this.block.currentBuffer();
+		GpuBuffer buffer = this.block.buffer();
+		int at = this.block.offset();
 		if (PassTimings.keepRedoneWork()) {
 			PassTimings.censusSlice();
 
-			return buffer.slice(0, blockBytes());
+			return buffer.slice(at, blockBytes());
 		}
 
 		int bytes = blockBytes();
-		// The length as well as the buffer, though only the buffer can move today: the block's size
-		// is settled at translation and a translation goes through release, which drops the ring.
-		// Comparing it costs one integer and takes a silent wrong answer off the table if that ever
-		// stops being true.
-		if (this.blockSlice == null || this.blockSliceOf != buffer || this.blockSliceBytes != bytes) {
+		// The offset and the length as well as the buffer, though only the buffer can move today: the
+		// block's size is settled at translation and a translation goes through release, which drops
+		// the block and the range with it. Comparing them costs two integers and takes a silent wrong
+		// answer off the table if that ever stops being true.
+		if (this.blockSlice == null || this.blockSliceOf != buffer || this.blockSliceAt != at
+				|| this.blockSliceBytes != bytes) {
 			PassTimings.censusSlice();
-			this.blockSlice = buffer.slice(0, bytes);
+			this.blockSlice = buffer.slice(at, bytes);
 			this.blockSliceOf = buffer;
+			this.blockSliceAt = at;
 			this.blockSliceBytes = bytes;
 		}
 
@@ -2068,6 +2079,13 @@ final class GeometryProgram {
 	 * values, and the same four values handed in by the pass. A pass that hands in another set, the
 	 * hand after a mob or a second sky element, writes again and so does every first write of a
 	 * frame.
+	 * <p>
+	 * <strong>The turn is what makes a skipped write safe in a ring every program shares.</strong> A
+	 * stamp holds only at the turn it was made at, and a turn is another buffer, so a write is
+	 * skipped only where the range in the buffer in hand is the one the stamp was made for, and the
+	 * first write of every frame goes in whatever the frame before wrote. The range is this program's
+	 * alone for as long as it holds it, so no other program's write can have changed the bytes the
+	 * stamp says are there.
 	 * <p>
 	 * <strong>The setters run either way.</strong> They put the pass's values in a state that every
 	 * program shares, and the alpha reference is left standing for the chain's composites to read,
@@ -2086,20 +2104,22 @@ final class GeometryProgram {
 		this.values.passAlphaTest(this.loaded.alphaTest().reference());
 		this.values.renderStage(this.pass.stage());
 
+		FrameCensus.blockPlaced(this.blockWrites, this.block.shared());
 		long version = this.values.version();
-		if (!PassTimings.keepRedoneWork() && this.written.holds(this.turn, version, this.modelView,
+		long turn = this.block.turn();
+		if (!PassTimings.keepRedoneWork() && this.written.holds(turn, version, this.modelView,
 				this.bob, this.projection, this.passColour)) {
 			return;
 		}
 
 		FrameCensus.geometryBlockWritten(this.blockWrites);
-		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
+		try (GpuBufferSlice.MappedView view = this.block.map()) {
 			ByteBuffer data = view.data();
 			data.position(0);
 			this.uniforms.write(Std140Builder.intoBuffer(data), this.values.world());
 		}
 
-		this.written.stamp(this.turn, version, this.modelView, this.bob, this.projection,
+		this.written.stamp(turn, version, this.modelView, this.bob, this.projection,
 				this.passColour);
 	}
 

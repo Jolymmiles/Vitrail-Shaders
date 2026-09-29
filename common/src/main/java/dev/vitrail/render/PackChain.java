@@ -370,6 +370,16 @@ public final class PackChain {
 	private boolean centerDepthRead;
 
 	private MappableRingBuffer block;
+
+	/**
+	 * Where every geometry program of this chain keeps its uniform block: the one ring that turns
+	 * beside {@link #block} in {@link #closeFrame}, so that the programs together cost one fence a
+	 * frame and not one each. Made with the chain and never null, because the programs are handed it
+	 * by the draws while they are built, on the worker, long before any device call is made; the ring
+	 * itself is made at the first block, and taken down in {@link #release}.
+	 */
+	private final BlockRing blocks = new BlockRing(!PassTimings.ringPerProgram());
+
 	private GpuBuffer quad;
 	private CompiledRenderPipeline head;
 	private int blockBytes;
@@ -521,6 +531,11 @@ public final class PackChain {
 			}
 		}
 		this.targets.storageTargets(stored);
+	}
+
+	/** Where the geometry programs of this chain keep their uniform blocks. */
+	BlockRing blocks() {
+		return this.blocks;
 	}
 
 	/**
@@ -1275,6 +1290,11 @@ public final class PackChain {
 			this.block.rotate();
 		}
 
+		// The ring the programs share turns here as well, once, and by the chain: a program's own
+		// rotate below turns a ring of its own and drops what the program set on a pass. Turned from
+		// the programs' rotates it would turn once for every one of them, and not at all on a frame
+		// that reaches none.
+		this.blocks.rotate();
 		this.terrain.rotate();
 		// Only families the worker has finished translating. drawable() is true once the
 		// composites and the terrain are compiled, which is earlier than leftover families
@@ -3177,6 +3197,9 @@ public final class PackChain {
 			this.families.forEach(FamilyDraw::release);
 		}
 
+		// After every program has given its range back: one handed back to a ring that is gone could
+		// not be told from a range of the next ring.
+		this.blocks.close();
 		if (this.block != null) {
 			this.block.close();
 			this.block = null;

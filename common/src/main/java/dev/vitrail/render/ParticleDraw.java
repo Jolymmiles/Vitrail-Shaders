@@ -586,7 +586,8 @@ public final class ParticleDraw extends FamilyDraw {
 				// and out of this loop that took the translucent half down with a failed opaque one.
 				try {
 					this.programs.put(element.element(), ParticleProgram.of(one, element, this.values,
-							this.load, writes, this.chainTargets, this.targets, this.chainRuns));
+							this.load, writes, this.chainTargets, this.targets, this.owner.blocks(),
+							this.chainRuns));
 				} catch (RuntimeException e) {
 					Vitrail.logger().error("Could not build the {} particle program of {}, so the game "
 							+ "keeps its own shader for that half",

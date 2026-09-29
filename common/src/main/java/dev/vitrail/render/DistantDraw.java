@@ -1135,7 +1135,7 @@ public final class DistantDraw extends FamilyDraw {
 				try {
 					this.programs.put(element.element(), DistantProgram.of(one, element, this.carried,
 							this.values, this.load, writes, this.chainTargets, this.targets,
-							this.chainRuns));
+							this.owner.blocks(), this.chainRuns));
 				} catch (RuntimeException e) {
 					shadowUnbuilt |= element.shadow();
 					pictureUnbuilt |= !element.shadow();
@@ -1532,7 +1532,7 @@ public final class DistantDraw extends FamilyDraw {
 
 		/** How far apart two slots stand, which is the device's answer and not a number of ours. */
 		private static int slotBytes(GpuDevice device) {
-			return Mth.roundToward(BLOCK_BYTES,
+			return RingLayout.slotBytes(BLOCK_BYTES,
 					device.getDeviceInfo().limits().minUniformOffsetAlignment());
 		}
 
@@ -1595,7 +1595,7 @@ public final class DistantDraw extends FamilyDraw {
 
 		/** How wide one slot has to be, which is the device's answer and not a number of ours. */
 		private static int slotBytes(GpuDevice device) {
-			return Mth.roundToward(SEED_BLOCK_BYTES,
+			return RingLayout.slotBytes(SEED_BLOCK_BYTES,
 					device.getDeviceInfo().limits().minUniformOffsetAlignment());
 		}
 

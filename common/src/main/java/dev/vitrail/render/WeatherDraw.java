@@ -465,7 +465,7 @@ public final class WeatherDraw extends FamilyDraw {
 					.filter(element -> loaded.containsKey(element.element()))
 					.forEach(element -> this.programs.put(element.element(), WeatherProgram.of(
 							loaded.get(element.element()), element, this.values, this.load, writes,
-							this.chainTargets, this.targets, this.chainRuns)));
+							this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns)));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the weather program of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for the rain "

@@ -121,6 +121,18 @@ final class FrameTally {
 
 	private long rotations;
 
+	private long sharedPrograms;
+	private long ownPrograms;
+
+	/**
+	 * Where the ring the geometry programs share stands, as the ring last said. A reading and not a
+	 * count, so {@link #clear} leaves it: the window empties, the ring does not.
+	 */
+	private int ringCapacity;
+	private int ringClaimed;
+	private int ringPeak;
+	private int ringPrograms;
+
 	private long farCameraSections;
 	private long farCameraPasses;
 	private long farShadowSections;
@@ -243,6 +255,32 @@ final class FrameTally {
 		this.rotations++;
 	}
 
+	/**
+	 * A geometry program drawn, once for each frame it is, and whether its block stands in the ring
+	 * the programs share or in one of its own. The block says whether this is its first time in the
+	 * frame.
+	 */
+	void blockPlaced(FrameCensus.Block block, boolean shared) {
+		if (block.placedFrame == this.frameNumber) {
+			return;
+		}
+
+		block.placedFrame = this.frameNumber;
+		if (shared) {
+			this.sharedPrograms++;
+		} else {
+			this.ownPrograms++;
+		}
+	}
+
+	/** Where the shared ring stands: what it can hold, what stands in it, and how many programs. */
+	void blockRing(int capacity, int claimed, int peak, int programs) {
+		this.ringCapacity = capacity;
+		this.ringClaimed = claimed;
+		this.ringPeak = peak;
+		this.ringPrograms = programs;
+	}
+
 	/** One section of the far terrain given a uniform of its own inside a pass. */
 	void farSection(boolean shadow) {
 		if (shadow) {
@@ -338,6 +376,8 @@ final class FrameTally {
 		this.chainWrites = 0;
 		this.farWrites = 0;
 		this.rotations = 0;
+		this.sharedPrograms = 0;
+		this.ownPrograms = 0;
 		this.farCameraSections = 0;
 		this.farCameraPasses = 0;
 		this.farShadowSections = 0;
@@ -407,6 +447,14 @@ final class FrameTally {
 				per(this.farWrites, frames)));
 		lines.add(String.format(Locale.ROOT, "  %s ring rotations, each one a fence created",
 				per(this.rotations, frames)));
+		lines.add(String.format(Locale.ROOT, "  %s drawn geometry programs keep their block in the ring "
+						+ "they share, %s in a ring of their own (0 would be ideal)",
+				per(this.sharedPrograms, frames), per(this.ownPrograms, frames)));
+		if (this.ringCapacity > 0) {
+			lines.add(String.format(Locale.ROOT, "  the shared ring holds %d blocks in %d of its %d "
+							+ "bytes, %d bytes at most",
+					this.ringPrograms, this.ringClaimed, this.ringCapacity, this.ringPeak));
+		}
 		if (this.farCameraPasses + this.farShadowPasses > 0) {
 			lines.add(String.format(Locale.ROOT, "  far terrain section uniforms, one descriptor push "
 							+ "each: %s over %s camera passes, %s over %s shadow passes",

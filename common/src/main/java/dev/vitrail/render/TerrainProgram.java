@@ -64,7 +64,7 @@ public final class TerrainProgram extends FamilyProgram {
 
 	private TerrainProgram(TerrainPass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
-			boolean chainRuns) {
+			BlockRing blocks, boolean chainRuns) {
 		super(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				pass.name().toLowerCase(Locale.ROOT), NAMESPACE, SodiumVertex.ANSWERED,
 				pass.shadow(),
@@ -88,7 +88,7 @@ public final class TerrainProgram extends FamilyProgram {
 				null,
 				// Drawn in the game's own volume, so the dh matrices answer the game's.
 				false),
-				loaded, values, load, format, writes, targets, chainRuns));
+				loaded, values, load, format, writes, targets, blocks, chainRuns));
 	}
 
 	/**
@@ -164,7 +164,8 @@ public final class TerrainProgram extends FamilyProgram {
 	 */
 	static Map<TerrainPass, TerrainProgram> build(Map<TerrainPass, PackProgram.Loaded> loaded,
 			PackValues values, int load, VertexFormat format, ChainPlan plan,
-			TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
+			TargetPlan chainTargets, boolean chainRuns, ColorTargets targets,
+			BlockRing blocks) {
 		try {
 			Map<TerrainPass, TerrainProgram> programs = new EnumMap<>(TerrainPass.class);
 			loaded.forEach((pass, one) -> {
@@ -198,7 +199,7 @@ public final class TerrainProgram extends FamilyProgram {
 						.map(ChainPlan.Pass::attachments)
 						.orElse(List.of());
 				programs.put(pass, new TerrainProgram(pass, bound, values, load, format, writes,
-						targets, chainRuns));
+						targets, blocks, chainRuns));
 			});
 
 			return programs;

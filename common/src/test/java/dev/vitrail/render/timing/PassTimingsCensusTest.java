@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import dev.vitrail.Vitrail;
 
@@ -548,6 +549,16 @@ class PassTimingsCensusTest {
 		for (String line : this.capture.lines) {
 			assertFalse(SPREAD.matcher(line).matches(), "only 50 intervals since the load: " + line);
 		}
+	}
+
+	// -- the switches ------------------------------------------------------------------------
+
+	@Test
+	void everyGeometryProgramSharesTheRingUnlessTheSwitchIsSet() {
+		assumeFalse(Boolean.getBoolean("vitrail.ringPerProgram"),
+				"the switch is on for this run, which is what is being tested");
+
+		assertFalse(PassTimings.ringPerProgram());
 	}
 
 	// -- the appender itself -----------------------------------------------------------------

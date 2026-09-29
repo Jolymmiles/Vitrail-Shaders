@@ -64,13 +64,15 @@ public final class FrameCensus {
 	}
 
 	/**
-	 * One program's uniform block, and the frame it was last written in, so that the second write of
-	 * a frame can be told from the first. One per program, made with it.
+	 * One program's uniform block, the frame it was last written in, so that the second write of a
+	 * frame can be told from the first, and the frame it was last counted as drawn in. One per
+	 * program, made with it.
 	 */
 	public static final class Block {
 
 		long frame = -1;
 		int writes;
+		long placedFrame = -1;
 	}
 
 	/**
@@ -220,6 +222,35 @@ public final class FrameCensus {
 	public static void rotated() {
 		if (ENABLED) {
 			TALLY.rotated();
+		}
+	}
+
+	/**
+	 * A geometry program drawn, from every prepare of it, counted once for each frame. Says which of
+	 * the two places its uniform block stands in: the ring every program of the chain shares, or one
+	 * of its own that costs a fence a frame.
+	 *
+	 * @param block  the program's, made with it
+	 * @param shared whether the block stands in the shared ring
+	 */
+	public static void blockPlaced(Block block, boolean shared) {
+		if (ENABLED) {
+			TALLY.blockPlaced(block, shared);
+		}
+	}
+
+	/**
+	 * Where the shared ring of the geometry programs' blocks stands, said whenever a program takes a
+	 * range of it or gives one back, and with a capacity of nought when there is none.
+	 *
+	 * @param capacity how many bytes one buffer of the ring holds for blocks
+	 * @param claimed  how many of them stand claimed
+	 * @param peak     the most that stood claimed at once
+	 * @param programs how many programs hold a range
+	 */
+	public static void blockRing(int capacity, int claimed, int peak, int programs) {
+		if (ENABLED) {
+			TALLY.blockRing(capacity, claimed, peak, programs);
 		}
 	}
 

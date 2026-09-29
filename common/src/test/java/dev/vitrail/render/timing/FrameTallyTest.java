@@ -133,6 +133,55 @@ class FrameTallyTest {
 	}
 
 	@Test
+	void aProgramDrawnInSeveralRunsIsPlacedOnceAFrame() {
+		FrameCensus.Block block = new FrameCensus.Block();
+
+		this.tally.blockPlaced(block, true);
+		this.tally.blockPlaced(block, true);
+		this.tally.blockPlaced(block, true);
+		this.tally.endFrame();
+		this.tally.blockPlaced(block, true);
+		this.tally.endFrame();
+
+		// Two frames, and the program is one of the drawn ones in each.
+		assertTrue(this.tally.lines(1.0).stream().anyMatch(line -> line.startsWith("  1.0 drawn geometry "
+				+ "programs keep their block in the ring they share, 0.0 in a ring of their own")),
+				this.tally.lines(1.0).toString());
+	}
+
+	@Test
+	void programsOnTheirOwnRingAreCountedApartFromTheOnesOnTheSharedRing() {
+		this.tally.blockPlaced(new FrameCensus.Block(), true);
+		this.tally.blockPlaced(new FrameCensus.Block(), true);
+		this.tally.blockPlaced(new FrameCensus.Block(), false);
+		this.tally.blockPlaced(new FrameCensus.Block(), false);
+		this.tally.endFrame();
+
+		assertTrue(this.tally.lines(1.0).stream().anyMatch(line -> line.startsWith("  2.0 drawn geometry "
+				+ "programs keep their block in the ring they share, 2.0 in a ring of their own")),
+				this.tally.lines(1.0).toString());
+	}
+
+	@Test
+	void theSharedRingSaysWhereItStandsOnlyOnceItHasACapacity() {
+		this.tally.endFrame();
+
+		assertTrue(this.tally.lines(1.0).stream().noneMatch(line -> line.startsWith("  the shared ring")));
+
+		this.tally.blockRing(1 << 20, 4096, 8192, 3);
+		this.tally.clear();
+		this.tally.endFrame();
+
+		// A window empties and the ring does not: what it says is where it stands, not a count.
+		assertTrue(this.tally.lines(1.0).contains("  the shared ring holds 3 blocks in 4096 of its "
+				+ "1048576 bytes, 8192 bytes at most"), this.tally.lines(1.0).toString());
+
+		this.tally.blockRing(0, 0, 0, 0);
+
+		assertTrue(this.tally.lines(1.0).stream().noneMatch(line -> line.startsWith("  the shared ring")));
+	}
+
+	@Test
 	void aNewFrameStartsEveryProgramOver() {
 		FrameCensus.Block first = new FrameCensus.Block();
 		FrameCensus.Block second = new FrameCensus.Block();
@@ -470,12 +519,20 @@ class FrameTallyTest {
 		// One program written twice in the first frame and once in the second, another once in the
 		// first: four writes over three program-frames, one of them a rewrite.
 		FrameCensus.Block twice = new FrameCensus.Block();
+		FrameCensus.Block other = new FrameCensus.Block();
+		FrameCensus.Block alone = new FrameCensus.Block();
+		this.tally.blockPlaced(twice, true);
 		this.tally.geometryWritten(twice);
+		this.tally.blockPlaced(twice, true);
 		this.tally.geometryWritten(twice);
-		this.tally.geometryWritten(new FrameCensus.Block());
+		this.tally.blockPlaced(other, true);
+		this.tally.geometryWritten(other);
+		this.tally.blockPlaced(alone, false);
 		this.tally.endFrame();
+		this.tally.blockPlaced(twice, true);
 		this.tally.geometryWritten(twice);
 		this.tally.endFrame();
+		this.tally.blockRing(1 << 20, 8192, 12288, 5);
 
 		assertEquals(List.of(
 				"Frame census over 10.0 s, 2 frames, an average frame:",
@@ -495,6 +552,9 @@ class FrameTallyTest {
 				"  2.0 geometry block writes over 1.5 programs, 0.5 of them written more than once "
 						+ "(0 would be ideal), 1.0 chain block writes, 2.0 far terrain block writes",
 				"  3.0 ring rotations, each one a fence created",
+				"  1.5 drawn geometry programs keep their block in the ring they share, 0.5 in a "
+						+ "ring of their own (0 would be ideal)",
+				"  the shared ring holds 5 blocks in 8192 of its 1048576 bytes, 12288 bytes at most",
 				"  far terrain section uniforms, one descriptor push each: 10.0 over 1.0 camera "
 						+ "passes, 5.0 over 1.0 shadow passes",
 				"  3.0 PackChain.ready() calls, 2.0 of them reaching the targets' prepare and 1.0 "

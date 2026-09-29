@@ -281,9 +281,11 @@ public final class CloudDraw extends FamilyDraw {
 			// answer is a compile: a module is only built when a pipeline is first prepared, so the
 			// setting nobody plays on costs one Java object and nothing on the device.
 			this.programs.put(Boolean.TRUE, CloudProgram.of(loaded.get(), true, this.values, this.load,
-					writes, this.chainTargets, this.targets, this.chainRuns));
+					writes, this.chainTargets, this.targets, this.owner.blocks(),
+					this.chainRuns));
 			this.programs.put(Boolean.FALSE, CloudProgram.of(loaded.get(), false, this.values,
-					this.load, writes, this.chainTargets, this.targets, this.chainRuns));
+					this.load, writes, this.chainTargets, this.targets, this.owner.blocks(),
+					this.chainRuns));
 
 			if (writes.isEmpty()) {
 				Vitrail.logger().info("{} has nowhere of its own for its clouds, so they keep the "

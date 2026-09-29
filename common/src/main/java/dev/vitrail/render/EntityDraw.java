@@ -2584,7 +2584,7 @@ public final class EntityDraw extends FamilyDraw {
 					built.put(element.element(), EntityProgram.of(one, element, this.values,
 							this.load, byFile.get(new Half(servedBy(one), element.afterStage(),
 									element.shadow())),
-							this.chainTargets, this.targets, this.chainRuns));
+							this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns));
 				}
 			}
 		} catch (RuntimeException e) {

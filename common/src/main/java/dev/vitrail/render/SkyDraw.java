@@ -516,7 +516,7 @@ public final class SkyDraw extends FamilyDraw {
 							.forEach(element -> built.put(element.label(), SkyProgram.of(
 									loaded.get(element.element()), element, this.values, this.load,
 									byProgram.getOrDefault(element.program(), List.of()),
-									this.chainTargets, this.targets, this.chainRuns)));
+									this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns)));
 				} catch (RuntimeException e) {
 					built.values().forEach(SkyProgram::release);
 

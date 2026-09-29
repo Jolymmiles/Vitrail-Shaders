@@ -128,6 +128,13 @@ public final class PassTimings {
 	/** Negative until the property and the file have been read, which needs the game directory. */
 	private static int keepRedone = -1;
 
+	private static final boolean RING_PER_PROGRAM_PROPERTY = Boolean.getBoolean("vitrail.ringPerProgram");
+
+	private static final String RING_PER_PROGRAM_ARM_FILE = "ring-per-program";
+
+	/** Negative until the property and the file have been read, like {@link #keepRedone}. */
+	private static int ringPerProgram = -1;
+
 	private static final boolean FIRST_DRAW_PROPERTY =
 			Boolean.getBoolean("vitrail.keepFirstDrawCompiles");
 
@@ -392,6 +399,7 @@ public final class PassTimings {
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
 		keepRedone = -1;
+		ringPerProgram = -1;
 		keepFirstDraw = -1;
 		censusOpenLabel = null;
 		censusLabels.clear();
@@ -435,6 +443,26 @@ public final class PassTimings {
 		}
 
 		return keepRedone == 1;
+	}
+
+	/**
+	 * Whether every geometry program keeps its uniform block in a ring of its own, instead of the one
+	 * ring the chain gives all of them. The two rings hold the same bytes and draw the same frame; the
+	 * difference is the fences a frame makes, one for each program against one for all, and that is
+	 * what this is for measuring on one jar.
+	 * <p>
+	 * Armed by {@code -Dvitrail.ringPerProgram=true} or by {@code vitrail/ring-per-program} beside the
+	 * pack, for the reason {@link #keepRedoneWork} gives, and settled once per pack load the same way.
+	 * Off otherwise, so a player is on the shared ring.
+	 */
+	public static boolean ringPerProgram() {
+		if (ringPerProgram < 0) {
+			ringPerProgram = RING_PER_PROGRAM_PROPERTY || armFile(RING_PER_PROGRAM_ARM_FILE) != null
+					? 1
+					: 0;
+		}
+
+		return ringPerProgram == 1;
 	}
 
 	/**
