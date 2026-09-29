@@ -34,11 +34,20 @@ the texture. That is the reference's key too, and the reason is that a render ty
 texture, so there are as many of them as there are mobs on screen, while the pipelines are a fixed
 table the game builds once.
 
-Three things do belong to the draw rather than to the pass, and are set again for every draw of a
+Three things do belong to the draw rather than to the pass, and are read again for every draw of a
 run: the image, since one pipeline draws every mob on screen and each of them brings its own skin;
 the scissor, both ways round, since a rectangle left standing from the previous draw would cut
 whatever comes next down to it; and the game's own per-draw transform block, which is what a pack
 reads as `gl_TextureMatrix[0]` and which two breezes on screen carry two of inside one run.
+
+The pipeline is the run's, bound at its first draw and never again inside it. The scissor and the
+transform block are put on the pass only when they differ from what the run last gave it, since the
+pass holds both until it is told another and both games mark the descriptors dirty on every set,
+equal or not. The first draw of a run gives the pipeline, the scissor and the transform block
+whatever the pass stood on, so a held pass's leftover state is never a draw's to inherit;
+`SentState` is where that is decided, and the game's own draws and every other family's are not
+counted in it, which is why a run forgets it at both ends. `vitrail/keep-redone-work` sends the
+three at every draw, for measuring the difference.
 
 One family never reaches this door. The particle renderer implements the feature interface directly
 instead of extending the class that owns `executeGroup`, so it has an `executeGroup` of its own,

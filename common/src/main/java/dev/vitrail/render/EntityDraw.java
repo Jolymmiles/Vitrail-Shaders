@@ -13,9 +13,11 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -1588,6 +1590,13 @@ public final class EntityDraw extends FamilyDraw {
 	private EntityProgram drawing;
 	private RenderPipeline bound;
 
+	/**
+	 * What the run in progress has told {@link #open}: the pipeline, the scissor and the game's
+	 * transforms. Emptied when a run opens a pass and when it ends, see {@link SentState} for why
+	 * those are the two moments.
+	 */
+	private final SentState sent = new SentState();
+
 	EntityDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
 			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, boolean seeded,
 			ColorTargets targets) {
@@ -2018,18 +2027,35 @@ public final class EntityDraw extends FamilyDraw {
 						: texture.textureView(),
 				texture == null ? null : texture.sampler());
 
-		GraphicsApi.setPipeline(this.open, this.bound);
-		scissor(prepared.scissorState());
+		// Sent at the first draw of a run and again only where it moved. The pipeline is the run's and
+		// never changes inside it, and the pass holds it, the scissor and the transforms below until
+		// it is told another, so saying one again costs a bind, a command or a descriptor push to
+		// arrive where the pass already stands. keepRedoneWork sends all three at every draw, so that
+		// one jar measures the difference.
+		boolean keep = PassTimings.keepRedoneWork();
+		if (this.sent.pipeline(this.bound) || keep) {
+			GraphicsApi.setPipeline(this.open, this.bound);
+		}
+
+		ScissorState rectangle = prepared.scissorState();
+		if (this.sent.scissor(rectangle.enabled(), rectangle.x(), rectangle.y(), rectangle.width(),
+				rectangle.height()) || keep) {
+			scissor(rectangle);
+		}
+
 		program.bind(this.open);
 
-		// The game's own transforms, for the same reason the image above is set again per draw and
-		// with a sharper one: what a pack reads as gl_TextureMatrix[0] is the matrix its render type
+		// The game's own transforms, for the same reason the image above is asked for at every draw
+		// and with a sharper one: what a pack reads as gl_TextureMatrix[0] is the matrix its render type
 		// was PREPARED with, and two breezes on screen carry two of them inside one run. Bound from
 		// the slice rather than rebuilt, which is what Iris does as well: it declares the same block
 		// (transform/transformer/VanillaTransformer.java:52-57) and registers the game's buffer under
 		// this very name (pipeline/programs/ExtendedShader.java:107).
 		if (program.readsGameTransforms()) {
-			this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, prepared.dynamicTransforms());
+			GpuBufferSlice transforms = prepared.dynamicTransforms();
+			if (this.sent.transforms(transforms) || keep) {
+				this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, transforms);
+			}
 		}
 		this.open.setVertexBuffer(0, info.vertexBuffer().slice());
 		this.open.setIndexBuffer(info.indexBuffer(), info.indexType());
@@ -2145,6 +2171,9 @@ public final class EntityDraw extends FamilyDraw {
 				: GeometryHold.open(encoder, descriptor);
 		this.drawing = program;
 		this.bound = pipeline;
+		// Whatever the pass stood on before this run is not this run's to know: a hold hands the same
+		// pass to the next family, and the game's own draws are adopted into it.
+		this.sent.forget();
 
 		return true;
 	}
@@ -2267,13 +2296,14 @@ public final class EntityDraw extends FamilyDraw {
 		this.open = null;
 		this.drawing = null;
 		this.bound = null;
+		this.sent.forget();
 		if (pass != null) {
 			pass.close();
 		}
 	}
 
 	/**
-	 * The scissor the game set for this draw, said again for every draw of a run.
+	 * The scissor the game set for this draw, put on the pass.
 	 * <p>
 	 * Both ways round and not only the enabling one: the state belongs to the draw and the pass
 	 * outlives it, so a rectangle left standing from the draw before would cut whatever comes next
