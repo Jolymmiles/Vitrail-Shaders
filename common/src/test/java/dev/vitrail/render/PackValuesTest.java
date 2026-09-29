@@ -10,10 +10,13 @@ import dev.vitrail.pack.source.ExpansionStats;
 import dev.vitrail.pack.source.IncludeExpander.ExpandedUnit;
 import dev.vitrail.pack.source.ShadowCullState;
 import dev.vitrail.pack.target.PackDirectives;
+import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.uniform.UniformGaps;
+import dev.vitrail.uniform.expr.CustomUniforms;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +26,7 @@ import java.util.Set;
 
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -364,5 +368,56 @@ class PackValuesTest {
 		assertEquals(Map.of(), PackValues.standIns(List.of("other")), "a name answered properly is not listed");
 		assertThrows(UnsupportedOperationException.class,
 				() -> PackValues.standIns(List.of(FIRST_STAND_IN)).put("x", List.of()));
+	}
+
+	// -- the version of the frame's values -------------------------------------------------------
+
+	/**
+	 * Values a frame can be advanced over: no pack was read, so the custom uniforms a load declares
+	 * are the none it declares when a pack has no line for one.
+	 */
+	private static PackValues advanceable() {
+		PackValues values = values();
+		try {
+			Field customs = PackValues.class.getDeclaredField("customs");
+			customs.setAccessible(true);
+			customs.set(values, CustomUniforms.builder().build(UniformCatalog.engine(), new ArrayList<>()));
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("the custom uniforms could not be set for the test", e);
+		}
+
+		return values;
+	}
+
+	@Test
+	void theVersionMovesWithTheFrameAndWithALeftWorldAndWithNothingElse() {
+		PackValues values = advanceable();
+		long first = values.version();
+
+		// What a pass sets beside its block is compared by whoever writes the block, and is no
+		// reason for the frame to have changed.
+		values.passAlphaTest(0.5F);
+		values.passColour(new Vector4f(1, 0, 0, 1));
+		values.modelView(new Matrix4f(), null);
+		values.projection(new Matrix4f());
+		assertEquals(first, values.version());
+		assertEquals(first, values.version(), "asking does not move it");
+
+		values.advance();
+		long advanced = values.version();
+		assertTrue(advanced != first, "a frame advanced is another frame");
+
+		values.leaveWorld();
+		assertTrue(values.version() != advanced, "a world left is another frame");
+	}
+
+	@Test
+	void theVersionOfTwoAdvancesIsNotTheVersionOfEither() {
+		PackValues values = advanceable();
+		values.advance();
+		long once = values.version();
+		values.advance();
+
+		assertTrue(values.version() != once);
 	}
 }

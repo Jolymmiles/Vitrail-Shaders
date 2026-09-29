@@ -475,6 +475,16 @@ final class GeometryProgram {
 	private GpuBufferSlice blockSent;
 
 	/**
+	 * What the bytes standing in the ring's current buffer were written from, and how many times the
+	 * ring has turned, which is what a second write of a frame is compared against. See
+	 * {@link BlockStamp}. The turn is counted here and not in the ring because the ring is dropped
+	 * and made again with the program's block, and the stamp goes with it.
+	 */
+	private final BlockStamp written = new BlockStamp();
+
+	private long turn;
+
+	/**
 	 * The device's one-texel constants, for a sprite the resource pack ships nothing for and for
 	 * every family drawn with no atlas at all. Shared across every program and surviving every
 	 * release, which is what keeps a rebuild from paying their clears again: see the class.
@@ -1061,6 +1071,7 @@ final class GeometryProgram {
 		if (this.block == null) {
 			this.block = new MappableRingBuffer(this.blockLabel,
 					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, blockBytes());
+			this.written.clear();
 		}
 
 		// After the constants and never before them: what a name with no image is answered with is a
@@ -1908,6 +1919,7 @@ final class GeometryProgram {
 		}
 
 		this.blockSent = null;
+		this.turn++;
 		if (this.block != null) {
 			FrameCensus.rotated();
 			this.block.rotate();
@@ -1945,6 +1957,7 @@ final class GeometryProgram {
 		this.blockSlice = null;
 		this.blockSliceOf = null;
 		this.blockSent = null;
+		this.written.clear();
 
 		// The reference is dropped, the textures are not: they are the device's, not this
 		// program's, and re-clearing them once per program was about ninety of the standalone
@@ -2040,9 +2053,24 @@ final class GeometryProgram {
 		return this.blockSlice;
 	}
 
+	/**
+	 * Puts this program's block in the ring's current buffer, unless the bytes standing there are the
+	 * ones this write would put.
+	 * <p>
+	 * A program is prepared once for each run of its draws and the ring turns once a frame, so a
+	 * program with three runs in a frame writes into one buffer three times. {@link BlockStamp} says
+	 * which of those writes put back what was there: the same turn, the same version of the frame's
+	 * values, and the same four values handed in by the pass. A pass that hands in another set, the
+	 * hand after a mob or a second sky element, writes again and so does every first write of a
+	 * frame.
+	 * <p>
+	 * <strong>The setters run either way.</strong> They put the pass's values in a state that every
+	 * program shares, and the alpha reference is left standing for the chain's composites to read,
+	 * {@link dev.vitrail.uniform.ViewSource#passAlphaTest} saying which one, so what the chain reads
+	 * is the last program prepared's whether or not that one wrote. {@code keepRedoneWork} writes
+	 * every block.
+	 */
 	private void writeBlock() {
-		FrameCensus.geometryBlockWritten(this.blockWrites);
-
 		// Before the block and never once for the run: the two conventions alternate inside one
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
 		// stage does with its clip depth on the way out comes from this pair.
@@ -2053,11 +2081,21 @@ final class GeometryProgram {
 		this.values.passAlphaTest(this.loaded.alphaTest().reference());
 		this.values.renderStage(this.pass.stage());
 
+		long version = this.values.version();
+		if (!PassTimings.keepRedoneWork() && this.written.holds(this.turn, version, this.modelView,
+				this.bob, this.projection, this.passColour)) {
+			return;
+		}
+
+		FrameCensus.geometryBlockWritten(this.blockWrites);
 		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 			ByteBuffer data = view.data();
 			data.position(0);
 			this.uniforms.write(Std140Builder.intoBuffer(data), this.values.world());
 		}
+
+		this.written.stamp(this.turn, version, this.modelView, this.bob, this.projection,
+				this.passColour);
 	}
 
 	private void ensureConstants(GpuDevice device) {

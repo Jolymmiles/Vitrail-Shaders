@@ -368,9 +368,15 @@ descriptors dirty on every set, so a draw whose bind set an image pushes, and on
 nothing pushes only if something else on it did. Uniform block writes are split into the geometry
 programs', the chain's and the far terrain's, and the geometry line says how many programs wrote
 their block more than once in a frame, which is nought when the block is written once for the run of
-draws it serves. Every ring turned by this engine is a fence created and is counted as one. The
-census costs one read of a static final per hook while the switch is off, and allocates nothing
-while it is on. It says how often, not how dear: read it beside the frame rate.
+draws it serves. A geometry program's block is written once for each turn of its ring and version of
+the frame's values, and again only where its pass hands in another matrix or colour, as the hand and
+the sky's elements do, so a program still counted on that line was drawn under two different sets of
+them, or straddles a turn of its ring, and did not write the same bytes twice. Every ring turned by
+this engine is a fence created and is counted as one. The census costs one read of a static final
+per hook while the switch is off, and allocates nothing while it is on. It says how often, not how
+dear: read it beside the frame rate.
+`vitrail/keep-redone-work` puts the redone binds and block writes back, so that one jar gives both
+readings.
 
 **How much of a load's module work is one text compiled twice is said once a family, with what the
 compiler did about it beside it.** Under the same switch, the log carries a
