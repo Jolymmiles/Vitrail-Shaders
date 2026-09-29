@@ -306,7 +306,10 @@ public final class ExprFunctions {
 				// OptiFine's round is Java's: Math.round of a float, widened back to a float
 				// (FunctionType.eval, case ROUND). So a half goes up, towards positive infinity:
 				// round(1.5) is 2 and round(-1.5) is -1, where GLSL leaves the direction of a half
-				// to the driver. The int form is there for an int declaration, as floor's is.
+				// to the driver. The int form is there for an int declaration, as floor's is. Unlike
+				// floor and ceil above it has no vector form: OptiFine documents round(x) for a
+				// scalar and lists no vector function but the vec2, vec3 and vec4 constructors, so
+				// there is none to follow.
 				// Iris leaves both lines commented out (parsing/IrisFunctions.java:274-277) and
 				// resolves no call of round at all, so a declaration that uses it is dropped there
 				// with a "No such function" and its program reads nought. It answers here, as it
