@@ -21,8 +21,11 @@ import org.slf4j.LoggerFactory;
 /**
  * What the add-ons registered, kind by kind, and the guard every call into them goes through.
  * <p>
- * Filled once from the loader's client entry point and read on the render thread from then on, so
- * the lists are built before anything reads them and never change after; nothing here is locked.
+ * Filled once from the loader's client entry point, before any thread that reads them exists, and
+ * never changed after, so the lists need no lock. Most calls come from the render thread, but a
+ * source patcher is also called from the pack-load workers, which is why the one field that does
+ * change, an entry's cut-off flag, is volatile: a piece cut off on one thread must be skipped on
+ * the others.
  * <p>
  * An add-on is taken whole or not at all. Its pieces are gathered while its
  * {@link VitrailAddon#register} runs and joined to the lists only when it returns, so an add-on that
@@ -52,7 +55,7 @@ public final class AddonRegistry {
 
 		private final String addon;
 		private final T piece;
-		private boolean cutOff;
+		private volatile boolean cutOff;
 
 		Entry(String addon, T piece) {
 			this.addon = addon;
