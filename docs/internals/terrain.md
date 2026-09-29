@@ -163,7 +163,9 @@ and one that never wrote `separateAo` gets one colour instead of two. So a verte
 twenty-four bytes to forty, twenty of which are the renderer's own. The union and never one
 program's own answer, because of the pairing rule at the top of this page: every one of the six
 declares the whole format whether or not it reads all of it, and one that declared less would move
-the location of every element after the gap without a word.
+the location of every element after the gap without a word. An add-on can add elements to that union
+whether or not the pack reads them, and
+[the add-ons page](addons.md#attributes-an-add-on-forces-into-the-vertex) is where that is counted in.
 
 Two consequences follow from the format now depending on the pack rather than on a switch. **A pack
 swap rebuilds the world whenever that answer moves**, through the same door the terrain switch uses,

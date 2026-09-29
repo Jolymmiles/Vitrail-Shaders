@@ -136,3 +136,47 @@ the whole opening, which is then as good as any and is held as any is.
 ## Far terrain
 
 ## Terrain meshes
+
+An add-on that builds something out of the terrain, an acceleration structure for a ray tracer being
+the case this was written for, needs two things of Sodium: the geometry it meshed, and a few
+elements in every vertex that the compact one does not carry. Both are `TerrainMeshListener`, and
+they are two mechanisms that meet in the layout.
+
+### Attributes an add-on forces into the vertex
+
+`attributes()` is a set of `TerrainAttribute`, the four names a pack reads (`mc_Entity`,
+`mc_midTexCoord`, `at_midBlock`, and `at_tangent` with the normal). The union over every listener is
+what the mesh carries beside what the pack reads. `TerrainAttributes.forced` reads it once and keeps
+it, because two places answer with it and have to agree for the whole session: the pack's chunk
+programs are translated against a mesh that includes it, and the mesh is built from it. It is read
+where the first of those two asks, which is after every add-on has registered: the loader registers
+them in its client entry point, before the pack is read and long before Sodium builds its renderer.
+An empty registry is not kept, so a read that came too early cannot fix the answer at nothing.
+
+**It is counted in twice, and only the two together are consistent.** The vertex stage of a
+translated program declares exactly the elements of the mesh it will be drawn against, and
+`TerrainProgram.carries` puts a pack away whose declared list differs from the format the renderer
+bound. A forced element the programs did not declare would therefore not add a word to the mesh: it
+would put the whole pack away, and where it sits before an element the pack reads it would first
+shift that element's location in silence, the failure [vertex inputs are matched by
+name](terrain.md#vertex-inputs-are-matched-by-name-and-one-direction-is-silent) describes. So the
+forced elements go into `PackProgram.loadTerrain` and are unioned with what the six programs read,
+and all six declare them; and `TerrainMesh.settle` unions the same set into what the pack published,
+which builds the format and is the only thing that does where no pack draws the terrain.
+`TerrainLayout.withForced` is where that second union is written. The translation cache is keyed on
+the bound elements, so a program translated without a forced element and one translated with it
+never share an entry.
+
+Where no pack's terrain program is drawing, the mesh is Sodium's own four elements and the forced
+ones, and Sodium's own chunk shader draws through it as it draws through any extended format: it
+declares the four it knows and the new elements come last. `BLOCK_ID` is then every block's unmapped
+value, there being no `block.properties`, with the fluid bit still set on a fluid's quads. The
+stride changes with the set and the world is built again, as it is for a pack that reads another
+element: the format is taken at the head of `initRenderer` and nowhere else, and `TerrainDraw` asks
+for a rebuild whenever the list the programs declare moves.
+
+A forced element that no program reads is declared by all six and read by none, the standing an
+element one of the six leaves to the others already has. Whether the compiled module keeps such an
+input, on which the location of everything after it depends, is what the off-game harness measures
+for the elements the corpus leaves unread. It has not been measured for one that every program
+leaves unread.

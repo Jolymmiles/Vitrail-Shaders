@@ -1,5 +1,6 @@
 package dev.vitrail.sodium;
 
+import dev.vitrail.addon.TerrainAttributes;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.TangentFrame;
 import dev.vitrail.render.BlockStateIds;
@@ -46,7 +47,8 @@ import java.util.List;
  * the pack's six chunk programs far enough to know which names they read, and hands that list here;
  * a vertex is then anything from twenty-four bytes to forty. The ones left out close the gap
  * rather than leaving a hole, so an element's offset is where it lands in this pack's mesh and not
- * where it lands in {@link Extra}.
+ * where it lands in {@link Extra}. What an add-on asks every vertex to carry counts as read: it is
+ * in that list, and where no pack is drawing it is added to Sodium's own four here.
  * <p>
  * <strong>The new elements have to stay last, and after Sodium's four.</strong> An element the shader
  * does not declare shifts the location of every element AFTER it, in silence, because the pipeline
@@ -155,7 +157,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	private final int stride;
 
 	/** What {@link #offsets} holds for an element the pack was not asked to carry. */
-	private static final int ABSENT = -1;
+	private static final int ABSENT = TerrainLayout.ABSENT;
 
 	private TerrainMesh(List<String> carried) {
 		if (this.innerStride % Integer.BYTES != 0) {
@@ -175,14 +177,22 @@ public final class TerrainMesh implements ChunkVertexType {
 			}
 		}
 
+		// And the other half of it: the offsets below are counted by TerrainLayout, in the order it
+		// keeps, so a list here that read differently would put every word one element off.
+		if (!TerrainLayout.APPENDED.equals(Arrays.stream(Extra.values()).map(Extra::attribute).toList())) {
+			throw new IllegalStateException("TerrainLayout counts the appended elements as "
+					+ TerrainLayout.APPENDED + " and this engine writes them as "
+					+ Arrays.stream(Extra.values()).map(Extra::attribute).toList());
+		}
+
 		this.carried = List.copyOf(carried);
 		this.extras = Arrays.stream(Extra.values())
 				.filter(extra -> this.carried.contains(extra.attribute()))
 				.toList();
 		this.offsets = new int[Extra.values().length];
 		Arrays.fill(this.offsets, ABSENT);
-		for (int at = 0; at < this.extras.size(); at++) {
-			this.offsets[this.extras.get(at).ordinal()] = at * Integer.BYTES;
+		for (Extra extra : this.extras) {
+			this.offsets[extra.ordinal()] = TerrainLayout.appendedOffset(extra.attribute(), this.carried);
 		}
 
 		this.format = extend(this.inner.getVertexFormat(), this.extras);
@@ -258,7 +268,11 @@ public final class TerrainMesh implements ChunkVertexType {
 		// empty is a pack with nothing to say, and one emptied below is a pack that asked for none of
 		// ours. The two decide the same layout and are not the same event, and the log parts them.
 		List<String> asked = broken ? List.of() : TerrainDraw.carried();
-		List<String> carried = asked;
+		// What add-ons need in every vertex is counted in here and kept out of what the pack
+		// published, which is what the log below is keyed on. The pack's programs are translated
+		// against the same union in PackProgram.loadTerrain, and that is what makes the list they
+		// declare and this one the same list.
+		List<String> carried = broken ? asked : TerrainLayout.withForced(asked, TerrainAttributes.forced());
 		// Sodium's own four and nothing of ours is the same layout Sodium already binds, so it is
 		// answered with Sodium's own rather than with a copy of it. No pack of the corpus is here,
 		// every one of them reading at least the block id, but a pack that read none of the five
@@ -343,7 +357,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		}
 
 		Vitrail.logger().info("The chunk mesh carries {} bytes a vertex instead of {}, the difference "
-				+ "being what this pack reads and Sodium does not carry: {}",
+				+ "being what this pack reads or an add-on asks for and Sodium does not carry: {}",
 				built.stride, built.innerStride,
 				built.extras.stream().map(Extra::attribute).toList());
 	}

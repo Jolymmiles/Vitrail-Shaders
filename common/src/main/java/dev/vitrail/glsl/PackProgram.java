@@ -927,12 +927,27 @@ public final class PackProgram {
 	}
 
 	/**
-	 * The same, reading an opening the caller already holds, which is the road the engine takes:
-	 * the chunk programs are read where the pack is loaded, beside the chain and the computes, and
-	 * the three of them share one reading of the archive.
+	 * The same, reading an opening the caller already holds, for a mesh nothing but the pack decides.
 	 */
 	public static Terrain loadTerrain(OpenedPack pack, String place, VertexInputs inputs)
 			throws IOException {
+		return loadTerrain(pack, place, inputs, Set.of());
+	}
+
+	/**
+	 * The same, with elements of the mesh that something other than the pack needs in every vertex,
+	 * which is the road the engine takes: the chunk programs are read where the pack is loaded,
+	 * beside the chain and the computes, and the three of them share one reading of the archive.
+	 *
+	 * @param forced the elements the mesh has to carry whether or not a program reads them, which an
+	 *               add-on asked for. They are counted with what the six programs read, so all six
+	 *               declare them like any other element of the mesh and the format the renderer binds
+	 *               is the one they were translated against. Only applied where the pack serves a
+	 *               chunk program: with none there is nothing to declare them in, and the mesh takes
+	 *               them from the caller that builds it
+	 */
+	public static Terrain loadTerrain(OpenedPack pack, String place, VertexInputs inputs,
+			Set<String> forced) throws IOException {
 		if (!inputs.terrain()) {
 			throw new IllegalArgumentException("The chunk passes are drawn from Sodium's own mesh, so "
 					+ inputs + " is not one of the contracts they may be written against");
@@ -997,6 +1012,7 @@ public final class PackProgram {
 			return new Terrain(Map.of(), List.of());
 		}
 
+		reads.addAll(forced);
 		List<String> carried = SodiumVertex.carried(reads);
 		Map<TerrainPass, Loaded> loaded = new LinkedHashMap<>();
 		for (Map.Entry<TerrainPass, Served> entry : served.entrySet()) {

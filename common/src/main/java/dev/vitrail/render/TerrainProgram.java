@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.addon.TerrainAttributes;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SodiumVertex;
 import dev.vitrail.glsl.VertexInputs;
@@ -8,6 +9,7 @@ import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.sodium.TerrainLayout;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.PrimitiveTopology;
@@ -145,7 +147,10 @@ public final class TerrainProgram extends FamilyProgram {
 		VertexInputs inputs = values.separateAo()
 				? VertexInputs.TERRAIN_SEPARATE_AO
 				: VertexInputs.TERRAIN;
-		PackProgram.Terrain read = PackProgram.loadTerrain(pack, place, inputs);
+		// What add-ons need in every vertex is declared by all six programs like what the pack reads,
+		// because the mesh carries it and a stage that declared less would shift every element after.
+		PackProgram.Terrain read = PackProgram.loadTerrain(pack, place, inputs,
+				TerrainLayout.elements(TerrainAttributes.forced()));
 		if (read.programs().isEmpty()) {
 			Vitrail.logger().warn("{} serves no terrain program with both stages in {}, so the "
 					+ "world keeps the game's own shader", pack.packPath().getFileName(),

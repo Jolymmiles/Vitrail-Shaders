@@ -101,8 +101,10 @@ public final class TerrainDraw {
 
 	/**
 	 * What the chunk mesh has to carry for the pack in force: Sodium's own elements first, then the
-	 * ones this engine appends that the pack's chunk programs really read. Empty where no pack's
-	 * terrain program is wanted, and then the mesh keeps Sodium's own format.
+	 * ones this engine appends that the pack's chunk programs really read or an add-on asked every
+	 * vertex to carry, the second counted in when the programs are translated. Empty where no pack's
+	 * terrain program is wanted, and then the mesh keeps Sodium's own format unless an add-on asked
+	 * for more, which {@code TerrainMesh.settle} adds by itself.
 	 * <p>
 	 * <strong>Read by the mesh at the one instant it may change and written only by
 	 * {@link #carries}</strong>, which has the world rebuilt when the answer moves. Volatile because
