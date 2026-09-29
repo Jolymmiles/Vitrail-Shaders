@@ -358,6 +358,59 @@ stage is a compute's twin. `BEFORE_DEFERRED` keeps its call, which on 26.3 is a 
 and the prepares, then `BEFORE_DEFERRED`, then the `AFTER_PROGRAM` of the deferred programs, the
 composites and the final, all under one `frame()` number.
 
+## The device closing
+
+An add-on creates its own Vulkan objects on the game's device and allocator, which
+`FrameContext.vulkan()` hands it as raw handles, and nothing in the game frees them. At exit the
+validation layer named the test add-on's two `VkImage`, two `VkImageView` and one `VkDeviceMemory`
+under `VUID-vkDestroyDevice-device-05137`, as children of a device that was being destroyed.
+`AddonRegistrar.closing` takes a `DeviceClosingListener`, which is told once that the device is
+about to go, with the same `VulkanHandles`.
+
+**Where it is called from.** `AddonDevice.closing`, from an injection at the head of
+`VulkanDevice.close` on both games (`VulkanDeviceMixin`, one file per game: the 26.2 one already
+latched the device's last pipeline purge at that head, the 26.3 one takes a new injection). `close`
+is what `RenderSystem.shutdownRenderer` calls on the game's device, on the render thread, and it is
+the only caller: it destroys the command encoder, then the allocator, then the device. Its head is
+the last moment the three are whole, it is reached exactly once whatever the loader, and a backend
+that fails to build its device never constructs a `VulkanDevice` to close. The session's own
+shutdown hooks, `EngineStages.closeClient`, stand earlier and differ between the loaders (Fabric
+injects at the head of `Minecraft.close`, NeoForge posts `ClientStoppingEvent` at the head of
+`exitWorldAndClose`), with the game still to shut its renderer down after both. They go on releasing
+what a pack costs; what the add-ons own is not released there.
+
+**The device is waited idle first, once.** The last frames are still in flight when `close` starts,
+and the add-on frees what they read. `vkDeviceWaitIdle` is called before the notice, and only where
+a listener is registered, so that no add-on needs a wait of its own and none can forget it. Its result
+is not read: a device that is already lost still has children to destroy, and the add-on is told
+either way. Whatever the add-ons throw, `AddonDevice` catches, because the alternative to a leak the
+validation layer names is a game that never destroys its device.
+
+**Once, and then nothing.** `AddonRegistry.closeDevice` gives the notice in registry order, the
+order every kind is called in, and answers false to a second call. A listener that throws is cut
+off and logged like any other piece, and the rest are still told. A stage listener that was cut off
+earlier leaves its add-on's closing listener alone, the two being separate pieces, which is what
+lets an add-on free what the failed one made. After the notice `AddonRegistry.call` refuses every
+piece of every add-on, so nothing of an add-on runs against a device it has been told is gone. The
+frames after the notice do not exist on either game, so this is a rule kept rather than a case seen.
+
+**What an add-on does on a reload, and what it does on a close.** The two are not alike, and a
+reload is the one an add-on meets every time a player changes pack.
+
+- A pack reload, F3+T included, changes the pack and nothing under it. The device, the handles and
+  every object the add-on made on them stay valid, and the next pack is served the same images, so
+  the add-on destroys nothing and creates nothing because of one, and hears nothing of it. What it
+  derived from the pack is read again through the calls a load brings with it: `SourcePatcher`'s
+  `appliesTo`, `addedFiles` and `patch`, `DefineSource.write` and `StageListener.programs`. The
+  frame number does not restart.
+- A device close is final. The add-on destroys everything it made on the device, through the
+  allocator what it allocated through it, in the order its own objects depend on each other, and
+  calls Vulkan with those handles no more. It needs no wait of its own and gets no second chance:
+  objects it leaves are reported as leaks of the device, and nothing of it is called afterwards to
+  free them.
+- Neither happens when the process ends without the game closing its device, a crash or a kill, and
+  the driver takes everything back then.
+
 ## Far terrain
 
 A far terrain source (`DistantTerrainSource`) is another mod's far terrain drawn in the place

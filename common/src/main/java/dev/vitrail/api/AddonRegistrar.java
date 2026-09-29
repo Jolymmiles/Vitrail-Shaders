@@ -25,4 +25,10 @@ public interface AddonRegistrar {
 
 	/** A copy of the terrain meshes as Sodium builds them, and the attributes they must carry. */
 	void terrain(TerrainMeshListener listener);
+
+	/**
+	 * A notice that the game is about to destroy its Vulkan device, for an add-on that created
+	 * objects on it to free them. Called once, and after it nothing of the add-on is called.
+	 */
+	void closing(DeviceClosingListener listener);
 }

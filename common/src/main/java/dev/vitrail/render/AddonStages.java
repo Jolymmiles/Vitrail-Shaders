@@ -182,7 +182,7 @@ final class AddonStages {
 		}
 	}
 
-	private static VulkanHandles handles(VulkanDevice vulkan) {
+	static VulkanHandles handles(VulkanDevice vulkan) {
 		VulkanHandles known = handles;
 		if (known != null && handlesOf == vulkan) {
 			return known;

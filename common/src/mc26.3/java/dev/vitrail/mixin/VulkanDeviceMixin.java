@@ -3,10 +3,12 @@ package dev.vitrail.mixin;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.backend.vulkan.VulkanDevice;
+import dev.vitrail.render.AddonDevice;
 import dev.vitrail.render.GeometryHold;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -33,5 +35,15 @@ public abstract class VulkanDeviceMixin {
 			+ "Lcom/mojang/renderpearl/api/buffers/GpuBuffer;", at = @At("HEAD"), require = 1)
 	private void vitrail$flushBeforeBufferUpload(CallbackInfoReturnable<GpuBuffer> callback) {
 		GeometryHold.flushIdle(() -> "initial buffer upload");
+	}
+
+	/**
+	 * Tells the add-ons the device is closing, at the head of {@code close} while the device and its
+	 * allocator are whole: what they created on either has to be freed before {@code close}
+	 * destroys the command encoder, the allocator and the device, in that order.
+	 */
+	@Inject(method = "close", at = @At("HEAD"), require = 1)
+	private void vitrail$addonsDeviceClosing(CallbackInfo callback) {
+		AddonDevice.closing((VulkanDevice) (Object) this);
 	}
 }

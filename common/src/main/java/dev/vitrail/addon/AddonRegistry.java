@@ -2,12 +2,14 @@ package dev.vitrail.addon;
 
 import dev.vitrail.api.AddonRegistrar;
 import dev.vitrail.api.DefineSource;
+import dev.vitrail.api.DeviceClosingListener;
 import dev.vitrail.api.DistantTerrainSource;
 import dev.vitrail.api.ImageSource;
 import dev.vitrail.api.SourcePatcher;
 import dev.vitrail.api.StageListener;
 import dev.vitrail.api.TerrainMeshListener;
 import dev.vitrail.api.VitrailAddon;
+import dev.vitrail.api.VulkanHandles;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,6 +34,10 @@ import org.slf4j.LoggerFactory;
  * throws halfway leaves nothing half-registered behind. Linkage errors count as throwing: an add-on
  * built against another version of the API fails with one when it calls a method this version does
  * not have, and that is its fault, not a reason to stop the game.
+ * <p>
+ * The device closing notice is the last call any add-on gets: {@link #closeDevice} gives it once,
+ * and from then on every guard here refuses, so nothing of an add-on runs against a device it has
+ * been told is gone.
  */
 public final class AddonRegistry {
 
@@ -43,6 +49,13 @@ public final class AddonRegistry {
 	private static final List<Entry<StageListener>> STAGES = new ArrayList<>();
 	private static final List<Entry<DistantTerrainSource>> DISTANT = new ArrayList<>();
 	private static final List<Entry<TerrainMeshListener>> TERRAIN = new ArrayList<>();
+	private static final List<Entry<DeviceClosingListener>> CLOSING = new ArrayList<>();
+
+	/** Whether the device closing notice has been started, which is given once. */
+	private static boolean noticed;
+
+	/** Whether the notice has been given, after which no add-on is called at all. */
+	private static volatile boolean ended;
 
 	private AddonRegistry() {
 	}
@@ -109,6 +122,7 @@ public final class AddonRegistry {
 		STAGES.addAll(gathering.stages);
 		DISTANT.addAll(gathering.distant);
 		TERRAIN.addAll(gathering.terrain);
+		CLOSING.addAll(gathering.closing);
 		LOGGER.info("Add-on {} registered {} piece(s)", id, gathering.count());
 	}
 
@@ -142,10 +156,42 @@ public final class AddonRegistry {
 		return Collections.unmodifiableList(TERRAIN);
 	}
 
+	/** Registered device closing listeners. */
+	public static List<Entry<DeviceClosingListener>> closing() {
+		return Collections.unmodifiableList(CLOSING);
+	}
+
 	/** Whether any add-on registered anything, so that callers can skip their work outright. */
 	public static boolean any() {
 		return !DEFINES.isEmpty() || !IMAGES.isEmpty() || !SOURCES.isEmpty() || !STAGES.isEmpty()
-				|| !DISTANT.isEmpty() || !TERRAIN.isEmpty();
+				|| !DISTANT.isEmpty() || !TERRAIN.isEmpty() || !CLOSING.isEmpty();
+	}
+
+	/**
+	 * Tells every add-on that asked that the device is closing, in the order the listeners were
+	 * registered, and then refuses every later call into any add-on.
+	 * <p>
+	 * Once: the second call, from wherever it comes, gives no notice and answers false. A listener
+	 * that throws is cut off and logged like any other piece and the others are still told, the
+	 * add-on's other pieces having no bearing on this one: a stage listener that was cut off
+	 * earlier leaves its add-on's closing listener as it was, since that is the one that frees what
+	 * the stage listener made.
+	 *
+	 * @return whether this call gave the notice
+	 */
+	public static synchronized boolean closeDevice(VulkanHandles handles) {
+		if (noticed) {
+			return false;
+		}
+
+		noticed = true;
+		try {
+			each(CLOSING, "handle the device closing", listener -> listener.deviceClosing(handles));
+		} finally {
+			ended = true;
+		}
+
+		return true;
 	}
 
 	/**
@@ -161,10 +207,11 @@ public final class AddonRegistry {
 
 	/**
 	 * Calls {@code call} on one entry under the same rule as {@link #each}, and says whether it
-	 * returned. False for an entry already cut off.
+	 * returned. False for an entry already cut off, and for every entry once the device closing
+	 * notice has been given.
 	 */
 	public static <T> boolean call(Entry<T> entry, String what, Consumer<? super T> call) {
-		if (entry.cutOff) {
+		if (entry.cutOff || ended) {
 			return false;
 		}
 
@@ -186,6 +233,9 @@ public final class AddonRegistry {
 		STAGES.clear();
 		DISTANT.clear();
 		TERRAIN.clear();
+		CLOSING.clear();
+		noticed = false;
+		ended = false;
 	}
 
 	/** The registrar one add-on is handed, which refuses to be used once its register returned. */
@@ -198,6 +248,7 @@ public final class AddonRegistry {
 		private final List<Entry<StageListener>> stages = new ArrayList<>();
 		private final List<Entry<DistantTerrainSource>> distant = new ArrayList<>();
 		private final List<Entry<TerrainMeshListener>> terrain = new ArrayList<>();
+		private final List<Entry<DeviceClosingListener>> closing = new ArrayList<>();
 		private boolean done;
 
 		Gathering(String addon) {
@@ -234,6 +285,11 @@ public final class AddonRegistry {
 			terrain.add(entry(listener));
 		}
 
+		@Override
+		public void closing(DeviceClosingListener listener) {
+			closing.add(entry(listener));
+		}
+
 		private <T> Entry<T> entry(T piece) {
 			if (done) {
 				throw new IllegalStateException("Add-on " + addon + " registered after its register() returned");
@@ -244,7 +300,7 @@ public final class AddonRegistry {
 
 		int count() {
 			return defines.size() + images.size() + sources.size() + stages.size() + distant.size()
-					+ terrain.size();
+					+ terrain.size() + closing.size();
 		}
 	}
 }

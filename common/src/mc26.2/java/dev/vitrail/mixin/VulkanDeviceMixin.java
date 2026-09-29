@@ -1,6 +1,7 @@
 package dev.vitrail.mixin;
 
 import dev.vitrail.mixin.access.RenderPipelineAccessor;
+import dev.vitrail.render.AddonDevice;
 import dev.vitrail.render.EntityMesh;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.StalePipelines;
@@ -222,10 +223,12 @@ public abstract class VulkanDeviceMixin implements StalePipelines {
 
 	/**
 	 * Latched at the head of {@code close}, which is the one purge nothing may survive: the device
-	 * is destroyed the moment it returns.
+	 * is destroyed the moment it returns. The add-ons are told first, while the device and its
+	 * allocator are whole, so that what they created on them is freed before either is.
 	 */
 	@Inject(method = "close", at = @At("HEAD"), require = 1)
 	private void vitrail$deviceClosing(CallbackInfo callback) {
+		AddonDevice.closing((VulkanDevice) (Object) this);
 		this.vitrail$closing = true;
 	}
 
