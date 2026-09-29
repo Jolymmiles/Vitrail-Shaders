@@ -1,8 +1,12 @@
 package dev.vitrail.pack.source;
 
+import dev.vitrail.addon.AddonRegistry;
+import dev.vitrail.api.PackIdentity;
+import dev.vitrail.api.SourcePatcher;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.SettingSet;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -23,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -35,6 +40,12 @@ import java.util.stream.Stream;
  * {@code Path} taken from it, and the failure shows up much later as a
  * {@code ClosedFileSystemException} on an unrelated read, so the loaded form of a pack holds
  * strings only.
+ * <p>
+ * What an add-on adds and patches is laid over the pack here and nowhere above: a file it adds is a
+ * path under the shader root that nothing is stored at, which every lookup below answers for, and a
+ * patch is applied to the lines as they are read. {@link SourcePatches} holds the decisions and this
+ * class puts them in front of the disk, so that a reader cannot tell an added file from one the pack
+ * shipped and nothing is written back.
  */
 public final class ShaderPackSource implements AutoCloseable {
 
@@ -94,6 +105,7 @@ public final class ShaderPackSource implements AutoCloseable {
 	private static final AtomicInteger OPENINGS = new AtomicInteger();
 
 	private final String packName;
+	private final Path packPath;
 	private final Path shadersRoot;
 	private final FileSystem ownedFileSystem;
 
@@ -164,11 +176,18 @@ public final class ShaderPackSource implements AutoCloseable {
 	 */
 	private final Map<Object, Object> derived = new HashMap<>();
 
+	/**
+	 * What the add-ons that apply to this pack add and change, fixed when it is opened. Emptied with
+	 * the memos above, which it is the same kind of thing as.
+	 */
+	private SourcePatches patches = SourcePatches.NONE;
+
 	private int caseInsensitiveHits;
 
-	private ShaderPackSource(String packName, Path shadersRoot, FileSystem ownedFileSystem,
-			Path realRoot) {
+	private ShaderPackSource(String packName, Path packPath, Path shadersRoot,
+			FileSystem ownedFileSystem, Path realRoot) {
 		this.packName = packName;
+		this.packPath = packPath;
 		this.shadersRoot = shadersRoot;
 		this.ownedFileSystem = ownedFileSystem;
 		this.realRoot = realRoot;
@@ -238,11 +257,44 @@ public final class ShaderPackSource implements AutoCloseable {
 		});
 	}
 
+	/**
+	 * Opens a pack with the add-ons' patchers that apply to it laid over it. Every road into a pack
+	 * comes through here, the settings screen's and the loader's alike, so that each of them reads
+	 * the same pack.
+	 */
 	public static ShaderPackSource open(Path packPath) throws IOException {
+		return open(packPath, AddonRegistry.sources());
+	}
+
+	/**
+	 * As above, with the patchers named rather than the session's own, so that a test poses its own.
+	 * <p>
+	 * The pack's hash is worked out only when there is a patcher to give it to. Which of them apply
+	 * is settled here, once, and holds for as long as the opening does.
+	 */
+	static ShaderPackSource open(Path packPath, List<AddonRegistry.Entry<SourcePatcher>> patchers)
+			throws IOException {
+		ShaderPackSource source = mount(packPath);
+		if (patchers.isEmpty()) {
+			return source;
+		}
+
+		try {
+			source.patches = SourcePatches.resolve(patchers,
+					new PackIdentity(source.packName, source.contentHash()), source::refuseAdded);
+		} catch (IOException | RuntimeException e) {
+			source.close();
+			throw e;
+		}
+
+		return source;
+	}
+
+	private static ShaderPackSource mount(Path packPath) throws IOException {
 		OPENINGS.incrementAndGet();
 		String name = nameOf(packPath);
 		if (Files.isDirectory(packPath)) {
-			return new ShaderPackSource(name, findShadersRoot(packPath, name), null,
+			return new ShaderPackSource(name, packPath, findShadersRoot(packPath, name), null,
 					packPath.toRealPath());
 		}
 
@@ -253,7 +305,7 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		FileSystem zip = FileSystems.newFileSystem(packPath);
 		try {
-			return new ShaderPackSource(name, findShadersRoot(zip.getPath("/"), name), zip, null);
+			return new ShaderPackSource(name, packPath, findShadersRoot(zip.getPath("/"), name), zip, null);
 		} catch (IOException | RuntimeException e) {
 			zip.close();
 			throw e;
@@ -338,9 +390,27 @@ public final class ShaderPackSource implements AutoCloseable {
 				.filter(path -> SOURCE_EXTENSIONS.contains(extensionOf(path)))
 				.filter(this::landsInside)
 				.toList());
+		files.addAll(addedFiles(true));
 		files.sort(Comparator.comparing(this::rel));
 
 		return List.copyOf(files);
+	}
+
+	/**
+	 * The files add-ons put in the pack, as paths under the shader root that nothing is stored at,
+	 * the ones with a source extension or the ones without: the two lists this class keeps apart
+	 * are apart for the added files as well.
+	 */
+	private List<Path> addedFiles(boolean sources) {
+		List<Path> files = new ArrayList<>();
+		for (String relative : this.patches.added().keySet()) {
+			Path file = this.shadersRoot.resolve(relative);
+			if (SOURCE_EXTENSIONS.contains(extensionOf(file)) == sources) {
+				files.add(file);
+			}
+		}
+
+		return files;
 	}
 
 	/**
@@ -366,6 +436,7 @@ public final class ShaderPackSource implements AutoCloseable {
 				.filter(this::withinCeiling)
 				.filter(this::landsInside)
 				.toList());
+		files.addAll(addedFiles(false));
 		files.sort(Comparator.comparing(this::rel));
 
 		return List.copyOf(files);
@@ -389,6 +460,15 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * filler would hold it there for minutes.
 	 */
 	public String searchableText(Path file) throws IOException {
+		String relative = rel(file);
+		List<String> added = this.patches.added().get(relative);
+		if (added != null) {
+			byte[] text = SourcePatches.textOf(added);
+			countText(relative, text.length);
+
+			return new String(text, StandardCharsets.ISO_8859_1);
+		}
+
 		try (InputStream in = Files.newInputStream(file)) {
 			byte[] head = in.readNBytes(BINARY_PROBE);
 			for (byte b : head) {
@@ -397,14 +477,42 @@ public final class ShaderPackSource implements AutoCloseable {
 				}
 			}
 
-			countText(rel(file), Files.size(file));
+			countText(relative, Files.size(file));
 			byte[] rest = in.readAllBytes();
+			String patched = patchedText(relative, head, rest);
+			if (patched != null) {
+				return patched;
+			}
+
 			StringBuilder text = new StringBuilder(head.length + rest.length);
 			text.append(new String(head, StandardCharsets.ISO_8859_1));
 			text.append(new String(rest, StandardCharsets.ISO_8859_1));
 
 			return text.toString();
 		}
+	}
+
+	/**
+	 * The file as the patchers that apply want it read, or null where none of them changed it, in
+	 * which case what is searched is the bytes as the pack wrote them.
+	 * <p>
+	 * The patched text is the lines of {@link #readLines} joined again, so a mention a patch adds is
+	 * found and one it removes is not. That is decoded as UTF-8 where the bytes are read as Latin-1,
+	 * which the note above says cannot change where an ASCII name is found.
+	 */
+	private String patchedText(String relative, byte[] head, byte[] rest) throws IOException {
+		if (!this.patches.active()) {
+			return null;
+		}
+
+		byte[] whole = new byte[head.length + rest.length];
+		System.arraycopy(head, 0, whole, 0, head.length);
+		System.arraycopy(rest, 0, whole, head.length, rest.length);
+
+		List<String> raw = decodeLines(whole);
+		List<String> patched = this.patches.apply(relative, raw);
+
+		return patched == raw ? null : String.join("\n", patched);
 	}
 
 	private boolean withinCeiling(Path file) {
@@ -444,6 +552,14 @@ public final class ShaderPackSource implements AutoCloseable {
 			return known;
 		}
 
+		List<String> added = this.patches.added().get(relative);
+		if (added != null) {
+			countText(relative, SourcePatches.textOf(added).length);
+			this.linesByFile.put(relative, added);
+
+			return added;
+		}
+
 		// The largest source file in the corpus is a hundred and sixty kilobytes. Reading without
 		// a ceiling means a zip that unpacks to half a gigabyte is read whole into memory before
 		// anything downstream gets the chance to refuse it.
@@ -455,10 +571,19 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		countText(relative, size);
 
+		// Patched before it is kept, so that every reader of the file, whichever asks first, is
+		// handed the same lines and an include expands what the patch made of it.
+		List<String> lines = this.patches.apply(relative, decodeLines(Files.readAllBytes(file)));
+		this.linesByFile.put(relative, lines);
+
+		return lines;
+	}
+
+	private static List<String> decodeLines(byte[] bytes) throws IOException {
 		CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
 				.onMalformedInput(CodingErrorAction.REPLACE)
 				.onUnmappableCharacter(CodingErrorAction.REPLACE);
-		CharBuffer decoded = decoder.decode(ByteBuffer.wrap(Files.readAllBytes(file)));
+		CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
 
 		String text = decoded.toString();
 		if (!text.isEmpty() && text.charAt(0) == 0xFEFF) {
@@ -467,10 +592,7 @@ public final class ShaderPackSource implements AutoCloseable {
 
 		// Splitting on a lone carriage return as well: some pack files still carry classic Mac
 		// line endings, and treating such a file as one long line loses every directive in it.
-		List<String> lines = List.of(text.split("\r\n|\n|\r", -1));
-		this.linesByFile.put(relative, lines);
-
-		return lines;
+		return List.of(text.split("\r\n|\n|\r", -1));
 	}
 
 	/**
@@ -528,13 +650,40 @@ public final class ShaderPackSource implements AutoCloseable {
 			return Optional.empty();
 		}
 
-		if (Files.isRegularFile(target.get())) {
+		if (Files.isRegularFile(target.get()) || isAdded(target.get())) {
 			return target;
 		}
 
 		// Asked again of what the listing found, which is a different file from the one confined:
-		// FOO.glsl can be a link out of the pack where foo.glsl was nothing at all.
-		return resolveIgnoringCase(target.get()).filter(this::landsInside);
+		// FOO.glsl can be a link out of the pack where foo.glsl was nothing at all. The pack's own
+		// files answer before the added ones, so a name that differs only in case from both is the
+		// pack's.
+		return resolveIgnoringCase(target.get())
+				.or(() -> addedIgnoringCase(target.get()))
+				.filter(this::landsInside);
+	}
+
+	/** Whether an add-on put a file at this path, which nothing on disk answers for. */
+	private boolean isAdded(Path file) {
+		return !this.patches.added().isEmpty() && this.patches.added().containsKey(rel(file));
+	}
+
+	/** The added file whose path is this one apart from case, counted as the disk's are. */
+	private Optional<Path> addedIgnoringCase(Path target) {
+		if (this.patches.added().isEmpty()) {
+			return Optional.empty();
+		}
+
+		String wanted = rel(target).toLowerCase(Locale.ROOT);
+		for (String relative : this.patches.added().keySet()) {
+			if (relative.toLowerCase(Locale.ROOT).equals(wanted)) {
+				this.caseInsensitiveHits++;
+
+				return Optional.of(this.shadersRoot.resolve(relative));
+			}
+		}
+
+		return Optional.empty();
 	}
 
 	/**
@@ -668,14 +817,24 @@ public final class ShaderPackSource implements AutoCloseable {
 		return byLowerName;
 	}
 
-	/** Directories directly under {@code shaders/}, by name. */
+	/**
+	 * Directories directly under {@code shaders/}, by name, the ones an added file stands in among
+	 * them: a dimension is a directory of the pack, and an add-on may bring the first file of one.
+	 */
 	public List<String> topLevelDirectories() throws IOException {
+		Set<String> names = new TreeSet<>();
 		try (Stream<Path> entries = Files.list(this.shadersRoot)) {
-			return entries.filter(Files::isDirectory)
-					.map(this::rel)
-					.sorted()
-					.toList();
+			entries.filter(Files::isDirectory).map(this::rel).forEach(names::add);
 		}
+
+		for (String relative : this.patches.added().keySet()) {
+			int slash = relative.indexOf('/');
+			if (slash > 0) {
+				names.add(relative.substring(0, slash));
+			}
+		}
+
+		return List.copyOf(names);
 	}
 
 	/**
@@ -706,7 +865,24 @@ public final class ShaderPackSource implements AutoCloseable {
 	 * to be refused rather than read whole and then refused.
 	 */
 	public long size(Path file) throws IOException {
-		return Files.size(file);
+		byte[] added = addedBytes(file);
+
+		return added != null ? added.length : Files.size(file);
+	}
+
+	/**
+	 * What an added file holds as bytes, or null for one the pack shipped. The three readers that
+	 * take bytes rather than lines answer for an added file the way a file of that text would, so
+	 * that none of them fails on a path with nothing stored at it.
+	 */
+	private byte[] addedBytes(Path file) {
+		if (this.patches.added().isEmpty()) {
+			return null;
+		}
+
+		List<String> lines = this.patches.added().get(rel(file));
+
+		return lines == null ? null : SourcePatches.textOf(lines);
 	}
 
 	/**
@@ -734,7 +910,10 @@ public final class ShaderPackSource implements AutoCloseable {
 					+ " bytes, which is not a length anything here can hold");
 		}
 
-		try (InputStream in = Files.newInputStream(file)) {
+		byte[] added = addedBytes(file);
+		try (InputStream in = added != null
+				? new ByteArrayInputStream(added)
+				: Files.newInputStream(file)) {
 			byte[] read = in.readNBytes((int) wanted);
 			if (read.length < wanted) {
 				throw new IOException(rel(file) + " holds " + read.length
@@ -747,6 +926,11 @@ public final class ShaderPackSource implements AutoCloseable {
 
 	/** A file's raw bytes, under the same ceiling as the sources: an image is not exempt. */
 	public byte[] bytes(Path file) throws IOException {
+		byte[] added = addedBytes(file);
+		if (added != null) {
+			return added;
+		}
+
 		long size = Files.size(file);
 		if (size > MAX_FILE_BYTES) {
 			throw new IOException(rel(file) + " is " + size + " bytes, past the " + MAX_FILE_BYTES
@@ -773,6 +957,57 @@ public final class ShaderPackSource implements AutoCloseable {
 		this.derived.clear();
 	}
 
+	/**
+	 * Whether the patchers that applied when this was opened would do something else than they did
+	 * then, which is what stops {@link KeptPack} serving units flattened under other patches.
+	 */
+	boolean patchesMoved() {
+		return this.patches.moved();
+	}
+
+	/**
+	 * The hash {@link PackIdentity} carries: every file under {@code shaders/} that lands inside the
+	 * pack, in path order.
+	 */
+	private String contentHash() throws IOException {
+		List<Path> files = new ArrayList<>(walk(this.shadersRoot).stream()
+				.filter(Files::isRegularFile)
+				.filter(this::landsInside)
+				.toList());
+		files.sort(Comparator.comparing(this::rel));
+
+		return PackHash.of(this.packPath, isZip(), files, this::rel);
+	}
+
+	/**
+	 * Why the pack cannot take a file an add-on offers at this path under {@code shaders/}, or null.
+	 * The same confinement every road into the pack has, asked of a path nothing exists at: it is
+	 * refused where it would land outside the pack, and where the pack has anything there already,
+	 * because changing a file the pack has is a patch and not an addition.
+	 */
+	private String refuseAdded(String relative, long bytes) {
+		Path target;
+		try {
+			target = this.shadersRoot.resolve(relative).normalize();
+		} catch (RuntimeException e) {
+			return "is not a path this pack can hold";
+		}
+
+		if (!target.startsWith(this.shadersRoot) || !landsInside(target)) {
+			return "would land outside the pack";
+		}
+
+		if (Files.exists(target)) {
+			return "is a path the pack already has";
+		}
+
+		if (bytes > MAX_FILE_BYTES) {
+			return "is " + bytes + " bytes, past the " + MAX_FILE_BYTES + " a shader source is allowed";
+		}
+
+		return null;
+	}
+
 	/** How many files this opening has read, for the line that says what a kept opening saved. */
 	int filesRead() {
 		return this.linesByFile.size();
@@ -794,6 +1029,7 @@ public final class ShaderPackSource implements AutoCloseable {
 		this.linesByFile.clear();
 		this.expandedUnits.clear();
 		this.derived.clear();
+		this.patches = SourcePatches.NONE;
 		if (this.ownedFileSystem != null) {
 			this.ownedFileSystem.close();
 		}

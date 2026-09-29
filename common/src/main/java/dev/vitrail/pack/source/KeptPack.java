@@ -46,10 +46,12 @@ import java.util.stream.Stream;
  * <p>
  * <strong>What decides that two loads may share an opening is written out rather than assumed.</strong>
  * The pack path, the settings the player chose, the profile, and the engine's whole define table,
- * which carries the world's registries and is exactly what moves under a pack at a world join. On
- * top of those the pack's own files are fingerprinted by size and modification time, so an archive
- * or a directory edited on the disk is opened afresh; a directory pack being the one every workshop
- * edits between two loads, that check is the reason this can be offered to a directory at all.
+ * which carries the world's registries and is exactly what moves under a pack at a world join, and
+ * the add-ons' defines with it. On top of those the pack's own files are fingerprinted by size and
+ * modification time, so an archive or a directory edited on the disk is opened afresh; a directory
+ * pack being the one every workshop edits between two loads, that check is the reason this can be
+ * offered to a directory at all. Last, the fingerprint of every add-on patcher that applies to the
+ * opening, because its files were flattened under the patches it made.
  * <p>
  * <strong>And what a reader worked out of an opening is NOT kept.</strong> {@link
  * ShaderPackSource#forgetDerived} empties those at that reading's close: a plan, a texture set or a
@@ -124,7 +126,8 @@ final class KeptPack {
 		String print = fingerprint(packPath);
 		Held standing = held;
 		if (standing != null && print != null && wanted.equals(standing.key())
-				&& print.equals(standing.print()) && atTheAskedScale(standing)) {
+				&& print.equals(standing.print()) && atTheAskedScale(standing)
+				&& !patchesMoved(standing)) {
 			ShaderPackSource source = standing.pack().source();
 			Vitrail.logger().info("The pack was already open and is read again from that opening: "
 					+ "{} files and {} flattened units kept, property=vitrail.keepPackOpen",
@@ -194,6 +197,24 @@ final class KeptPack {
 		return standing.pack().settings().scale() == SettingSet.askedShadowMapScale();
 	}
 
+	/**
+	 * Whether the add-ons that patch the held opening would patch it otherwise than they did when it
+	 * was opened, which is part of what decides that two loads may share it and is asked of the
+	 * opening rather than folded into {@link Key}.
+	 * <p>
+	 * The reason is what the fingerprint of a patcher is for. The flattened units an opening keeps
+	 * were made under the patches it was opened with, and the key above cannot see them: it holds
+	 * the pack's path and the engine's table, and an add-on whose patches follow a setting of its own
+	 * changes neither. Asked of the opening and not computed for the load being asked for, because
+	 * which patchers apply is settled by the pack's identity, and when the files are unchanged, which
+	 * the fingerprint of the files above has just said, the opening's identity is the load's. Reading
+	 * the pack to work out a new one would cost the very mount this class exists to save. A load
+	 * whose files did move is not served whatever this answers.
+	 */
+	private static boolean patchesMoved(Held standing) {
+		return standing.pack().source().patchesMoved();
+	}
+
 	/** Why the opening held could not serve, in the words the line above prints. */
 	private static String why(Held standing, String print, Key wanted) {
 		if (standing == null) {
@@ -210,6 +231,10 @@ final class KeptPack {
 
 		if (!atTheAskedScale(standing)) {
 			return "the shadow map scale has moved";
+		}
+
+		if (patchesMoved(standing)) {
+			return "an add-on's changes to the pack have moved";
 		}
 
 		return "its files have moved on the disk";

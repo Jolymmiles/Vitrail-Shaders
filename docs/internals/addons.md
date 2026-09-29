@@ -55,6 +55,80 @@ settle: nothing has been read against the sources yet.
 
 ## Pack sources
 
+The one door into a pack is `ShaderPackSource.open`, and the registry's patchers are laid over the
+pack there, so that the settings screen, the loader, the kept opening and the per-program openings
+of the family worker all read the same pack. Nothing above it knows a file was added or changed, and
+nothing is written back.
+
+**Patchers are called from more than one thread.** Openings are not confined to the render thread:
+the workers that read the rest of a pack's programs while the world is played open the archive
+themselves, so two openings can run at once and a patcher's methods can overlap. Everything one
+opening keeps (the patched lines, the added files, the applying set) belongs to that opening's
+thread alone, and what is shared between openings is the hash memory, which is synchronised, and the
+log of refusals already said.
+
+**An opening settles which patchers apply, once.** With no patcher registered it does nothing. With
+one it builds the `PackIdentity`, asks each `appliesTo`, then takes `addedFiles` and the first
+`fingerprint` of the ones that do. The set is fixed for the opening, which a kept opening carries
+across loads: whatever can change between two loads belongs in `fingerprint`, not in `appliesTo`.
+`SourcePatches` holds these decisions.
+
+**The identity hash is worked out only for an opening that has a patcher to give it to, and only
+when the pack has moved.** It is SHA-256 over every file under `shaders/` that lands inside the pack,
+each as its path from the shaders root and the digest of its bytes, in path order, so a folder, a
+zip of it and a zip packed one folder down agree. A load opens one pack dozens of times, and
+hashing reads every texture, so `PackHash` remembers the last few packs by a cheap stamp (the
+archive's size and time for a zip, every file's for a folder) and reads the bytes again only when
+the stamp differs. An edit that keeps a file's size and time is missed, as it is by `KeptPack`.
+
+**A patch is applied where lines are made, once per file.** `readLines` decodes a file, hands the
+lines to `SourcePatches.apply` and memoises what comes back, so `IncludeExpander`, `ShaderProperties`,
+`PropertiesFile`, `PackLang` and `SourceMentions` all see the patched lines and an include expands
+what the patch made. The patchers run in add-on order, each on the last one's answer, and the path
+they are given is the file's path from the pack's root, `shaders/lib/settings.glsl`. Lines holding a
+line break are split, since everything downstream takes an element for a line. `searchableText`
+does not go through `readLines` and is not memoised, so a file it reads is patched by the same call:
+`apply` remembers the files a patch changed, and whichever of the two asks first, the other is given
+the same lines and the patcher is not asked twice. What a mention scan searches for a patched file
+is those lines joined again, which is decoded as UTF-8 where the raw bytes are read as Latin-1 and
+cannot change where an ASCII name is found; a file no patch changed is searched as the bytes it is.
+`bytes`, `head` and `size` read images and raw data, which a patch of lines does not describe, so
+they are only taught about added files.
+
+**An added file is a path under the shader root with nothing stored at it, and every lookup says it
+is there.** The path is `shadersRoot.resolve(relative)`, the same kind of `Path` as the pack's own,
+so `rel` and everything that takes a `Path` work unchanged. `resolveAgainst` accepts it before it
+asks the disk, which covers `resolveInsideShaders`, `resolveRelativeTo` and `file`, and asks for it
+ignoring case after the pack's own files have had their turn. `sourceFiles` and `otherFiles` list it
+by its extension, in the fixed order, and `ProgramSet.enumerate` walks `sourceFiles`.
+`topLevelDirectories` names the directory an added file stands in, since a dimension is a directory
+and an add-on may bring the first file of one. Added files are not patched, and they count against
+the text total when first read.
+
+**Refused added paths are logged once per add-on, pack and path.** A path that does not begin with
+`shaders/`, or holds an empty or dot segment, a backslash or a NUL, is not a path under the shaders.
+A path the pack has anything at, file or folder, is a patch and not an addition. A path that would
+land outside the pack, through a link in a folder pack, fails the same `landsInside` every lookup
+passes. A file past the ceiling a source of the pack has is refused, and the 64 MiB text cap counts
+it like any other. A second add-on adding a path the first did is refused.
+
+**A kept opening is served only while the patches it was made under still stand.** The held
+opening's applying patchers are asked for their `fingerprint` at every load and compared with the
+ones recorded when it was opened (`ShaderPackSource.patchesMoved`), beside the checks `KeptPack`
+already makes, and the units it flattened are dropped with the opening when they differ. The
+patchers are asked of the opening rather than folded into `Key` because which of them apply is
+decided by the pack's identity, and when the files have not moved, which the check before has just
+said, the identity is the opening's own: working out a new one would mean mounting the archive, which
+is what a kept opening is there to avoid. A patcher cut off after the opening's fingerprint was taken
+stands as such in the next one and ends the hold, since the opening then holds some files patched
+and some as they were.
+
+**A patcher that misbehaves is cut off, and what it leaves behind is a readable pack.** Every call
+goes through `AddonRegistry.call`, and a null answer or a null in a list of lines counts as a throw.
+A patcher cut off while listing its files adds none of them; one cut off while patching leaves the
+files read after that as the pack wrote them; one cut off before the reading starts is left out of
+the whole opening, which is then as good as any and is held as any is.
+
 ## Images
 
 ## Frame stages
