@@ -14,7 +14,8 @@ import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
  * many wrapped calls, and each of them used to ask {@link StorageImages} and
  * {@link StorageBuffers} for the entry's name again: five lookups per descriptor of every pass of
  * the game and of Sodium, with or without a pack loaded. The entry is resolved where it is read
- * off the layout, and the fields read the answer.
+ * off the layout, and the fields read the answer. The image is the pack's own or, where the pack
+ * declares none, one an add-on serves.
  * <p>
  * Held per thread rather than in a static, as the entry was before it: a push recorded off the
  * render thread cannot read another push's entry, whatever the backend does later.
@@ -36,7 +37,8 @@ public final class PushedDescriptor {
 		FrameCensus.descriptor();
 		PushedDescriptor current = CURRENT.get();
 		current.entry = entry;
-		current.image = StorageImages.bound(entry.name());
+		StorageImages.Bound image = StorageImages.bound(entry.name());
+		current.image = image != null ? image : AddonImages.bound(entry.name());
 		current.buffer = StorageBuffers.bound(entry.name());
 	}
 
@@ -49,7 +51,10 @@ public final class PushedDescriptor {
 		return this.entry;
 	}
 
-	/** The pack image under the entry's name, or null where the pack declares none. */
+	/**
+	 * The image under the entry's name, or null where neither the pack nor an add-on serves one:
+	 * the pack's own first, then the add-on's.
+	 */
 	public StorageImages.Bound image() {
 		return this.image;
 	}

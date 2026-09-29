@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout.Entry;
+import dev.vitrail.addon.AddonImageNames;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.GeometryStage;
@@ -60,7 +61,8 @@ public abstract class VulkanBindGroupLayoutMixin {
 		Entry entry = CURRENT.get();
 		if (type == 1 && entry != null && (StorageImages.storageBinding(entry.name())
 				|| CustomImages.storage(entry.name())
-				|| TargetName.imageIndex(entry.name()).isPresent())) {
+				|| TargetName.imageIndex(entry.name()).isPresent()
+				|| AddonImageNames.storageBinding(entry.name()))) {
 			type = 3;
 		}
 

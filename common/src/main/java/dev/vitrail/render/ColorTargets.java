@@ -275,6 +275,9 @@ final class ColorTargets {
 	private TargetSurface noise;
 	private TargetSurface unwritten;
 
+	/** What an add-on's image name reads on a frame its source has nothing for. */
+	private final AddonStandIns addonStandIns = new AddonStandIns();
+
 	/**
 	 * The depth the pack's own opaque geometry left this frame, one float a pixel, so that whoever
 	 * puts the game's picture into the same target can tell a pixel that is still the pack's from
@@ -471,6 +474,7 @@ final class ColorTargets {
 		try {
 			changed = ensureConstants();
 			changed |= ensureCoverage(screenWidth, screenHeight);
+			changed |= this.addonStandIns.ensure(screenWidth, screenHeight);
 			// Not sized on the screen and therefore never resized with it: the pack's own resolution
 			// is the whole point of the map. Its answer is not folded into the debt below because
 			// the map is never in the clear that pays it: it empties itself where it is allocated,
@@ -584,6 +588,7 @@ final class ColorTargets {
 			clear(encoder, this.white, OPAQUE_WHITE);
 			clear(encoder, this.grey, MID_GREY);
 			clear(encoder, this.unwritten, UNWRITTEN);
+			this.addonStandIns.clear(encoder);
 			uploadNoise(encoder);
 			this.packSurfaces.forEach((image, surface) -> upload(encoder, surface, image.pixels()));
 
@@ -1052,6 +1057,7 @@ final class ColorTargets {
 		this.noise = release(this.noise);
 		this.unwritten = release(this.unwritten);
 		this.coverage = release(this.coverage);
+		this.addonStandIns.release();
 		this.shadowMap.release();
 		this.depth.release();
 		this.copies.release();

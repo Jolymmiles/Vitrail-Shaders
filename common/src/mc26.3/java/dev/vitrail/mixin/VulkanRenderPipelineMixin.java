@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import com.mojang.renderpearl.backend.api.BackendRenderPipeline;
 import com.mojang.renderpearl.backend.vulkan.VulkanRenderPipeline;
+import dev.vitrail.addon.AddonImageNames;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.WideSamplerSets;
@@ -63,7 +64,8 @@ public abstract class VulkanRenderPipelineMixin {
 		String name = CURRENT.get();
 		if (type == VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && name != null
 				&& (StorageImages.storageBinding(name) || CustomImages.storage(name)
-						|| TargetName.imageIndex(name).isPresent())) {
+						|| TargetName.imageIndex(name).isPresent()
+						|| AddonImageNames.storageBinding(name))) {
 			type = VK12.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		}
 

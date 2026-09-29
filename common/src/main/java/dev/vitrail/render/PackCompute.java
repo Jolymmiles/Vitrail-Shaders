@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.addon.AddonImageNames;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SharedMemory;
@@ -1041,7 +1042,8 @@ final class PackCompute implements AutoCloseable {
 				ComputeShader.Binding entry = this.entries.get(i);
 				boolean storage = CustomImages.storage(entry.name())
 						|| StorageImages.storageBinding(entry.name())
-						|| COLOUR_IMAGE.matcher(entry.name()).matches();
+						|| COLOUR_IMAGE.matcher(entry.name()).matches()
+						|| AddonImageNames.storageBinding(entry.name());
 				int type;
 				if (entry.buffer()) {
 					type = StorageBuffers.named(entry.name()) || servesShared(entry.name())
@@ -1164,6 +1166,12 @@ final class PackCompute implements AutoCloseable {
 				}
 
 				StorageImages.Bound bound = StorageImages.bound(entry.name());
+				if (bound == null) {
+					// The pack's own names first, then the add-ons': the two never share a name, and
+					// AddonImageNames is where the one that would is refused.
+					bound = AddonImages.bound(entry.name());
+				}
+
 				VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack);
 
 				// A texture the pack ships answers here exactly as it answers a full screen pass:

@@ -1,5 +1,6 @@
 package dev.vitrail.pack.target;
 
+import dev.vitrail.addon.AddonImageNames;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.texture.CustomImages;
@@ -149,10 +150,15 @@ public final class SamplerPlan {
 	 * <p>
 	 * {@link #COLOUR_IMAGE} is a colour target a program stores into as {@code colorimgN}, on the
 	 * half it would read {@code colortexN} from, which is the half Iris binds the image on.
+	 * <p>
+	 * {@link #ADDON} is a name an add-on's image source serves. It is answered at the descriptor,
+	 * by name and at the moment of the draw, so what the pass binds first is only a placeholder;
+	 * the kind exists so that the name is not {@link #UNSERVED} and, in a full screen program,
+	 * does not fall to the default sampler and read the scene.
 	 */
 	public enum Kind {
 		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH,
-		DISTANT_DEPTH, CUSTOM_IMAGE, COLOUR_IMAGE, UNSERVED, UNBINDABLE
+		DISTANT_DEPTH, CUSTOM_IMAGE, COLOUR_IMAGE, ADDON, UNSERVED, UNBINDABLE
 	}
 
 	/**
@@ -290,6 +296,27 @@ public final class SamplerPlan {
 	}
 
 	public static Kind classify(String name) {
+		Kind known = builtInKind(name);
+		if (known != Kind.UNSERVED) {
+			return known;
+		}
+
+		// Last, so that a name the engine answers for keeps that answer. The pack's own names never
+		// get this far in the calls that know the pack, and AddonImageNames refuses a claim on them
+		// for the calls that do not.
+		return AddonImageNames.serves(name) ? Kind.ADDON : Kind.UNSERVED;
+	}
+
+	/**
+	 * Whether the engine gives this name a meaning of its own: a colour target, a depth, the shadow
+	 * map, the noise image, the far terrain's depth, or a name the translation forged. The pack's
+	 * own images and textures are not decided here, which only a caller that knows the pack can.
+	 */
+	public static boolean builtIn(String name) {
+		return builtInKind(name) != Kind.UNSERVED;
+	}
+
+	private static Kind builtInKind(String name) {
 		// First, because it is the only answer that can be right: nothing but the translation
 		// produces this prefix, and it only produces it for a name it has already moved.
 		if (name.startsWith(FORGED)) {

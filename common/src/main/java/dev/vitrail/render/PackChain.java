@@ -3117,6 +3117,9 @@ public final class PackChain {
 						+ "frames this pack draws the far terrain, and the far plane on the rest");
 		named(byKind, SamplerPlan.Kind.CUSTOM_IMAGE,
 				"read a storage image the pack declared with image.NAME");
+		named(byKind, SamplerPlan.Kind.ADDON,
+				"read an image an add-on serves, and a black one the size of the screen on the frames "
+						+ "it serves nothing");
 		named(byKind, SamplerPlan.Kind.UNBINDABLE,
 				"are declared under a type this backend cannot bind, and should have gone with "
 						+ "their pass");

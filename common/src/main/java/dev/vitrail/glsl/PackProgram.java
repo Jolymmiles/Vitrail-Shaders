@@ -1,9 +1,11 @@
 package dev.vitrail.glsl;
 
+import dev.vitrail.addon.AddonImageNames;
 import dev.vitrail.pack.option.OptionIndex;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.option.SettingSet;
 import dev.vitrail.pack.model.AlphaTest;
+import dev.vitrail.pack.model.PackTexture;
 import dev.vitrail.pack.program.ChainFilter;
 import dev.vitrail.pack.program.ProgramResolver;
 import dev.vitrail.pack.program.ProgramSet;
@@ -101,6 +103,14 @@ public final class PackProgram {
 
 		public Loaded {
 			supplied = Set.copyOf(supplied);
+			// Before any pipeline of this program is built, which is when the bind group is laid out
+			// from the names alone: an add-on's image the shader declares as an image needs its
+			// storage type there, and only the declaration says which of the two it is.
+			for (TranslatedUnit.Uniform sampler : program.samplers()) {
+				if (imageUniform(sampler)) {
+					AddonImageNames.declaredAsImage(sampler.name());
+				}
+			}
 		}
 
 		/**
@@ -1791,7 +1801,13 @@ public final class PackProgram {
 			OptionIndex options, SettingSet settings) throws IOException {
 		CustomImages.install(properties.imageDirectives(settings.globalDefines(options)));
 		CustomStorage.install(properties.bufferObjects(settings.globalDefines(options)));
-		return PackTextures.read(properties, settings.globalDefines(options), source);
+		PackTextures declared = PackTextures.read(properties, settings.globalDefines(options), source);
+		// With the images above: the names this pack gives a meaning to are the ones no add-on may
+		// serve.
+		AddonImageNames.packTextures(declared.supplied().stream()
+				.map(PackTexture::sampler)
+				.collect(Collectors.toUnmodifiableSet()));
+		return declared;
 	}
 
 	/** Both halves, as files. Iris carries a default vertex stage for old packs and this does not. */

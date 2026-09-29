@@ -131,6 +131,89 @@ the whole opening, which is then as good as any and is held as any is.
 
 ## Images
 
+An `ImageSource` serves images to the pack's programs by name. The pack declares the name itself,
+`uniform sampler2D name;` to read it or `layout(rgba8) uniform image2D name;` to store into it, and
+the declaration is normally put there by the add-on's `SourcePatcher`. Which of the two it is comes
+from that declaration and from nothing the add-on says.
+
+**Who owns a name.** `AddonImageNames` reads every source's `names()` once, through
+`AddonRegistry.call`, on the first question after registration, and answers the rest from a map: the
+descriptor push asks for every descriptor of every pass of the game, so the answer to "is this name
+an add-on's" has to be a map read. A name is served only when nobody else gives it a meaning.
+Refused, with one warning and no effect: every name `SamplerPlan.builtIn` knows (colour targets,
+`colorimgN`, the depths, the shadow map and its colours, `noisetex`, the far terrain's depth, the
+names the translation forges), the names the geometry passes bind themselves (the atlas spellings,
+`lightmap`, the overlay, the PBR maps), the pack's own `image.` names (`CustomImages.named`) and the
+textures the pack ships (`PackTextures.supplied`, recorded by `PackProgram.textures` as each program
+is read). Of two claims on one name the source registered first keeps it. A source whose `names()`
+throws is cut off and claims nothing.
+
+**How a name is classified.** `SamplerPlan.Kind.ADDON` sits after every built-in answer in
+`SamplerPlan.classify`, so the pack's images and shipped files, which the longer overloads settle
+first, keep their names. It exists because `UNSERVED` is wrong twice over: a full screen program
+gives an unserved `sampler2D` the scene (`takesDefault`), which would let a name the add-on serves
+read `colortex0` on the frames the add-on has nothing, and the chain's log would list the name as one
+the engine has no answer for. What a pass binds first for such a name is only a placeholder (the one
+black texel every `UNSERVED` name gets); the real answer is swapped in at the push.
+
+**The push, graphics.** `PushedDescriptor.begin` (a whole file per game, beside the game's bind
+group entry on 26.2 and the uniform's name on 26.3) already asked `StorageImages.bound` and
+`StorageBuffers.bound` once per entry. When the pack has no image of that name it now asks
+`AddonImages.bound`, which comes back in the same `StorageImages.Bound` shape, so that
+`VulkanRenderPassMixin` swaps the view, drops the sampler for a storage binding and rewrites the
+descriptor type exactly as it does for the pack's own images, and no second road exists. The source
+is asked at every push of the name and not once a frame, because a push is the one moment known to
+be inside the pass that will read the image. For everyone with no add-on that serves images the whole
+third lookup is one volatile read.
+
+**The push, compute.** `PackCompute.pushDescriptors` asks the same `AddonImages.bound` where it asks
+`StorageImages.bound`, and takes the answer down the same road: a storage binding is a storage image
+descriptor, anything else a combined image sampler. The compute's sampler is the nearest, clamped
+one `samplerFor` gives a name no image directive declared.
+
+**The bind group layout.** The layout of a pipeline is made from names, before any image exists and
+before the add-on has been asked for one, and a descriptor whose type disagrees with its layout is
+not a wrong picture but a lost device. So the storage type cannot come from `AddonImage.storage`,
+which is per frame and per image. It comes from the shader: `PackProgram.Loaded` records every
+uniform of an image type it carries (`AddonImageNames.declaredAsImage`), and the three places that
+type a layout ask `AddonImageNames.storageBinding`, which is true for a served name some program
+declares as an image: `VulkanBindGroupLayoutMixin` on 26.2, `VulkanRenderPipelineMixin` on 26.3 and
+`PackCompute.createLayout`. The record only grows, because a release landing after the next pack's
+first program would erase that pack's; the cost is that an add-on has to declare one name the same
+way in every pack, which the patcher that writes the declaration does anyway.
+
+**What a name with no image reads.** `AddonImages.choose` binds the image the source handed over
+where the shader can use it as declared, and otherwise a stand-in the size of the screen: opaque
+black for a sampled name, and for a storage name a scratch image the pack may write and nothing
+reads. Never the placeholder texel: packs read these names with `texelFetch` at any pixel, and a
+texel that is not there reads whatever the driver likes. The two stand-ins are `AddonStandIns`,
+owned by `ColorTargets`, allocated in `ensure` only while some add-on claims an image name (and the
+scratch only while a program declares one as a storage image), cleared with the constants, sized
+with the screen and released with the targets. They are separate images because a store into a
+shared one would turn every later read of nothing into whatever the pack wrote. The scratch is
+RGBA8; a shader whose layout qualifier says another format stores into it reinterpreted, which only
+happens on a frame the source served nothing for a storage name, and the bytes are read by nobody. A
+storage answer whose image is not `storage`, or one with no view or no extent, is refused the same
+way, with one warning per name.
+
+**The layout an image must be in.** `VK_IMAGE_LAYOUT_GENERAL`, sampled or stored, always. Measured
+on both games' backends: `VulkanRenderPass.pushDescriptors` writes `imageLayout(1)` for every
+combined image sampler, the pass attachments are `GENERAL` too, `VulkanGpuTexture` moves a new image
+from `UNDEFINED` to `GENERAL` in its constructor, `StorageImages` does the same for the pack's
+images, and `PackCompute` writes `GENERAL` for every image it pushes. Nothing binds
+`SHADER_READ_ONLY_OPTIMAL`, and no barrier Vitrail records changes a layout, so an add-on image in
+that layout is a mismatch with its own descriptor. The add-on moves the image to `GENERAL` when it
+creates it and leaves it there; the javadoc of `ImageSource` and `AddonImage` says so as the
+contract. Memory is covered without the add-on: what it wrote in a stage is made visible to the
+passes after it by the barrier recorded after the listeners (see Frame stages), and what it wrote in
+an earlier frame by the game's barrier after every pass. The image is sampled nearest and clamped,
+like the pack's other images without a directive, and has to stay alive until the last frame that
+bound it has left the GPU, which the backend keeps two of in flight.
+
+Not done, on purpose: three dimensional images (`AddonImage` has no depth, and a `sampler3D`
+declaration stays refused as unbindable), mip chains, filtered sampling, and any answer that depends
+on which pass asks.
+
 ## Frame stages
 
 ## Far terrain

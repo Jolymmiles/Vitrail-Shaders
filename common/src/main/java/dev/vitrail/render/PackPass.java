@@ -721,7 +721,11 @@ final class PackPass {
 				// the same name would have the pass read the scene as whatever the pack meant to
 				// sample and look convincing.
 				// A colour image never reaches this switch, bound above as a storage image.
-				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE, COLOUR_IMAGE -> targets.black();
+				//
+				// An add-on's name is a placeholder here and never what the shader reads: the push
+				// swaps in the add-on's image, or the screen-sized stand-in, by name (AddonImages).
+				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE, COLOUR_IMAGE, ADDON ->
+						targets.black();
 			};
 
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a

@@ -2572,6 +2572,7 @@ final class GeometryProgram {
 				// in everywhere else, and the load has already said why.
 				|| (kind == SamplerPlan.Kind.COLORTEX && (!collides(binding) || copied(binding)))
 				|| kind == SamplerPlan.Kind.CUSTOM_IMAGE
+				|| kind == SamplerPlan.Kind.ADDON
 				|| kind == SamplerPlan.Kind.NOISE
 				|| (kind == SamplerPlan.Kind.DEPTH
 						&& (this.pass.afterDeferred() || SamplerPlan.depthCopy(sampler)))

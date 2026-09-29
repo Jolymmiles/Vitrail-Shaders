@@ -8,7 +8,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The descriptor the game's pass is writing while it pushes a draw's set, resolved once per entry:
- * its name, and the storage image or buffer this engine serves under that name, if any.
+ * its name, and the image or storage buffer this engine serves under that name, if any. An image
+ * is the pack's own, or failing that one an add-on serves; both come back in the shape the mixin
+ * swaps into the descriptor.
  * <p>
  * The 26.3 half. On 26.2 the entry was the game's {@code VulkanBindGroupLayout.Entry}; here it is
  * the name of the uniform the pipeline declares, which is what every question asked of it reads.
@@ -32,7 +34,8 @@ public final class PushedDescriptor {
 		FrameCensus.descriptor();
 		PushedDescriptor current = CURRENT.get();
 		current.name = name;
-		current.image = StorageImages.bound(name);
+		StorageImages.Bound image = StorageImages.bound(name);
+		current.image = image != null ? image : AddonImages.bound(name);
 		current.buffer = StorageBuffers.bound(name);
 	}
 
@@ -46,7 +49,7 @@ public final class PushedDescriptor {
 		return this.name;
 	}
 
-	/** The storage image served under the name, or null. */
+	/** The image the pack or an add-on serves under the name, or null. */
 	public StorageImages.@Nullable Bound image() {
 		return this.image;
 	}
