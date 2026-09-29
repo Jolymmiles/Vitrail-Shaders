@@ -2,7 +2,6 @@ package dev.vitrail.render;
 
 import dev.vitrail.addon.AddonDefines;
 import dev.vitrail.addon.AddonRegistry;
-import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.option.DefineNames;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.render.pbr.PbrAtlases;
@@ -89,7 +88,7 @@ public final class PackDefines {
 	 */
 	public static void settle() {
 		installed = stamp();
-		distant = DhDepth.present();
+		distant = DistantTerrain.present();
 		format = PbrAtlases.format();
 		revisions = AddonDefines.revisions(AddonRegistry.defines());
 	}
@@ -149,7 +148,7 @@ public final class PackDefines {
 	 * every frame.
 	 */
 	public static boolean distantHorizonsMoved() {
-		return DhDepth.present() != distant;
+		return DistantTerrain.present() != distant;
 	}
 
 	/**
@@ -191,7 +190,7 @@ public final class PackDefines {
 		// same answer the reduction and the sampler already run on: a pack told one thing and a
 		// specular map reduced under another would be two conventions in one picture.
 		EngineDefines.Environment machine = new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION,
-				os(), vendor, renderer, mipmap, DhDepth.present(), biomeIds(), categories(),
+				os(), vendor, renderer, mipmap, DistantTerrain.present(), biomeIds(), categories(),
 				PbrAtlases.format(), BufferBlending.served());
 
 		// Asked of the add-ons last, against the machine they will sit beside: which names are the

@@ -1,6 +1,5 @@
 package dev.vitrail.render;
 
-import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
@@ -1784,7 +1783,7 @@ public final class PackChain {
 		// pack. What it costs is that a takeover lands on the NEXT frame, DH having drawn its LODs
 		// long before this line; nothing of the picture turns on that, the frame before it being
 		// what this engine draws with the door shut.
-		DhLods.install();
+		DistantTerrain.install();
 
 		GpuTextureView served = chain.distant.served();
 		if (served == null && !chain.readsDistantDepth()) {
@@ -3207,7 +3206,7 @@ public final class PackChain {
 
 		// DH takes its far terrain back with the pack, its own frame order included: DhLods.handBack
 		// says why nothing else would ever return it.
-		DhLods.handBack();
+		DistantTerrain.handBack();
 
 		this.terrain.release();
 		synchronized (this.familyMaps) {

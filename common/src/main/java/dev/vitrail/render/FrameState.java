@@ -1,6 +1,5 @@
 package dev.vitrail.render;
 
-import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.target.PackDirectives;
@@ -483,27 +482,31 @@ public final class FrameState implements WorldState {
 		// It does NOT cover the three partings that OUTLIVE the coupling: the ordinary one this
 		// batch exists for, one that is Iris's own answer, and one that is a hole older than any of
 		// this. They are named one by one in ViewMatrices.advanceDistant.
-		int distance = DhDepth.renderDistanceBlocks();
+		//
+		// All of it is asked of ONE source, settled by the reading below, so that the three reads
+		// cannot part company over which source they went to.
+		DistantTerrain.Reading source = DistantTerrain.reading();
+		int distance = source.renderDistanceBlocks();
 
 		// One reflective read of the row, and the planes worked out of it, rather than the row
 		// read twice through four field gets a frame.
-		boolean row = DhDepth.zRow(this.distantPlanes);
+		boolean row = source.zRow(this.distantPlanes);
 		float scale = row ? this.distantPlanes.x : 0.0F;
 		float offset = row ? this.distantPlanes.y : 0.0F;
 
-		boolean planes = row && DhDepth.planes(scale, offset, this.distantPlanes);
+		boolean planes = row && DistantTerrain.planes(scale, offset, this.distantPlanes);
 		float near = planes ? this.distantPlanes.x : ViewMatrices.FALLBACK_PLANE;
-		float far = planes ? this.distantPlanes.y : ViewMatrices.FALLBACK_PLANE;
+		float farPlane = planes ? this.distantPlanes.y : ViewMatrices.FALLBACK_PLANE;
 
-		if (!DhDepth.usable()) {
+		if (!source.coherent()) {
 			distance = -1;
 			near = ViewMatrices.FALLBACK_PLANE;
-			far = ViewMatrices.FALLBACK_PLANE;
+			farPlane = ViewMatrices.FALLBACK_PLANE;
 			scale = 0.0F;
 			offset = 0.0F;
 		}
 
-		this.view.advanceDistant(near, far, distance);
+		this.view.advanceDistant(near, farPlane, distance);
 		this.view.advanceDistantVolume(scale, offset);
 
 		// Settled here and nowhere else, because the answer decides which pair of shadow matrices

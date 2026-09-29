@@ -1,6 +1,5 @@
 package dev.vitrail.render;
 
-import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.DistantVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.pack.target.ChainPlan;
@@ -200,10 +199,11 @@ final class DistantProgram extends FamilyProgram {
 
 	@Override
 	public boolean warmAhead(AheadCompiler compiler) {
-		// Without DH standing, nothing ever draws these. And measured on a bench without that
-		// mod, the two dh programs also refused shaderc outright, so compiling ahead here bought
-		// nothing but refusal lines for programs no frame would ever ask for.
-		if (!DhLods.usable()) {
+		// Without a far terrain standing, nothing ever draws these: DH taken over, or an add-on's
+		// source with terrain to give. And measured on a bench without that mod, the two dh programs
+		// also refused shaderc outright, so compiling ahead here bought nothing but refusal lines for
+		// programs no frame would ever ask for.
+		if (!DistantTerrain.drawable()) {
 			return false;
 		}
 
