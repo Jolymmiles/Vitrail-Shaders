@@ -2,6 +2,7 @@ package dev.vitrail.pack.option;
 
 import dev.vitrail.pack.model.RenderStage;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -110,17 +111,45 @@ public final class EngineDefines {
 	 * @param bufferBlending  whether the device lets two attachments of one pass blend differently.
 	 *                        A device answer and not an engine one, which is why it travels with
 	 *                        the vendor and the renderer rather than being read here
+	 * @param addonDefines    what add-ons pose beside the engine's symbols, in the order they were
+	 *                        gathered. Already vetted by {@link DefineNames}: this record carries
+	 *                        them to the table and decides nothing about them, except that the
+	 *                        table's own symbols win where a name is in both
 	 */
 	public record Environment(int mcVersion, Os os, String vendorName, String rendererName,
 			int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
-			List<String> biomeCategories, TextureFormat textureFormat, boolean bufferBlending) {
+			List<String> biomeCategories, TextureFormat textureFormat, boolean bufferBlending,
+			Map<String, String> addonDefines) {
+
+		/**
+		 * The order is part of what is kept: the table is emitted in order, so an add-on's symbols
+		 * come out in the order they were gathered, and a map that forgot it would make the
+		 * emission, and the cache key over it, depend on a hash.
+		 */
+		public Environment {
+			addonDefines = Collections.unmodifiableMap(new LinkedHashMap<>(addonDefines));
+		}
+
+		/** What a caller with no add-ons to ask hands over, which is every caller but the game's. */
+		public Environment(int mcVersion, Os os, String vendorName, String rendererName,
+				int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
+				List<String> biomeCategories, TextureFormat textureFormat, boolean bufferBlending) {
+			this(mcVersion, os, vendorName, rendererName, mipmapLevel, distantHorizons, biomes,
+					biomeCategories, textureFormat, bufferBlending, Map.of());
+		}
 
 		/** What a caller with no resource pack to ask hands over: {@link #of}, and the harness. */
 		public Environment(int mcVersion, Os os, String vendorName, String rendererName,
 				int mipmapLevel, boolean distantHorizons, Map<String, Integer> biomes,
 				List<String> biomeCategories) {
 			this(mcVersion, os, vendorName, rendererName, mipmapLevel, distantHorizons, biomes,
-					biomeCategories, null, false);
+					biomeCategories, null, false, Map.of());
+		}
+
+		/** The same machine with the add-ons' defines replaced by these. */
+		public Environment withAddonDefines(Map<String, String> defines) {
+			return new Environment(mcVersion, os, vendorName, rendererName, mipmapLevel,
+					distantHorizons, biomes, biomeCategories, textureFormat, bufferBlending, defines);
 		}
 
 		public static Environment of(int mcVersion) {
@@ -307,6 +336,12 @@ public final class EngineDefines {
 			defines.put("CAT_" + categories.get(ordinal).toUpperCase(Locale.ROOT),
 					Integer.toString(ordinal));
 		}
+
+		// Last, so that an add-on can neither move an engine symbol nor reorder the ones above:
+		// everything else in the table is what a pack was written against, and these are extra.
+		// Vetted before they get here (DefineNames), and still put only where the name is free, so
+		// that a table built from a hand made environment keeps the same promise.
+		environment.addonDefines().forEach(defines::putIfAbsent);
 
 		return defines;
 	}

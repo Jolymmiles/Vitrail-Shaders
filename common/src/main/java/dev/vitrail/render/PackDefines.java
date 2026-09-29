@@ -1,6 +1,9 @@
 package dev.vitrail.render;
 
+import dev.vitrail.addon.AddonDefines;
+import dev.vitrail.addon.AddonRegistry;
 import dev.vitrail.dh.DhDepth;
+import dev.vitrail.pack.option.DefineNames;
 import dev.vitrail.pack.option.EngineDefines;
 import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.uniform.BiomeCategory;
@@ -42,7 +45,8 @@ import java.util.Objects;
  * Two of these move without the world moving, so {@link #stale()} watches them beside the registry
  * rather than trusting what was true when the pack was read: Distant Horizons, which the player
  * switches from that mod's own screen, and the material convention a resource pack declares, which
- * a resource reload replaces.
+ * a resource reload replaces. The add-ons' defines are the third: nothing tells Vitrail when one
+ * changes but the revision its source reports.
  */
 public final class PackDefines {
 
@@ -54,6 +58,13 @@ public final class PackDefines {
 
 	/** And what the resource packs declared their material maps in, which a reload replaces. */
 	private static volatile EngineDefines.TextureFormat format;
+
+	/**
+	 * And where every add-on's define source stood, which only the source itself can move. Null
+	 * until the first settle: nothing has been read against the sources yet, so nothing they say
+	 * can have moved under it.
+	 */
+	private static volatile List<AddonDefines.Revision> revisions;
 
 	private PackDefines() {
 	}
@@ -80,6 +91,7 @@ public final class PackDefines {
 		installed = stamp();
 		distant = DhDepth.present();
 		format = PbrAtlases.format();
+		revisions = AddonDefines.revisions(AddonRegistry.defines());
 	}
 
 	/**
@@ -87,7 +99,20 @@ public final class PackDefines {
 	 * the one reload nobody can ask for.
 	 */
 	public static boolean stale() {
-		return stamp() != installed || distantHorizonsMoved() || textureFormatMoved();
+		return stamp() != installed || distantHorizonsMoved() || textureFormatMoved()
+				|| addonDefinesMoved();
+	}
+
+	/**
+	 * Whether an add-on's define source reports another revision than it did at the last settle,
+	 * or has been cut off since, either of which means the table it wrote is not the one the pack
+	 * was read against. Like the far terrain's flip, what is recorded is the live answer and not the
+	 * one {@link #gather} wrote from, so a change inside the read itself waits for the next one.
+	 */
+	public static boolean addonDefinesMoved() {
+		List<AddonDefines.Revision> recorded = revisions;
+
+		return recorded != null && AddonDefines.moved(AddonRegistry.defines(), recorded);
 	}
 
 	/**
@@ -165,9 +190,18 @@ public final class PackDefines {
 		// The material convention comes from the last stitch rather than from the file, which is the
 		// same answer the reduction and the sampler already run on: a pack told one thing and a
 		// specular map reduced under another would be two conventions in one picture.
-		return new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION, os(), vendor,
-				renderer, mipmap, DhDepth.present(), biomeIds(), categories(), PbrAtlases.format(),
-				BufferBlending.served());
+		EngineDefines.Environment machine = new EngineDefines.Environment(EngineDefines.DEFAULT_MC_VERSION,
+				os(), vendor, renderer, mipmap, DhDepth.present(), biomeIds(), categories(),
+				PbrAtlases.format(), BufferBlending.served());
+
+		// Asked of the add-ons last, against the machine they will sit beside: which names are the
+		// engine's depends on it, the symbols the machine withholds among them.
+		if (AddonRegistry.defines().isEmpty()) {
+			return machine;
+		}
+
+		return machine.withAddonDefines(
+				AddonDefines.gather(AddonRegistry.defines(), DefineNames.reservedIn(machine)));
 	}
 
 	private static Map<String, Integer> biomeIds() {

@@ -1033,6 +1033,9 @@ public final class PackChoice {
 					+ "MC_TEXTURE_FORMAT_LAB_PBR and the revision beside it: those are what a "
 					+ "pack branches its material decode on, and they cannot be right for both",
 					textureFormatDeclared());
+		} else if (PackDefines.addonDefinesMoved()) {
+			Vitrail.logger().info("An add-on's defines changed, so the pack is read again against "
+					+ "them: they are part of what every program is translated with");
 		} else {
 			Vitrail.logger().info("The world's own registries are here now, reloading the pack so "
 					+ "what names a tag resolves against them");
