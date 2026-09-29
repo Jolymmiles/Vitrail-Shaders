@@ -12,11 +12,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Holds a declaration nested past {@link CustomUniforms#MAX_DEPTH} to a refusal named among the
- * problems, where it used to be a {@code StackOverflowError} out of the pack load.
+ * problems, and not a {@code StackOverflowError} out of the pack load.
  * <p>
- * Five thousand levels is well past where the stack gave out, in every shape the grammar nests
+ * Five thousand levels is well past where the stack gives out, in every shape the grammar nests
  * in: calls, the minus sign, a chain of sums, which nests on the left, and a stray token beside a
- * deep call, which overflowed inside the parser's own error message before any tree was built.
+ * deep call, whose parser error message would overflow before any tree was built if the depth
+ * were not measured first.
  */
 class NestingDepthTest {
 
@@ -72,11 +73,11 @@ class NestingDepthTest {
 	}
 
 	/**
-	 * A sum nests on the left, one level a term, and a hundred thousand of them threw out of the
-	 * build at some three thousand. It has to be refused before anything that recurses sees it: the
-	 * resolver, the listing of what a declaration reads and the sort of the graph. The name it reads
-	 * is a declared one, so that it is the depth that refuses it and not an unknown name, and the
-	 * declaration of that name goes on being read.
+	 * A sum nests on the left, one level a term, and a hundred thousand of them would throw out of
+	 * the build at some three thousand if they reached anything that recurses. It has to be refused
+	 * before that: the resolver, the listing of what a declaration reads and the sort of the graph
+	 * all recurse. The name it reads is a declared one, so that it is the depth that refuses it and
+	 * not an unknown name, and the declaration of that name goes on being read.
 	 */
 	@Test
 	void aHundredThousandTermSumIsRefusedBeforeAnythingRecurses() {

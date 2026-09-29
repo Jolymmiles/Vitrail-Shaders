@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
  * Holds {@code round} to OptiFine's, which is Java's {@code Math.round} of a float: a half goes up,
  * towards positive infinity, whichever side of nought it is on.
  * <p>
- * OptiFine lists the function and Iris never registered it, so a declaration using it was dropped
- * with nothing to stand in for it. The halves are what tell one rounding rule from another, so
- * they are what is held here.
+ * OptiFine lists the function and Iris registers none, so a round left unregistered drops every
+ * declaration using it, with nothing to stand in for it, and each call here would be refused. The
+ * halves are what tell one rounding rule from another, so they are what is held here.
  */
 class RoundAsOptiFineTest {
 

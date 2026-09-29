@@ -10,9 +10,10 @@ import org.junit.jupiter.api.Test;
  * against brackets, which must still decide, and inside the condition of an {@code if}, where a
  * pack writes most of its boolean logic.
  * <p>
- * Taken left to right on one level, {@code a || b && c} was {@code (a || b) && c}, and the two
- * readings part exactly when the left of the {@code ||} holds and the right of the {@code &&}
- * does not. That is the case held here.
+ * Taken left to right on one level, {@code a || b && c} would be {@code (a || b) && c}, and the
+ * two readings part exactly when the left of the {@code ||} holds and the right of the {@code &&}
+ * does not. That is the case held here: a grammar that put the two on one level answers false
+ * where {@code &&} binds tighter and the answer is true.
  */
 class AndOrPrecedenceTest {
 

@@ -134,8 +134,8 @@ class ExprOperatorsTest {
 	@Test
 	void andBindsTighterThanOr() {
 		// Documented in ExprGrammar: && is one level tighter than ||, as in OptiFine, C, GLSL and
-		// Java. The two used to share one level and group from the left, as they still do in Iris,
-		// and the first of these was (T || F) && F, false.
+		// Java. Two operators sharing one level and grouping from the left, as they do in Iris,
+		// would read the first of these as (T || F) && F, false, and fail it.
 		assertTrue(this.rig.boolOf("1 < 2 || 1 > 2 && 1 > 2"), "T || (F && F)");
 		assertTrue(this.rig.boolOf("1 > 2 && 1 < 2 || 1 < 2"), "(F && T) || T");
 		// Where the two readings agree nothing distinguishes them.

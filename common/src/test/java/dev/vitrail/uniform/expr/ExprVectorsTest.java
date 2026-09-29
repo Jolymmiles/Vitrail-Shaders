@@ -199,8 +199,9 @@ class ExprVectorsTest {
 
 	@Test
 	void vectorsCompareWithTheOperatorsAndWithEqual() {
-		// The vector equality used to be registered only as "equal", where the operators look for
-		// "equals" and "notEquals", and as a vector type, so no way of writing it reached it.
+		// The operators look for "equals" and "notEquals", and each answers a bool for two vectors.
+		// A vector equality registered only as "equal", or as a vector type, would be reached by no
+		// way of writing it, and every line here would be refused.
 		assertTrue(this.rig.boolOf("va == va"));
 		assertFalse(this.rig.boolOf("va != va"));
 		assertTrue(this.rig.boolOf("equals(va, va)"));
@@ -212,9 +213,9 @@ class ExprVectorsTest {
 
 	@Test
 	void theVectorEqualFunctionAnswersABoolAndNotAVector() {
-		// "equal" used to be registered twice with one signature, once as equality and once as its
-		// inverse, and with the vector type as its return type, so asked for a vector it threw
-		// "Ambiguity". It answers a bool now, and a vector is simply not what it gives.
+		// "equal" answers a bool, and a vector is simply not what it gives: asked for one, it is
+		// refused. Registered twice with one signature, once as equality and once as its inverse,
+		// and with the vector type as its return type, it would throw "Ambiguity" instead.
 		String reason = this.rig.refusal("vec3", "equal(va, va)");
 		assertTrue(reason.contains("Couldn't resolve"), reason);
 	}
@@ -294,9 +295,9 @@ class ExprVectorsTest {
 
 	@Test
 	void twoCallsOfOneVectorOperationInOneExpressionKeepTheirOwnResults() {
-		// Each call of a vector function has an object and a buffer of its own. They used to be ONE
-		// object per name, as they still are in Iris, and nested twice in one expression the second
-		// call overwrote the first one's result before the outer call had read it.
+		// Each call of a vector function has an object and a buffer of its own. Were there ONE
+		// object per name, as in Iris, then nested twice in one expression the second call would
+		// overwrite the first one's result before the outer call had read it.
 		//
 		// va + va = (2, 4, 6) and va + va + va = (3, 6, 9).
 		assertVec(new float[] {5, 10, 15}, this.rig.vecOf(3, "(va + va) + (va + va + va)"),
@@ -316,16 +317,16 @@ class ExprVectorsTest {
 
 	@Test
 	void twoDifferentVectorOperationsInOneExpressionDoNotShare() {
-		// The same nesting with two different operations was right with one object per name too,
-		// which is why the sharing went unseen in most packs: add, subtract and multiply each had a
-		// buffer of their own.
+		// The same nesting with two different operations: add, subtract and multiply each keep a
+		// buffer of their own, so a regression that pooled one buffer across operations would fail
+		// here.
 		assertVec(new float[] {2, 8, 18}, this.rig.vecOf(3, "(va + va) * va - vec3(0, 0, 0)"),
 				"(2,4,6) * (1,2,3)");
 		// va * 2 = (2,4,6) and 3 - va = (2,1,0): a multiply and a subtract feeding one add.
 		assertVec(new float[] {4, 5, 6}, this.rig.vecOf(3, "(va * vec3(2, 2, 2)) + (vec3(3, 3, 3) - va)"),
 				"(2,4,6) + (2,1,0)");
-		// A chain that leans left was right too: each inner result was the FIRST operand, which the
-		// outer call wrote over in place.
+		// A chain that leans left: each inner result is the FIRST operand, which the outer call
+		// writes over in place, so it has to be that call's own buffer and nobody else's.
 		assertVec(new float[] {4, 8, 12}, this.rig.vecOf(3, "va + va + va + va"), "((a + a) + a) + a");
 	}
 }

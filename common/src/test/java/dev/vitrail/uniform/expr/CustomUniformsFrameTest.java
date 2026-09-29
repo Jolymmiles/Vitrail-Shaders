@@ -331,15 +331,16 @@ class CustomUniformsFrameTest {
 
 	@Test
 	void ifWithManyBranchesDoesNotReadTheElseWhenALaterTestIsTrue() {
-		// The else throws if it runs. The loop used to evaluate it after every test that failed,
-		// before it read the next one, as Iris's still does, so this was dropped on the first
-		// test although the second one is true and the answer is 2.
+		// The else throws if it runs. It is read only when every test has failed, so the second
+		// test being true gives 2. A loop that evaluated it after each failed test, before reading
+		// the next one, as Iris's does, would throw on the first test and drop the declaration.
 		assertEquals(2, this.rig.intOf("if(ia < 0, 1, ia > 0, 2, 1 % (ia - 7))"));
 	}
 
 	@Test
 	void ifWithManyBranchesDoesNotReadTheElseWhenTheFirstTestIsTrue() {
-		// A first test that is true returned before the else was read with the old loop too.
+		// A first test that is true returns before the else is read, so the throwing else is never
+		// reached; a walk that read the else ahead of the tests would throw here.
 		assertEquals(1, this.rig.intOf("if(ia > 0, 1, ia > 0, 2, 1 % (ia - 7))"));
 	}
 
@@ -347,8 +348,8 @@ class CustomUniformsFrameTest {
 	void theElseOfAManyBranchIfSmoothsOnceAFrame() {
 		// smooth() in the else advances every time it is evaluated, and it is evaluated once a
 		// frame whatever the number of tests before it: half the way to its target in a frame,
-		// here from 4 to 2. The old loop evaluated it once per failed test, so two tests moved it
-		// to 1 and three to 0.5.
+		// here from 4 to 2. A loop that evaluated it once per failed test would advance it twice
+		// for two tests, to 1, and three times for three, to 0.5.
 		CustomUniforms uniforms = this.rig.buildClean(
 				"uniform.float.two = if(ia < 0, 1.0, ia < 1, 2.0, smooth(fa))",
 				"uniform.float.three = if(ia < 0, 1.0, ia < 1, 2.0, ia < 2, 3.0, smooth(fa))",

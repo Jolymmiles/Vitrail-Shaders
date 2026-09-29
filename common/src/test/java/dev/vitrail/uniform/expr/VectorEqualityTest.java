@@ -10,8 +10,10 @@ import org.junit.jupiter.api.Test;
  * Holds the comparison of two float vectors to one boolean at every size, and to the way the
  * scalar {@code ==} compares a component, beyond the vec3 cases in {@link ExprVectorsTest}.
  * <p>
- * Both groups of registrations were named {@code equal} and declared a vector where they answer
- * a boolean, so no call of either resolved: a declaration that compared two vectors was dropped.
+ * The equality answers a boolean under {@code equal} and {@code equals}, and its inverse under
+ * {@code notEquals}. Registered as a vector, or both under the one name {@code equal}, no call
+ * would resolve, or one would find two matches, and a declaration that compared two vectors would
+ * be dropped.
  */
 class VectorEqualityTest {
 

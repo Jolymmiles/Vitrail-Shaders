@@ -214,9 +214,9 @@ class ExprFunctionsTest {
 
 	@Test
 	void minAndMaxOfThreeOrMoreReadEveryArgument() {
-		// OptiFine's min(x, y, ...) is the least of all of them. The loop in ExprFunctions used to
-		// read params[1] on every turn, as Iris's still does, so the third argument onward never
-		// counted: each of these gave the second argument.
+		// OptiFine's min(x, y, ...) is the least of all of them. A loop that read params[1] on
+		// every turn, as Iris's does, would never count the third argument onward, and each of
+		// these would give the second argument.
 		assertEquals(1.0F, this.rig.floatOf("min(3, 2, 1)"));
 		assertEquals(3.0F, this.rig.floatOf("max(1, 2, 3)"));
 		assertEquals(9.0F, this.rig.floatOf("max(1, 2, 9, 3)"));
@@ -231,7 +231,8 @@ class ExprFunctionsTest {
 
 	@Test
 	void minAndMaxOfThreeAreRightWhenTheAnswerIsAmongTheFirstTwo() {
-		// Right with the old loop too, which is why a pack that ordered its arguments happened to work.
+		// The answer is among the first two, so a loop that read only params[1] would be right here
+		// too: what these hold is that reading every argument does not disturb them.
 		assertEquals(1.0F, this.rig.floatOf("min(3, 1, 2)"));
 		assertEquals(5.0F, this.rig.floatOf("max(1, 5, 3)"));
 		assertEquals(1, this.rig.intOf("min(1, 2, 3)"));
@@ -451,9 +452,9 @@ class ExprFunctionsTest {
 
 	@Test
 	void roundIsRegisteredAsOptiFineEvaluatesIt() {
-		// round(x) is in the header list and in OptiFine, and it used to be registered by nothing,
-		// as in Iris, so both of these were refused with "No such function: round". The halves
-		// either side of nought are in RoundAsOptiFineTest.
+		// round(x) is in the header list and in OptiFine, and Iris registers nothing for it, so
+		// left unregistered both of these would be refused with "No such function: round". The
+		// halves either side of nought are in RoundAsOptiFineTest.
 		assertEquals(3.0F, this.rig.floatOf("round(2.5)"), "a half goes up");
 		assertEquals(2, this.rig.intOf("round(2)"), "an int declaration takes the int form");
 		assertTrue(ExprFunctions.functions.names().contains("round"));
@@ -496,9 +497,9 @@ class ExprFunctionsTest {
 	@Test
 	void theRegistryHoldsExactlyTheseNames() {
 		// A list, so that a name added or lost has to be added here on purpose. The accessors are
-		// the eight spellings of a component plus the four indices. The three names the known
-		// defects concern (round, equal, notEqual) are pinned apart, in their own tests, so that
-		// fixing one changes only that test.
+		// the eight spellings of a component plus the four indices. Three names are left out of
+		// the list and held in tests of their own: round and equal, which are registered on purpose,
+		// and notEqual, which is not, so that a change to one of them changes only that test.
 		List<String> expected = new ArrayList<>(List.of(
 				"<access$0>", "<access$1>", "<access$2>", "<access$3>", "<access$a>", "<access$b>",
 				"<access$g>", "<access$p>", "<access$q>", "<access$r>", "<access$s>", "<access$t>",

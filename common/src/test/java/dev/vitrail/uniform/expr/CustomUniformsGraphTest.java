@@ -397,8 +397,8 @@ class CustomUniformsGraphTest {
 	@Test
 	void anExpressionThousandsOfTermsLongIsRefusedAtBuild() {
 		// The parser walks it with a list, the resolver and the evaluator with the call stack, so
-		// with no depth limit a very long or very deeply bracketed expression threw an Error out of
-		// build(). It is measured after it parses and refused, as a line in the problems.
+		// with no depth limit a very long or very deeply bracketed expression would throw an Error
+		// out of build(). It is measured after it parses and refused, as a line in the problems.
 		String longSum = "fa" + "+fa".repeat(100_000);
 		List<String> problems = new ArrayList<>();
 
@@ -413,7 +413,8 @@ class CustomUniformsGraphTest {
 	@Test
 	void anExpressionAsLongAsTheDepthLimitBuildsAndEvaluates() {
 		// A sum nests on the left, one level a term, so this is exactly as deep as a declaration
-		// may be. Five hundred terms built here before the limit, and are refused now.
+		// may be. It has to build and evaluate: a limit that counted one level too many would
+		// refuse it.
 		int terms = CustomUniforms.MAX_DEPTH;
 		CustomUniforms uniforms = this.rig.buildClean("uniform.float.r = fa" + "+fa".repeat(terms - 1));
 		this.rig.frame(uniforms);
