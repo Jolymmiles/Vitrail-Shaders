@@ -275,6 +275,91 @@ an add-on can use.
 
 ## Far terrain
 
+A far terrain source (`DistantTerrainSource`) is another mod's far terrain drawn in the place
+Distant Horizons' is: with the pack's own `dh_terrain`, `dh_water` and `dh_shadow`, under a pack
+told `DISTANT_HORIZONS` is defined, its `dhDepthTex` names filled from what was drawn. Nothing about
+the pack side is new. What is new is who supplies the sections, and the whole design is the rule
+that the add-on owns the terrain and Vitrail owns the GPU.
+
+**Distant Horizons wins whenever it is present, and then nothing new runs.** `FarSources.select`
+takes `DhDepth.present()` as an argument and answers null for it, so DH stays the source exactly as
+before, with its reflective reads and its proxy over `IDhTerrainRenderer`. Without it the first
+source that says `present()` is the one, in the order the add-ons were found, and the ones after
+it are not asked. A session with no add-on source pays one list-is-empty read in each place the
+facade stands, and reaches no add-on code.
+
+**`render/DistantTerrain` is the facade the engine reads instead of `DhDepth` and `DhLods`.**
+`PackDefines` asks it `present()`, `DistantProgram.warmAhead` asks `drawable()`, `PackChain` routes
+`install` and `handBack` through it, and `FrameState` takes its reads from a `Reading`. DH's reading
+is `DhDepth`'s calls in their old order. The FrameState rule that the distance, the z row and the
+"still readable" flag are taken together and published together is kept by settling ONE source per
+frame: an add-on source is cut off by a throw exactly where DH latches off, and `coherent()` is how
+a frame notices that either happened between the reads. The window an add-on gives (near and far,
+in blocks) is turned into the z row DH's matrix would have carried, `(near / (far - near), near *
+far / (far - near))`, and FrameState takes the planes back out of the row with `DhDepth.planes`, the
+arithmetic that undoes it. So every consumer downstream of the row is the code DH already ran. One
+difference is a gain and not a divergence: DH's planes are the previous frame's, and an add-on's
+are read the frame they are used in.
+
+**The geometry is copied once and lives in buffers Vitrail makes.** The add-on hands `upload` a
+vertex and an index buffer in DH's 16-byte layout (documented on `DistantMeshes`) and gets a handle.
+`MeshTable` keeps the bookkeeping and has no device: any thread may `upload` and `free`, and both
+only put a handle on a queue. The copy is made at the call, into direct memory the handle owns, so
+the caller reuses its buffers at once and a handle that is dropped can never leak native memory;
+the indices are checked against the vertex count in that same pass, because a read past a vertex
+buffer on the GPU ends in a lost device that names nobody. The render thread calls `drain` at the
+head of the frame, from `EngineStages.frameGraphSetup` where no pass is open (the same place
+`PbrTextures.load` records its uploads), and copies up to 16 MiB of meshes with
+`GpuDevice.createBuffer(label, usage, data)`, which is a staging copy into the frame's command
+buffer. The budget is checked after each mesh so one larger than 16 MiB still goes by itself. The
+transfer ends a held geometry pass through `CommandEncoderMixin`, so it belongs at the head of the
+frame and not inside it. A mesh that is not on the GPU yet is left out of the lists rather than
+waited for, which is what `ready()` lets an add-on replace a tile without a hole.
+
+**Freeing rides the game's own retirement.** `free` marks the handle and queues it; `drain`
+closes the buffers on the render thread at the head of a later frame. Closing a `GpuBuffer` on the
+Vulkan backend queues it on the same two-deep destruction queue `GpuRecording.destroyLater` uses,
+so it is destroyed after the submissions that may still read it, and the frame that listed a mesh
+can still draw it, the light's stage at its tail included. The copies come before the retirements
+in `drain`, which closes the race of a free landing in the middle of that mesh's own copy without a
+lock. A source that is cut off has everything given back at the next drain, and the session's end
+gives back the rest (`PackChain.close`). The meshes are the add-on's and outlive every pack, so a
+pack release frees none of them.
+
+**A frame is three draws and a list, and Vitrail hooks the game at one new point.**
+`frameGraphSetup` calls `DistantTerrain.beginFrame`, which drains and then asks the source for the
+frame's `DistantSections`, only when the pack really draws a far terrain (`DistantDraw.drawsFarTerrain`)
+and the source says it is usable. The opaque half is drawn by `EngineStages.beforeOpaqueBlocks`,
+the head of the opaque chunk group, which is where DH's own hook draws; the water half at the end
+of `afterTranslucentFeatures`, once the translucent layer is composed and copied, which is where
+DH's water lands relative to everything a pack reads. Both go through the same `DistantDraw.draw`
+door DH's proxy uses, so seeding the world's depth under the water, the takes into `dhDepthTex0`
+and `dhDepthTex1`, the program preparation and every refusal are shared. The one new hook is the
+stage before the opaque group, a `@WrapOperation` on the first `renderGroup` call of the main pass
+(`lambda$addMainPass$0` on 26.2, `executeSolid` on 26.3) in the common `LevelRendererMixin`. It is
+common rather than per loader because both loaders reach it the same way: every stage event they
+have is an "after". The lambda name and the call's ordinal were read off both the bare and the
+NeoForge-patched jars.
+
+**The light gets lists of its own.** DH's sections are the ones its frustum kept for the camera, so
+a hill behind the camera casts no shadow in front of it, which `DistantDraw.shadow` documents as a
+divergence from Iris. A source is under no such limit: `DistantSections` carries `shadowOpaque` and
+`shadowWater`, `DistantDraw.feedShadow` hands them over at the head of the frame, and `rotate` takes
+them in place of the camera's at the frame's close. A source that hands only the camera's lists gets
+them back for the light, converted once. `DistantFrame.shadows()` says whether the pack draws the
+far terrain into its map at all, so a source that builds the lists apart may skip them.
+
+**A source that misbehaves costs itself and nothing else.** Every question goes through
+`AddonRegistry.call`, so a throw or a linkage error cuts the source off and its answers fall back to
+the ones the frame already has for "no far terrain": not present, no distance, no window, no
+sections. A list holding a null, or a window that is not `0 < near < far` and finite, is the
+add-on's failure and is handled like the same. A mesh that is not one of the table's own is left
+out and said once.
+
+What stays out of this mechanism, because it is not far terrain: the block refinement metalith
+hooks into `TerrainDraw`, `ColorTargets.coverage`, `GeometryProgram.descriptor`,
+`DistantDraw.record` and `EngineStages.afterOpaqueBlocks`, and any vertex stride but 16.
+
 ## Terrain meshes
 
 An add-on that builds something out of the terrain, an acceleration structure for a ray tracer being

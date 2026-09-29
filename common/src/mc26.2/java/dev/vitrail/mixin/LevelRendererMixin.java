@@ -1,11 +1,15 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.platform.EngineStages;
 import dev.vitrail.render.PackChain;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.framegraph.FramePass;
+import com.mojang.blaze3d.textures.GpuSampler;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayerGroup;
+import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -28,6 +32,11 @@ import org.spongepowered.asm.mixin.injection.At;
  * <p>
  * The pass exists only on the frames where something is drawn always on top, so on most frames this
  * never runs and the chain keeps the depth at its own point, which is then still whole.
+ * <p>
+ * The other wrap is the one stage of the level's frame that stands before a chunk group instead of
+ * after one, the head of the opaque terrain, which is where the far terrain of an add-on has to be
+ * put down. It is here and not in a loader module because both loaders reach it the same way: the
+ * loaders' own stage events are all "after" ones, and this is the call they are posted after.
  */
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
@@ -49,5 +58,25 @@ public abstract class LevelRendererMixin {
 		};
 
 		original.call(pass, kept);
+	}
+
+	/**
+	 * The first of the two {@code renderGroup} calls of the main pass, which is the opaque one, run
+	 * behind a stage of ours. Ordinal rather than a test on the group, so that the binding fails
+	 * loudly if the pass ever stops making both calls from here. The lambda is the only one
+	 * {@code addMainPass} holds, and it is {@code $0} in the bare game and in the patched one alike:
+	 * the name was read off both jars.
+	 */
+	@WrapOperation(method = "lambda$addMainPass$0",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;"
+							+ "renderGroup(Lnet/minecraft/client/renderer/chunk/ChunkSectionLayerGroup;"
+							+ "Lcom/mojang/blaze3d/textures/GpuSampler;)V",
+					ordinal = 0),
+			require = 1)
+	private void vitrail$beforeOpaqueBlocks(ChunkSectionsToRender sections,
+			ChunkSectionLayerGroup group, GpuSampler sampler, Operation<Void> original) {
+		EngineStages.beforeOpaqueBlocks();
+		original.call(sections, group, sampler);
 	}
 }

@@ -400,6 +400,17 @@ public final class DistantDraw extends FamilyDraw {
 	private List<DhLods.Section> shadowWater = List.of();
 
 	/**
+	 * What the light draws instead of the camera's lists, when the source of the far terrain has
+	 * lists of its own for it, and null when it has not.
+	 * <p>
+	 * Set by {@link #feedShadow} at the head of a frame and taken over by {@link #rotate}, so it is
+	 * good for one frame's light and never for two: a frame that feeds nothing leaves the light the
+	 * camera's lists, which is the whole of what Distant Horizons has to give it.
+	 */
+	private List<DhLods.Section> fedShadowOpaque;
+	private List<DhLods.Section> fedShadowWater;
+
+	/**
 	 * Whether the light's own two halves have stopped for the load, which is latched apart from
 	 * {@link #broken}: a failure drawing into the map says nothing about the picture, and the map is
 	 * the half of the two that can be dropped without the far terrain changing colour.
@@ -424,7 +435,9 @@ public final class DistantDraw extends FamilyDraw {
 	 * <p>
 	 * The one door {@code dh/DhLods} comes through, and the answer decides what DH does next: false
 	 * hands the half back, and DH draws it with its own shader exactly as it does where this engine
-	 * does not stand in the way.
+	 * does not stand in the way. The far terrain of an add-on's source comes through the same door,
+	 * from {@link DistantTerrain}, and false there means the half is not drawn at all, there being
+	 * no other renderer to hand it back to.
 	 *
 	 * @param opaque   which half this is, taken from DH's own call rather than worked out here
 	 * @param sections every section of the far terrain, in the order DH listed them
@@ -484,7 +497,8 @@ public final class DistantDraw extends FamilyDraw {
 	 * so its map holds far terrain the camera cannot see. Here there is no second list to be had:
 	 * {@code dh/DhLods} stands in for the one interface DH hands its geometry to, and DH walks that
 	 * road once a frame, from the camera. What it costs the image is a hill behind the camera laying
-	 * no shadow on the ground in front of it.
+	 * no shadow on the ground in front of it. A source that is not DH has no such limit and is
+	 * given the way round it, {@link #feedShadow}.
 	 * <p>
 	 * Quiet where there is nothing to draw, which is every frame of every session without that mod,
 	 * and every pack that ships no {@code dh_shadow}.
@@ -513,6 +527,50 @@ public final class DistantDraw extends FamilyDraw {
 			Vitrail.logger().error("Vitrail stopped drawing the far terrain into the shadow map after "
 					+ "an error, so nothing of it casts into the map for the rest of this pack", e);
 		}
+	}
+
+	/**
+	 * Gives the light its own lists for the frame in hand, for a source of the far terrain that can
+	 * tell the light from the camera.
+	 * <p>
+	 * The camera's lists are the ones its own frustum culled, and that is a divergence from Iris that
+	 * {@link #shadow} spells out: a hill behind the camera lays no shadow on the ground in front of
+	 * it. A source that holds the whole far terrain is not held to that, and hands the light every
+	 * section that can reach the map. Read at the frame's close, so it is fed before it, and never
+	 * drawn from twice.
+	 *
+	 * @param opaque the light's opaque half
+	 * @param water  the light's water half
+	 */
+	static void feedShadow(List<DhLods.Section> opaque, List<DhLods.Section> water) {
+		DistantDraw draw = PackChain.distant();
+		if (draw != null) {
+			draw.fedShadowOpaque = opaque;
+			draw.fedShadowWater = water;
+		}
+	}
+
+	/**
+	 * Whether the pack in force draws the far terrain's camera halves at all: it has been read, it
+	 * serves them, and nothing has stopped the family. What decides whether a source of the far
+	 * terrain is worth asking for a frame, where drawing none of it would only be work thrown away.
+	 */
+	static boolean drawsFarTerrain() {
+		DistantDraw draw = PackChain.distant();
+
+		return draw != null && draw.read && !draw.broken && draw.served(false) > 0;
+	}
+
+	/**
+	 * Whether the pack in force draws the far terrain into its shadow map this frame, so that lists
+	 * for the light are worth building: a map is drawn at all, and the pack serves the light's half
+	 * of the far terrain and has not lost it.
+	 */
+	static boolean drawsShadows() {
+		DistantDraw draw = PackChain.distant();
+
+		return draw != null && draw.read && !draw.shadowBroken && TerrainDraw.shadows()
+				&& draw.served(true) > 0;
 	}
 
 	/** The image the far terrain left its depth in, or null when it drew nothing this frame. */
@@ -1317,11 +1375,12 @@ public final class DistantDraw extends FamilyDraw {
 	/**
 	 * Rotates the ring buffers. Called once the frame's far terrain draws have been recorded.
 	 * <p>
-	 * <strong>And hands what DH gave this frame to the light</strong>, which is the one thing here
-	 * that is not a turn of a buffer. The light's stage runs after this call, so what it draws is
-	 * what the frame now closing captured; a frame where DH handed nothing over leaves the light
-	 * with nothing rather than with the last far terrain it saw, which is what the two empty lists
-	 * below buy.
+	 * <strong>And hands what the source gave this frame to the light</strong>, which is the one thing
+	 * here that is not a turn of a buffer: the lists the source fed it for the light where it had
+	 * any, and the camera's own lists where it had none. The light's stage runs after this call, so
+	 * what it draws is what the frame now closing captured; a frame where nothing was handed over
+	 * leaves the light with nothing rather than with the last far terrain it saw, which is what the
+	 * two empty lists below buy.
 	 */
 	@Override
 	void rotate() {
@@ -1330,8 +1389,10 @@ public final class DistantDraw extends FamilyDraw {
 		// this class is dropped here: a frame that draws no far terrain would otherwise hand the
 		// take an image seeded a frame ago, against a camera that has moved.
 		this.seeded = false;
-		this.shadowOpaque = this.opaqueSections;
-		this.shadowWater = this.waterSections;
+		this.shadowOpaque = this.fedShadowOpaque != null ? this.fedShadowOpaque : this.opaqueSections;
+		this.shadowWater = this.fedShadowWater != null ? this.fedShadowWater : this.waterSections;
+		this.fedShadowOpaque = null;
+		this.fedShadowWater = null;
 		this.opaqueSections = List.of();
 		this.waterSections = List.of();
 		CORNERS.rotate();
@@ -1356,6 +1417,8 @@ public final class DistantDraw extends FamilyDraw {
 		this.waterSections = List.of();
 		this.shadowOpaque = List.of();
 		this.shadowWater = List.of();
+		this.fedShadowOpaque = null;
+		this.fedShadowWater = null;
 		// NOT closed, which is the whole of issue 111: a recorded pass holds slices of these
 		// two rings, and a load tears the chain down in the middle of a frame that has
 		// already bound them. What is dropped here is what this load wrote into them.

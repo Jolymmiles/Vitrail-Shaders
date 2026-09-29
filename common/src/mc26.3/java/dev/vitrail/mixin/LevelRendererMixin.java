@@ -1,8 +1,16 @@
 package dev.vitrail.mixin;
 
+import dev.vitrail.platform.EngineStages;
 import dev.vitrail.render.PackChain;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayerGroup;
+import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,6 +31,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <p>
  * The method runs only on the frames where something is drawn always on top, so on most frames this
  * never runs and the chain keeps the depth at its own point, which is then still whole.
+ * <p>
+ * The other hook is the one stage of the level's frame that stands before a chunk group instead of
+ * after one, the head of the opaque terrain, which is where the far terrain of an add-on has to be
+ * put down. It is here and not in a loader module because both loaders reach it the same way: the
+ * loaders' own stage events are all "after" ones, and this is the call they are posted after.
  */
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
@@ -34,5 +47,25 @@ public abstract class LevelRendererMixin {
 	@Inject(method = "executeAlwaysOnTop", at = @At("HEAD"), require = 1)
 	private void vitrail$scene(CallbackInfo callback) {
 		PackChain.markSceneDepth();
+	}
+
+	/**
+	 * The one {@code renderGroup} call of {@code executeSolid}, which is the opaque group, run behind
+	 * a stage of ours. Drawn into the pass the level was handed, which the stage steps out of when it
+	 * opens a pass of its own; the call that follows opens it again.
+	 */
+	@WrapOperation(method = "executeSolid",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;"
+							+ "renderGroup(Lnet/minecraft/client/renderer/chunk/ChunkSectionLayerGroup;"
+							+ "Lcom/mojang/renderpearl/api/commands/RenderPass;"
+							+ "Lcom/mojang/renderpearl/api/textures/GpuSampler;"
+							+ "Lcom/mojang/renderpearl/api/textures/GpuTextureView;Z)V"),
+			require = 1)
+	private void vitrail$beforeOpaqueBlocks(ChunkSectionsToRender sections,
+			ChunkSectionLayerGroup group, RenderPass pass, GpuSampler sampler, GpuTextureView atlas,
+			boolean wireframe, Operation<Void> original) {
+		EngineStages.beforeOpaqueBlocks();
+		original.call(sections, group, pass, sampler, atlas, wireframe);
 	}
 }

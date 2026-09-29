@@ -1326,6 +1326,8 @@ public final class PackChain {
 		// survive every release on purpose, so the shutdown is the one caller that really frees
 		// them.
 		DistantDraw.close();
+		// And the meshes add-ons handed over, which belong to them and outlive every pack.
+		DistantTerrain.close();
 		ConstantTextures.close();
 		ShadowCompare.close();
 		GeometryStage.close();

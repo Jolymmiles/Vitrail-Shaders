@@ -3,6 +3,7 @@ package dev.vitrail.platform;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.HostReport;
+import dev.vitrail.render.DistantTerrain;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.GraphicsApi;
 import dev.vitrail.render.HandDraw;
@@ -169,6 +170,13 @@ public final class EngineStages {
 		// mob first comes on screen.
 		PbrTextures.load();
 
+		// Then the far terrain of an add-on, at the same instant and for the same reason: what its
+		// source has handed over is copied to the GPU here, where a transfer is recorded outside any
+		// pass, and the source is asked for the frame's sections before a single one of them is
+		// drawn. It is the head of the level frame that the light's lists are fed from as well, so
+		// they are in place when the frame closes. Nothing at all where Distant Horizons draws.
+		DistantTerrain.beginFrame(cameraPosition);
+
 		// The begins ahead of the shadow stage and the prepares behind it, which is the order
 		// OptiFine runs them in and the order Iris keeps: its begins are the head of the level render
 		// (pipeline/IrisRenderingPipeline.java:1014, from mixin/MixinLevelRenderer.java:123), its
@@ -206,6 +214,20 @@ public final class EngineStages {
 		// the moment Iris gives it inside its own shadow render. The volumes it propagates are the
 		// previous frame's shadow-geometry writes, one frame late like the shadow map itself.
 		PackChain.dispatchShadowCompute();
+	}
+
+	/**
+	 * Just before the opaque chunk group is drawn, which is where the far terrain of an add-on's
+	 * source is put down: behind the near terrain, so that the near world covers it, and after the
+	 * sky, so that it covers that. It is the point Distant Horizons draws its own opaque half from,
+	 * and the only stage of this list that stands before a chunk group rather than after one.
+	 */
+	public static void beforeOpaqueBlocks() {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
+		DistantTerrain.drawOpaque();
 	}
 
 	/**
@@ -299,6 +321,12 @@ public final class EngineStages {
 		// Then the copy a translucent program reads where it samples a target it writes, which
 		// has to hold the layer just composed and everything before it.
 		PackChain.takeReadCopies();
+
+		// Last, and with the layer composed and copied behind it: the water half of an add-on's far
+		// terrain is drawn from the head of the translucent chunk group under Distant Horizons, and
+		// what stands between the two is the outline pass, which draws nothing a pack reads. It
+		// blends over the layer this stage has just made, exactly as the near water does.
+		DistantTerrain.drawWater();
 	}
 
 	/**

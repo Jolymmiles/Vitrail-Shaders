@@ -1025,9 +1025,9 @@ public final class PackChoice {
 					+ "over it, so the whole pack is read, translated and its colour targets allocated "
 					+ "again, which is the hitch at the portal", PackPlace.settled(), PackPlace.world());
 		} else if (PackDefines.distantHorizonsMoved()) {
-			Vitrail.logger().info("Distant Horizons is drawing a far terrain now, or has stopped, so "
-					+ "the pack is read again against DISTANT_HORIZONS: the symbol is what a pack "
-					+ "branches its distant land on, and it cannot be right for both");
+			Vitrail.logger().info("A far terrain, Distant Horizons' or an add-on's, is being drawn now or "
+					+ "has stopped, so the pack is read again against DISTANT_HORIZONS: the symbol is "
+					+ "what a pack branches its distant land on, and it cannot be right for both");
 		} else if (PackDefines.textureFormatMoved()) {
 			Vitrail.logger().info("The resource packs {}, so the pack is read again against "
 					+ "MC_TEXTURE_FORMAT_LAB_PBR and the revision beside it: those are what a "

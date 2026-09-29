@@ -298,7 +298,8 @@ public final class EngineDefines {
 		// corpus is written for a picture with a far terrain in its depth, its own blend states and
 		// its own programs, and posing it over a depth that has none applies them to a screen they
 		// were never meant for. Iris poses it on the mod being loaded AND its rendering answering,
-		// gl/shader/StandardMacros.java:64; render/PackDefines asks the same two questions here.
+		// gl/shader/StandardMacros.java:64; render/PackDefines asks the same two questions here,
+		// of Distant Horizons or, where that mod is not present, of an add-on's far terrain source.
 		if (environment.distantHorizons()) {
 			defines.put("DISTANT_HORIZONS", "");
 		}

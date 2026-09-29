@@ -483,8 +483,10 @@ public final class FrameState implements WorldState {
 		// batch exists for, one that is Iris's own answer, and one that is a hole older than any of
 		// this. They are named one by one in ViewMatrices.advanceDistant.
 		//
-		// All of it is asked of ONE source, settled by the reading below, so that the three reads
-		// cannot part company over which source they went to.
+		// All of it is asked of ONE source, settled by the reading below: Distant Horizons, or an
+		// add-on's far terrain where DH is not present. What the coherent rule is about, a source that
+		// stops answering between two of the reads, holds for either of them, and the reading is what
+		// keeps the reads on the same one.
 		DistantTerrain.Reading source = DistantTerrain.reading();
 		int distance = source.renderDistanceBlocks();
 
